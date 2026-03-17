@@ -199,8 +199,7 @@ nafo_21B_grouped_daysfished<-nafo_21B%>% subset(SpeciesEffort=="2")%>%
 # unique(nafo_21B_gear_subset$Gear)
 unique(nafo_21B_grouped_daysfished$MainSpecies)
 
-nafo_21B_subset <- filter(
-  nafo_21B_grouped_daysfished,
+nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
   MainSpecies %in% c("1","2","3","4","6","10","11","12","13","16","21","30","31","52" ,"56", "49"))
 #(54, 105, 488, 489, 480, 487, 144)
 # MainSpecies to include (these are target species groups, not actual species caught):
@@ -466,20 +465,16 @@ for (i in 1:16) {
     type = "l", col = "blue", lty = 2,
     ylim = c(0, 1),
     main = sp_name,
-    xlab = "", ylab = "Relative Effort or Catch"
-  )
+    xlab = "", ylab = "Relative Effort or Catch")
 
   lines(
     as.numeric(rownames(catch_matrix)),
     safe_norm(c_raw, c_max),
-    col = "red"
-  )
+    col = "red")
 
-  lines(
-    as.numeric(rownames(effort_matrix)),
+  lines( as.numeric(rownames(effort_matrix)),
     safe_norm(e_raw, e_raw_max),
-    col = "blue", lty = 1
-  )
+    col = "blue", lty = 1 )
 }
 
 plot.new()

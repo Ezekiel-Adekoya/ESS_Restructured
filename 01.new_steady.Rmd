@@ -259,24 +259,10 @@ library(tidyr)
 species_lookup <- data.frame(
   Species = c(610, 60, 10, 41, 40, 30, 64, 11, 14, 42, 16, 31, 70, 23, 220, 12),
   Species_name = c(
-    "Sand Lances",
-    "Atlantic Herring",
-    "Atlantic Cod",
-    "Witch Flounder",
-    "American Plaice",
-    "Atlantic Halibut",
-    "Capelin",
-    "Haddock",
-    "Silver Hake",
-    "Yellowtail Flounder",
-    "Pollock",
-    "Greenland Halibut",
-    "Atlantic Mackerel",
-    "Atlantic Redfishes",
-    "Spiny Dogfish",
-    "White Hake"
-  )
-)
+    "Sand Lances", "Atlantic Herring","Atlantic Cod","Witch Flounder","American Plaice",
+    "Atlantic Halibut", "Capelin","Haddock","Silver Hake","Yellowtail Flounder",
+    "Pollock","Greenland Halibut","Atlantic Mackerel","Atlantic Redfishes","Spiny Dogfish",
+    "White Hake"))
 
 # ------------------------------------------------------------
 # 1. Filter, join names, rename columns
@@ -307,24 +293,10 @@ lf_agg <- lf_agg |>
 # ------------------------------------------------------------
 col_order <- c(
   "length_cm",
-  "Sand Lances",
-  "Atlantic Herring",
-  "Atlantic Cod",
-  "Witch Flounder",
-  "American Plaice",
-  "Atlantic Halibut",
-  "Capelin",
-  "Haddock",
-  "Silver Hake",
-  "Yellowtail Flounder",
-  "Pollock",
-  "Greenland Halibut",
-  "Atlantic Mackerel",
-  "Atlantic Redfishes",
-  "Spiny Dogfish",
-  "White Hake",
-  "YEAR"
-)
+  "Sand Lances", "Atlantic Herring","Atlantic Cod","Witch Flounder","American Plaice",
+    "Atlantic Halibut", "Capelin","Haddock","Silver Hake","Yellowtail Flounder",
+    "Pollock","Greenland Halibut","Atlantic Mackerel","Atlantic Redfishes","Spiny Dogfish",
+    "White Hake","YEAR")
 
 lf_agg <- lf_agg |>
   select(any_of(col_order))
@@ -411,7 +383,7 @@ corrections<-which(ratio>1)
 #external_species_info[corrections,"w_max"]<-biomass_cutoff[which(ratio>1),"max_w"]
 #correct sandlance maturation size too
 #external_species_info[1,"w_mat"]<-external_species_info[1,"w_max"]*0.10
-external_species_info
+
 ```
 
 
@@ -424,8 +396,9 @@ external_species_info[1,"w_max"]<-154
 external_species_info[1,"w_mat"]<-15
 
 params <- newMultispeciesParams(external_species_info,interaction = NULL, resource_dynamics = "resource_semichemostat",kappa = 1e12,gear_params = gear_params)
-
-```
+external_species_info
+write.csv(external_species_info, file = "Ess_data/new_ESSS_species_params.csv", row.names = FALSE)
+<!-- ``` -->
 
 Set up fishing gear parameters
 ```{r}
@@ -895,9 +868,7 @@ wl <- data.frame(
   a       = species_params(params)$a,
   b       = species_params(params)$b)
 
-bio_size <- bio_size |>
-  left_join(wl, by = "Species") |>
-  mutate(w = a * length_cm ^ b) |>
+bio_size <- bio_size |> left_join(wl, by = "Species") |> mutate(w = a * length_cm ^ b) |>
   filter(!is.na(Biomass), Year < 1986)
 
 # ------------------------------------------------------------
@@ -910,10 +881,8 @@ widths  <- upp - low
 mid     <- (widths + 2 * widths) / 2   # midpoint of each bin
 
 bio_size <- bio_size |>
-  mutate(
-    weightclass   = cut(w, breaks = breaks),
-    norm_biomass  = Biomass / widths[as.integer(cut(w, breaks = breaks))]
-  )
+  mutate(weightclass   = cut(w, breaks = breaks),
+    norm_biomass  = Biomass / widths[as.integer(cut(w, breaks = breaks))])
 
 levels(bio_size$weightclass) <- mid
 bio_size$weightclass <- round(as.numeric(as.character(bio_size$weightclass)), 2)
@@ -1116,7 +1085,8 @@ Run the model with changing fishing through time
 
 ```{r}
 fishing_history = readRDS("Ess_data/new_relative_interp_effort_nafo.RDS")
-effort<-fishing_history[as.character("1970":"2010"),]
+effort<-fishing_history[as.character("1970":"2018"),]
+
 params_spin<-projectToSteady(params,effort=initial_effort(params),t_max=100)
 sim<- project(params_spin, effort = effort)
 plot(sim)
@@ -1166,7 +1136,6 @@ ggplot(filter(yield_sim_base,Species!="Sand Lances"),aes(x = Year, y = Yield, gr
 ```
 
 
-
 Test with Additional predation mortality on all spp
 Introduction of New gears (named: seal)
 params now include additional gear
@@ -1209,10 +1178,12 @@ gear_params(params_with_seal)["Spiny Dogfish, Seals","catchability"]<-0.1
 
 Creating a data frame of constant fishing (mean fishing) with extra effort (Seals)
 ```{r}
+fishing_history = readRDS("Ess_data/new_relative_interp_effort_nafo.RDS")
+effort<-fishing_history[as.character("1970":"2018"),]
 effort_with_seal<-effort
 # Create a data frame with 41 rows
 # Create the Seal vector2
-Seals <- c(rep(0, 16), seq(0, 1.0, length.out = 25))
+Seals <- c(rep(0, 16), seq(0, 1.0, length.out = 33))
 
 # Add the Seal column to the existing data frame
 # Create a new data frame by combining the existing data and the "Seal" column
