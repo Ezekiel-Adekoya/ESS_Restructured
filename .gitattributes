@@ -1,0 +1,5 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+Ess_data/fhpd.csv filter=lfs diff=lfs merge=lfs -text
+Ess_data/fhpy.csv filter=lfs diff=lfs merge=lfs -text
+* !text !filter !merge !diff

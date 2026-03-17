@@ -1,0 +1,813 @@
+---
+title: "Running forcing through time by Scenario"
+author: "Ezekiel Adekoya"
+date: "2025-02-05"
+output: html_document
+---
+
+Set up directories
+```{r setup, include=FALSE}
+library("here")
+dir <- setwd(here())
+knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/Eastern Scotian Shelf Model/")
+
+# Define the save directory
+save_dir <- paste0(here(), "/Ess_Output/")
+```
+
+
+Function to randomize interaction matrix while preserving basic ecological constraints
+```{r}
+# Function to randomize interaction matrix while preserving basic ecological constraints
+randomize_interaction_matrix <- function(params, sdev = 0.1) {
+  # Get current interaction matrix
+  old_inter <- params@interaction
+  # Get current interactions for seal predation 
+  old_seal <- gear_params(params)$catchability[14:26]
+  
+  # Create noise matrix with same dimensions
+  n <- nrow(old_inter)
+  noise <- matrix(rnorm(n*n, mean = 0, sd = sdev), nrow = n)
+  noise_seal <- rnorm(n, mean = 0, sd = sdev)
+  
+  # Add noise while preserving symmetry
+  new_inter <- old_inter * exp(noise)
+  new_seal <-  old_seal*exp(noise_seal)
+    
+  # Ensure diagonal remains 0.5
+  #diag(new_inter) <- 0.5
+  
+  # Ensure values stay between 0 and 1
+  new_inter[new_inter > 1] <- 1
+  new_inter[new_inter < 0] <- 0
+  new_seal[new_seal > 1] <- 1
+  new_seal[new_seal < 0] <- 0
+  
+  
+  # Update parameters
+  params@interaction <- new_inter
+  gear_params(params)$catchability[17:32]<-new_seal 
+  
+  return(params)
+}
+
+```
+
+Function to run multiple simulations with different interaction matrices
+```{r}
+# Function to run multiple simulations with different interaction matrices
+run_random_sims <- function(params, n_sims = 10, years = 100, sd = 0.1,effort_scen) {
+  # List to store simulation results
+  sim_results <- list()
+  
+  # Run simulations
+  for(i in 1:n_sims) {
+    # Create new parameters with randomized interaction matrix
+    rand_params <- randomize_interaction_matrix(params, sd = sd)
+    # Run to steady
+    rand_params<-steady(rand_params)
+    # Run simulation
+    sim <- project(rand_params, effort=effort_scen)
+    
+    # Store results
+    sim_results[[i]] <- sim
+  }
+  
+  return(sim_results)
+}
+
+```
+
+Set up packages:
+```{r}
+# Set up packages:
+# Load required library
+library(mizer)
+library(mizerExperimental)
+library(Metrics)
+library(tidyverse)
+library(interp)
+library(hydroGOF)
+library(patchwork)
+library(ggpubr)
+```
+
+Read in params object
+```{r}
+# Read in params object 
+params_with_seal <- readRDS("Ess_data/params_with_seal_interaction.RDS")
+# Read in effort object
+effort_with_seal <- readRDS("Ess_data/effort_with_seal_matrix.RDS")
+effort<-effort_with_seal
+# set up zero effort for sim without seals
+effort[,"Seals"]<-0
+#fix zero effort values for American Plaice
+#effort["2004","AMERICAN PLAICE"]<-sum(effort[c("2003","2005"),"AMERICAN PLAICE"])/2
+params = params_with_seal
+#Orignal run
+sim0 <- project(params,effort = effort)
+plotlyBiomass(sim0)
+
+# Run single simulation with randomized matrix as a test
+rand_params <- randomize_interaction_matrix(params)
+sim1 <- project(rand_params,effort = effort)
+plot(sim1,time_range=c(1970:1980))
+plotBiomassRelative(sim1,sim0)
+
+# use sam eparams object but set Seal "effort" to 0 for without additonal mort runs
+effort<-effort_with_seal
+effort[,"Seals"] <- 0
+# Run multiple simulations
+#sims_scen1 <- run_random_sims(params_with_seal, n_sims = 1000,effort_scen=effort,sd=0.2)
+# sims_scen2 <- run_random_sims(params_with_seal, n_sims = 1000,effort_scen=effort_with_seal,sd=0.2)
+# 
+# # Save sim outputs
+# saveRDS(sims_scen1,"Ess_output/sims_scen1.RDS")
+# saveRDS(sims_scen2,"Ess_output/sims_scen2.RDS")
+
+sims_scen1<-readRDS("Ess_output/sims_scen1.RDS")
+sims_scen2<-readRDS("Ess_output/sims_scen2.RDS")
+
+# Check results from first simulation
+plot(sims_scen2[[2]],time_range=c(1970:1980))
+
+plotBiomassRelative(sims_scen2[[99]],sim0)
+```
+
+Figures - make plot of obs and sims
+```{r}
+# read in biomass and catches data
+yield_ts<-readRDS("Ess_data/yield_ts.RDS")
+yield_ts<-yield_ts |> rename(Yield_Obs=Yield) |> filter(Species!="SANDLANCES")
+biomass_ts<-readRDS("Ess_data/biomass_ts.RDS")
+biomass_ts<-biomass_ts |> rename(Biomass_Obs=Biomass) 
+# -- Extract biomass time series from simulation lists for scenario 1 and 2 --
+# sims_scen1 and sims_scen2: lists of simulation results, each with 1000 runs
+
+sim_bio <- lapply(sims_scen1, getBiomass, min_w = species_params(params)$biomass_cutoff)
+sim_bio2 <- lapply(sims_scen2, getBiomass, min_w = species_params(params)$biomass_cutoff)
+
+# Combine the biomass data frames into one data frame for each scenario
+df_sim_bio <- do.call(rbind.data.frame, sim_bio)
+df_sim_bio$sim <- rep(1:1000, each = 41)        # Add simulation run index (1000 sims, 41 years each)
+df_sim_bio$year <- rep(1970:2010, 1000)         # Add corresponding year for each row
+
+df_sim_bio2 <- do.call(rbind.data.frame, sim_bio2)
+df_sim_bio2$sim <- rep(1:1000, each = 41)
+df_sim_bio2$year <- rep(1970:2010, 1000)
+
+# -- Summarize simulation results by species and year for Scenario 1 --
+
+sim_mean <- df_sim_bio |>
+  pivot_longer(cols = 1:13) |>                   # Convert species columns from wide to long format
+  mutate(Year = year, Species = as.factor(name)) |>
+  group_by(Species, Year) |>
+  summarise(Biomass = median(value)) |>          # Median biomass across simulations
+  ungroup()
+
+sim_lower <- df_sim_bio |>
+  pivot_longer(cols = 1:13) |>
+  mutate(Year = year, Species = as.factor(name)) |>
+  group_by(Species, Year) |>
+  summarise(Biomass = min(value)) |>             # Minimum biomass for uncertainty range
+  ungroup()
+
+sim_upper <- df_sim_bio |>
+  pivot_longer(cols = 1:13) |>
+  mutate(Year = year, Species = as.factor(name)) |>
+  group_by(Species, Year) |>
+  summarise(Biomass = max(value)) |>             # Maximum biomass for uncertainty range
+  ungroup()
+
+# -- Summarize simulation results by species and year for Scenario 2 (same process) --
+
+sim_mean2 <- df_sim_bio2 |>
+  pivot_longer(cols = 1:13) |>
+  mutate(Year = year, Species = as.factor(name)) |>
+  group_by(Species, Year) |>
+  summarise(Biomass = median(value)) |>
+  ungroup()
+
+sim_lower2 <- df_sim_bio2 |>
+  pivot_longer(cols = 1:13) |>
+  mutate(Year = year, Species = as.factor(name)) |>
+  group_by(Species, Year) |>
+  summarise(Biomass = min(value)) |>
+  ungroup()
+
+sim_upper2 <- df_sim_bio2 |>
+  pivot_longer(cols = 1:13) |>
+  mutate(Year = year, Species = as.factor(name)) |>
+  group_by(Species, Year) |>
+  summarise(Biomass = max(value)) |>
+  ungroup()
+
+# -- Create data frames with median, lower and upper quantiles for Scenario 1 --
+
+sim1 <- data.frame(
+  Species = sim_mean$Species,
+  Year = sim_mean$Year,
+  sim_mean = sim_mean$Biomass,
+  sim_lower = sim_lower$Biomass,
+  sim_upper = sim_upper$Biomass,
+  scen = rep("Scen1", length(sim_mean$Biomass))
+)
+
+# Join observed biomass time series with simulation summaries for Scenario 1
+sim1 <- left_join(biomass_ts, sim1)
+
+# -- Same for Scenario 2 --
+sim2 <- data.frame(
+  Species = sim_mean2$Species,
+  Year = sim_mean2$Year,
+  sim_mean = sim_mean2$Biomass,
+  sim_lower = sim_lower2$Biomass,
+  sim_upper = sim_upper2$Biomass,
+  scen = rep("Scen2", length(sim_mean2$Biomass))
+)
+
+sim2 <- left_join(biomass_ts, sim2)
+
+# -- Combine both scenarios into one data frame for plotting or analysis --
+
+time_series <- rbind(sim1, sim2)
+
+# Rename observed biomass column to 'Biomass' for easier plotting
+time_series <- time_series |> rename(Biomass = Biomass_Obs)
+
+# -- Add a 'Calibration' label for years before 1986, keep scenario label after --
+time_series <- time_series %>%
+  mutate(scen = ifelse(Year < 1986, "Calibration", scen))
+
+# -- Define species names and set factor levels accordingly --
+species <- levels(time_series$Species) <- c(
+  "AMERICAN PLAICE", "ATLANTIC COD", "ATLANTIC HALIBUT", "HERRING",
+  "REDFISH UNSEPARATED", "GREENLAND HALIBUT", "HADDOCK", "SAND LANCE",
+  "SILVER HAKE", "SPINY DOGFISH", "WHITE HAKE", "WITCH FLOUNDER", "YELLOWTAIL FLOUNDER"
+)
+
+# -- Order species by their maximum weight for plotting or analyses --
+maxw <- species_params(params)$w_max
+species_df <- data.frame(species, maxw)
+species_ordered <- species_df[order(species_df$maxw), "species"]
+
+```
+
+
+```{r}
+time_series_first4 <- sim2[, 1:4]
+colnames(time_series_first4) <- c("Year", "Species", 
+                                  "Biomass_observed", "Biomass")
+time_series_first4<- time_series_first4 %>%
+  filter(Year >= 1986, Year <= 2010)
+modStats(time_series_first4,
+         obs  = "Biomass_observed",
+         mod  = "Biomass",
+         type = "Species",
+         rank = "Species")
+library(dplyr)
+
+taylor_data <- time_series_first4 %>%
+  group_by(Species) %>%
+  mutate(
+    Biomass_observed_norm = Biomass_observed / mean(Biomass_observed, na.rm = TRUE),
+    Biomass_norm          = Biomass / mean(Biomass_observed, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# Choose distinct colors for species
+
+x = TaylorDiagram(
+  taylor_data,
+  obs       = "Biomass_observed_norm",
+  mod       = "Biomass_norm",
+  group     = "Species",
+  normalise = TRUE,       # keep actual SD values
+  pch       = 19,
+  cex       = 1.2,
+  #col       = rainbow(length(unique(taylor_data$Species))),
+  pos.cor   = TRUE,
+  cor.range = c(-1, 1),    # allow negative correlations
+  main      = "Taylor Diagram – Model vs Observed Biomass by Species"
+)
+
+
+# Correlation plot by Species
+ggplot(time_series_first4, aes(x = Biomass_observed, y = Biomass)) +
+  geom_point(aes(color = Species), size = 2) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  stat_cor(aes(label = paste(..r.label.., sep = "~`,`~")), 
+           method = "pearson", label.x.npc = "left", label.y.npc = 0.95) +
+  facet_wrap(~ Species, scales = "free") +
+  theme_bw() +
+  labs(
+    x = "Observed Biomass",
+    y = "Model Biomass",
+    title = "Observed vs Modeled Biomass by Species"
+  )
+
+```
+
+
+reorder Species in the plot to go from from small to large max body size.
+```{r}
+# reorder Species in the plot to go from from small to large max body size.
+time_series <- time_series |> arrange(Species) |> mutate(Species=factor(Species,species))
+
+time_series <- time_series %>%
+  rename(Scenario = scen) %>%
+  mutate(Species = fct_recode(Species, "SAND LANCE" = "SANDLANCES"))
+biomass_plot <- ggplot(time_series, aes(x = Year, y = Biomass, colour = Scenario, fill = Scenario)) +
+  facet_wrap(~factor(Species, levels = c("SAND LANCE", "HERRING", "WITCH FLOUNDER", "REDFISH UNSEPARATED" , "YELLOWTAIL FLOUNDER","SILVER HAKE", "AMERICAN PLAICE","GREENLAND HALIBUT", "HADDOCK", "SPINY DOGFISH","WHITE HAKE", "ATLANTIC COD", "ATLANTIC HALIBUT")), scales = "free") +
+  geom_point(aes(y = Biomass), colour = "black", size = 0.5) +
+  geom_ribbon(aes(ymin = sim_lower, ymax = sim_upper), alpha = 0.3, colour = NA) +
+  geom_line(aes(y = sim_mean)) +
+  scale_colour_manual(name = NULL,
+                      values = c("grey70", "#4575B4", "#D73027"),
+                      labels = c("Reference period", "Fishing without additional predation mortality", "Fishing with additional predation mortality")) +
+  scale_fill_manual(name = NULL,
+                    values = c("grey70", "#4575B4", "#D73027"),
+                    labels = c("Reference period", "Fishing without additional predation mortality", "Fishing with additional predation mortality")) +
+  labs(y = "Biomass", x = "Year") +   
+  geom_vline(xintercept = 1986, linetype = "dashed", color = "black") +   
+  theme_pubr() +   
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 8)
+  )
+
+ggsave(filename = paste0(save_dir, "biomass_plot.jpeg"), plot = biomass_plot,
+       width = 11, height = 8.5, units = "in",dpi = 400)
+biomass_plot
+```
+
+Figure for CATCHES 
+```{r}
+# Function to extract yield data, removing 'Seals' gear, and keeping relevant columns
+trimYield <- function(sim){
+  y <- plotYieldGear(sim, return_data = TRUE)   # Extract yield data by gear
+  y <- filter(y, Gear != "Seals")               # Remove entries where gear is 'Seals'
+  y <- select(y, c(Year, Species, Yield))       # Keep only Year, Species, and Yield columns
+  return(y)
+}
+
+# Apply trimming function to all simulations in both scenarios
+sim_catches <- lapply(sims_scen1, trimYield)
+sim_catches2 <- lapply(sims_scen2, trimYield)
+
+# Add simulation ID to each element in the list
+for (i in 1:1000) {
+  sim_catches[[i]]$sim <- i
+  sim_catches2[[i]]$sim <- i
+}
+
+# Combine all simulations into single data frames for each scenario
+df_sim_catch <- do.call(rbind.data.frame, sim_catches)
+df_sim_catch2 <- do.call(rbind.data.frame, sim_catches2)
+
+# Compute summary statistics (median, min, max) for each species and year in Scenario 1
+sim_mean_c  <- df_sim_catch |> group_by(Species, Year) |> summarise(Yield = median(Yield)) |> ungroup()
+sim_lower_c <- df_sim_catch |> group_by(Species, Year) |> summarise(Yield = min(Yield))    |> ungroup()
+sim_upper_c <- df_sim_catch |> group_by(Species, Year) |> summarise(Yield = max(Yield))    |> ungroup()
+
+# Compute summary statistics for Scenario 2
+sim_mean2_c  <- df_sim_catch2 |> group_by(Species, Year) |> summarise(Yield = median(Yield)) |> ungroup()
+sim_lower2_c <- df_sim_catch2 |> group_by(Species, Year) |> summarise(Yield = min(Yield))    |> ungroup()
+sim_upper2_c <- df_sim_catch2 |> group_by(Species, Year) |> summarise(Yield = max(Yield))    |> ungroup()
+
+# Create summary dataframe for Scenario 1 and join with observed yield time series
+sim1_c <- data.frame(
+  Species   = sim_mean_c$Species, 
+  Year      = sim_mean_c$Year,
+  sim_mean  = sim_mean_c$Yield,
+  sim_lower = sim_lower_c$Yield,
+  sim_upper = sim_upper_c$Yield,
+  scen      = rep("Scen1", length(sim_mean_c$Yield))
+)
+sim1_c <- right_join(yield_ts, sim1_c)  # Combine with observed data
+
+# Create summary dataframe for Scenario 2 and join with observed yield time series
+sim2_c <- data.frame(
+  Species   = sim_mean2_c$Species, 
+  Year      = sim_mean2_c$Year,
+  sim_mean  = sim_mean2_c$Yield,
+  sim_lower = sim_lower2_c$Yield,
+  sim_upper = sim_upper2_c$Yield,
+  scen      = rep("Scen2", length(sim_mean2_c$Yield))
+)
+sim2_c <- right_join(yield_ts, sim2_c)  # Combine with observed data
+
+# Combine both scenarios into a single dataframe
+time_series_c <- rbind(sim1_c, sim2_c)
+
+# Label pre-1986 years as 'Calibration' period
+time_series_c <- time_series_c %>%
+  mutate(scen = ifelse(Year < 1986, "Calibration", scen))
+
+# Rename 'Yield_Obs' to 'Yield' for clarity and consistency
+time_series_c <- time_series_c |> rename(Yield = Yield_Obs)
+
+```
+
+Reorder Species in the plot to go from from small to large max body size.
+```{r}
+# Reorder Species in the plot to go from from small to large max body size.
+# species_c<-species[-1] #remove sandlances as not fished
+time_series_c <- subset(time_series_c,!is.na(time_series_c$Species))
+species<-levels(time_series_c $Species)<- c("AMERICAN PLAICE", "ATLANTIC COD","ATLANTIC HALIBUT", "HERRING","REDFISH UNSEPARATED", "GREENLAND HALIBUT", "HADDOCK","SAND LANCE", "SILVER HAKE", "SPINY DOGFISH",  "WHITE HAKE", "WITCH FLOUNDER", "YELLOWTAIL FLOUNDER")
+
+yield_plot = ggplot(time_series_c, aes(x=Year, y=Yield, colour=scen, fill=scen)) +   
+  facet_wrap(~factor(Species, levels = c("HERRING", "WITCH FLOUNDER", "REDFISH UNSEPARATED", 
+"YELLOWTAIL FLOUNDER", "SILVER HAKE", "AMERICAN PLAICE", "GREENLAND HALIBUT", "HADDOCK", "SPINY DOGFISH", "WHITE HAKE", "ATLANTIC COD", "ATLANTIC HALIBUT")), 
+              scales="free") +   
+  geom_point(aes(y=Yield), colour="black", size=0.3) +   
+  geom_ribbon(data = time_series_c, aes(ymin=sim_lower, ymax=sim_upper), alpha=0.3, colour=NA) +   
+  geom_line(data = time_series_c, aes(y=sim_mean, colour=scen)) +   
+  scale_colour_manual(name = NULL,  
+                      values = c("grey70", "#4575B4", "#D73027"),
+                      labels = c("Reference period", 
+                                 "Fishing without additional predation mortality", 
+                                 "Fishing with additional predation mortality")) +   
+  scale_fill_manual(name = NULL,  
+                    values = c("grey70", "#4575B4", "#D73027"),
+                    labels = c("Reference period", 
+                               "Fishing without additional predation mortality", 
+                               "Fishing with additional predation mortality")) +   
+  labs(y = "Catches", x = "Year") +   
+  geom_vline(xintercept = 1986, linetype="dashed", color = "black") +   
+  theme_pubr() +   
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 8)
+  )
+ggsave(filename = paste0(save_dir, "yield_plot.jpeg"), plot = yield_plot,
+       width = 11, height = 7.5, units = "in",dpi = 400)
+yield_plot
+```
+
+
+ Comparison of Model Skill Metrics across Model Scenarios
+```{r}
+
+# Calculate modStats
+library(openair)
+# Add log-transformed variables for catch (Yield)
+time_series_c <- time_series_c |> mutate(logYield = log(Yield),logMeanSimYield=log(sim_mean))
+
+modStats_c <- time_series_c %>%
+  group_modify(~modStats(.x, obs = "logYield",  # Log of observed yield
+                         mod = "logMeanSimYield", # Log of simulated median yield
+                         type = "scen", rank = "scen",statistic=c("n","FAC2","MGE","RMSE","r","COE"),method="spearman")) %>%
+  ungroup()
+# Compute performance statistics for each 'scen' group (Scenarios and Calibration period)
+time_series <- time_series %>%
+  rename(scen =  Scenario)
+time_series <- time_series |> mutate(logBiomass = log(Biomass),logMeanSimBiomass=log(sim_mean))
+modStats <- time_series %>%
+  group_modify(~modStats(.x, obs = "logBiomass", mod = "logMeanSimBiomass", type = "scen", rank = "scen",statistic=c("n","FAC2","MGE","RMSE","r","COE"),method="spearman")) %>%
+  ungroup()
+
+
+## Load flextable for formatted tables
+library(flextable)
+# Compute performance statistics for biomass data
+tabl_b <-  modStats %>%
+  mutate(across(where(is.numeric), ~round(., 3))) %>%
+  select(c("scen","n","FAC2","MGE","RMSE","r","COE"))%>%
+  flextable()
+# Compute performance statistics for catch data
+tabl_c<-modStats_c %>%
+  mutate(across(where(is.numeric), ~round(., 3))) %>%
+  select(c("scen","n","FAC2","MGE","RMSE","r","COE"))%>%
+  flextable()
+
+```
+
+
+# Compare size-based trophic cascades under each scenario relative to histrorical when cod were abundant across species
+```{r}
+# Extract reference spectra from historical period (1970–1985) when cod were abundant
+spectra_reference <- plotSpectra(sims_scen1[[1]], return_data = TRUE, time_range = 1970:1985)
+
+# Extract spectra for Scenario 1 (without additional predation mortality) for 1995–2010
+spectra_scen1 <- plotSpectra(sims_scen1[[1]], return_data = TRUE, time_range = 1995:2010)
+
+# Extract spectra for Scenario 2 (with additional predation mortality) for 1995–2010
+spectra_scen2 <- plotSpectra(sims_scen2[[1]], return_data = TRUE, time_range = 1995:2010)
+
+# Join Scenario 1 spectra with reference and calculate symmetric relative difference
+sf1 <- mutate(
+  left_join(spectra_reference, spectra_scen1, by = c("w", "Legend")), 
+  rel_diff = (value.y - value.x) / (value.x + value.y)
+)
+
+# Join Scenario 2 spectra with reference and calculate symmetric relative difference
+sf2 <- mutate(
+  left_join(spectra_reference, spectra_scen2, by = c("w", "Legend")), 
+  rel_diff = (value.y - value.x) / (value.x + value.y)
+)
+
+# Add scenario labels for plotting
+sf1$scenario <- "Fishing without additional predation mortality"
+sf2$scenario <- "Fishing with additional predation mortality"
+
+# Combine both scenarios into one data frame
+combined_data <- rbind(sf1, sf2)
+
+# Define manual colors for the scenarios
+linecolours <- c("#D73027", "#4575B4")
+
+# Clean and standardize species names for plotting
+combined_data <- combined_data %>%
+  mutate(Legend = case_when(
+    Legend == "TURBOT, GREENLAND HALIBUT" ~ "GREENLAND HALIBUT",
+    Legend == "HERRING(ATLANTIC)" ~ "HERRING",
+    Legend == "COD(ATLANTIC)" ~ "ATLANTIC COD",
+    Legend == "SANDLANCES" ~ "SAND LANCE",
+    TRUE ~ Legend))
+
+# Set factor levels for consistent facet ordering
+combined_data$Legend <- factor(combined_data$Legend, 
+  levels = c("Resource", "SAND LANCE", "HERRING", "HADDOCK", "YELLOWTAIL FLOUNDER", 
+             "WITCH FLOUNDER", "AMERICAN PLAICE", "REDFISH UNSEPARATED", "SILVER HAKE", 
+             "SPINY DOGFISH", "ATLANTIC COD", "WHITE HAKE", "GREENLAND HALIBUT", "ATLANTIC HALIBUT"))
+
+# Create the trophic cascade plot
+trophic_cascades_plot <- ggplot(combined_data, aes(x = w, y = rel_diff, colour = scenario)) +
+  geom_line(linewidth = 0.8) +  # Plot relative difference over weight
+  facet_wrap(~Legend, scales = "free") +  # Separate panels by species
+  labs(x = "Weight (g)", y = "Symmetric relative difference") +
+  scale_x_log10() +  # Log scale for weight axis
+  scale_color_manual(values = linecolours) +  # Apply manual colors to scenarios
+  geom_hline(yintercept = 0, linetype = 1, colour = "dark grey", linewidth = 0.75) +  # Reference line at 0
+  theme_bw() +  # Base theme
+  theme(
+    text = element_text(size = 12, face = "bold"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10, face = "bold"),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10, face = "bold"),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(linewidth = 1),
+    panel.grid.major.x = element_blank(), 
+    panel.grid.major.y = element_blank() 
+  )
+
+# Save the plot to file
+ggsave(
+  filename = paste0(save_dir, "trophic_cascades_plot.jpeg"),
+  plot = trophic_cascades_plot,
+  width = 11, height = 7.5, units = "in", dpi = 400
+)
+
+# Print the plot to the output
+trophic_cascades_plot
+
+```
+
+Spectra_community
+```{r}
+# Size spectra of the observed 
+bio_size_read <- read.csv("Ess_data/bio_size.csv")
+biomass_size_spectra<-bio_size %>%
+  group_by(weightclass,Year)%>%
+  summarise(nbiomass=sum(norm_biomass))%>%
+  ungroup() 
+#Observed Reference period 1970-1985
+mean_biomass_size_spectra_ref <- biomass_size_spectra  %>% 
+  filter(Year<1986)%>%
+  group_by(weightclass) %>% 
+  summarise(mean_nbiomass=mean(nbiomass))
+#Observed Post Reference period 1986-2010
+mean_biomass_size_spectra_post <- biomass_size_spectra  %>% 
+  filter(Year>1985)%>%
+  group_by(weightclass) %>% 
+  summarise(mean_nbiomass=mean(nbiomass))
+# create function to calculate *community* size spectrum from a time period.
+sizespec<-function(sim,time_range){
+  ssdf<-plotSpectra(sim, power = 0,  resource = F, return_data = TRUE, time_range = time_range) |>
+    group_by(w)|>
+    summarise(sum(value)) 
+    #|>filter(w >= 0.001)
+  return(ssdf)
+}
+
+ssdf_ref <-lapply(sims_scen1, sizespec,  time_range = 1970:1985)
+ssdf1 <- lapply(sims_scen1, sizespec,  time_range = 1995:2010)
+ssdf2 <- lapply(sims_scen2, sizespec, time_range = 1995:2010)
+
+# Add simulation ID to each element in the list
+iter = 1000 # should be 1000 in you dataset?
+for (i in 1:iter) {
+  ssdf_ref[[i]]$sim <- i
+  ssdf1[[i]]$sim <- i
+  ssdf2[[i]]$sim <- i
+}
+
+# Combine all the size spectra sims dataframes into one data frame for each scenario
+df_ssdf_ref <- do.call(rbind.data.frame, ssdf_ref)
+# Combine all the size spectra sims dataframes into one data frame for each scenario
+df_ssdf_1 <- do.call(rbind.data.frame, ssdf1)
+# Combine all the size spectra sims dataframes into one data frame for each scenario
+df_ssdf_2 <- do.call(rbind.data.frame, ssdf2)
+
+# Compute summary statistics (median, min, max) for each species and year in REFERENCE
+df_ssdf_ref_mean  <- df_ssdf_ref |> group_by(w) |> summarise(N = median(`sum(value)`)) |> ungroup()
+df_ssdf_ref_lower <- df_ssdf_ref |> group_by(w) |> summarise(N = min(`sum(value)`)) |> ungroup()
+df_ssdf_ref_upper <- df_ssdf_ref |> group_by(w) |> summarise(N = max(`sum(value)`)) |> ungroup()
+
+# Compute summary statistics for Scenario 1
+sim_mean1_ssdf  <- df_ssdf_1 |> group_by(w) |> summarise(N = median(`sum(value)`)) |> ungroup()
+sim_lower1_ssdf <- df_ssdf_1 |> group_by(w) |> summarise(N = min(`sum(value)`)) |> ungroup()
+sim_upper1_ssdf <- df_ssdf_1 |> group_by(w) |> summarise(N = max(`sum(value)`)) |> ungroup()
+
+# Compute summary statistics for Scenario 2
+sim_mean2_ssdf  <- df_ssdf_2 |>group_by(w) |> summarise(N = median(`sum(value)`)) |> ungroup()
+sim_lower2_ssdf <- df_ssdf_2 |> group_by(w) |> summarise(N = min(`sum(value)`)) |> ungroup()
+sim_upper2_ssdf <- df_ssdf_2 |> group_by(w) |> summarise(N = max(`sum(value)`)) |> ungroup()
+
+# Create summary dataframe for REFERENCE and join with observed yield time series
+ss_c_ref <- data.frame(
+  w   = df_ssdf_ref_mean$w, 
+  sim_meanN      = df_ssdf_ref_mean$N,
+  sim_lowerN  = df_ssdf_ref_lower$N,
+  sim_upperN = df_ssdf_ref_upper$N,
+  scen      = rep("REF", length(df_ssdf_ref_mean$w)))
+
+# Create summary dataframe for Scenario 1 and join with observed yield time series
+ss_c_1 <- data.frame(
+  w   = sim_mean1_ssdf$w, 
+  sim_meanN      = sim_mean1_ssdf$N,
+  sim_lowerN  = sim_lower1_ssdf$N,
+  sim_upperN = sim_upper1_ssdf$N,
+  scen      = rep("Scen1", length(sim_mean1_ssdf$w)))
+
+# Create summary dataframe for Scenario 2
+ss_c_2 <- data.frame(
+  w          = sim_mean2_ssdf$w, 
+  sim_meanN  = sim_mean2_ssdf$N,
+  sim_lowerN = sim_lower2_ssdf$N,
+  sim_upperN = sim_upper2_ssdf$N,
+  scen       = rep("Scen2", length(sim_mean2_ssdf$w))
+)
+
+# Combine all scenarios
+time_series_c <- rbind(ss_c_1, ss_c_2, ss_c_ref)
+
+# ---------------------------------------------
+# 2. Recode scenario names
+# ---------------------------------------------
+time_series_c <- time_series_c %>%
+  mutate(scen = recode(scen,
+      "Scen1" = "Fishing without additional mortality",  # Fixed: Capital S
+      "Scen2" = "Fishing with additional mortality",     # Fixed: Capital S
+      "REF"   = "Reference period") )
+
+# Define line colours
+linecolours <- c(
+  "Fishing without additional mortality" = "#4575B4",
+  "Fishing with additional mortality"    = "#D73027",
+  "Reference period"                     = "darkgray")
+
+# Create the spectra plot
+# Define y-axis limits for annotation
+y_limits <- range(time_series_c$sim_meanN, na.rm = TRUE)
+x_limits <- range(time_series_c$w, na.rm = TRUE)
+
+spectra_plot <- ggplot( time_series_c, aes(x = w, y = sim_meanN, colour = scen, fill = scen)) +
+  geom_ribbon(aes(ymin = sim_lowerN, ymax = sim_upperN), alpha = 0.1, colour = NA, show.legend = FALSE) +
+  geom_line(linewidth = 1.2, alpha = 0.8) +
+  geom_point(data = mean_biomass_size_spectra_ref,  aes(x = weightclass, y = mean_nbiomass), inherit.aes = FALSE,
+      size = 1.8, shape = 23, fill = "white", colour = "black") +
+  geom_point(data = mean_biomass_size_spectra_post, aes(x = weightclass, y = mean_nbiomass),  inherit.aes = FALSE,
+      size = 1.8, shape = 23, fill = "black", colour = "black") +
+  scale_y_log10() +
+  scale_x_log10() +
+  scale_colour_manual(values = linecolours) +
+  scale_fill_manual(values = linecolours) +
+  labs(x = "Size (g)", y = "Normalized biomass density") +
+  annotate("text",
+           x = x_limits[1] * 0.8,  # slightly left of min x
+           y = y_limits[2] * 0.95, # near top
+           label = "(a)",
+           hjust = 0,
+           vjust = 1.2,
+           fontface = "bold",
+           size = 6) +
+  theme_bw() +
+  theme(
+    text = element_text(size = 12, family = "Arial"),
+    axis.title.x = element_text(face = "bold", size = 12),
+    axis.title.y = element_text(face = "bold", size = 12),
+    axis.text.y  = element_text(face = "bold", size = 12),
+    axis.text.x  = element_text(face = "bold", size = 12),
+    legend.position = "none",
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(linewidth = 1.5)
+  )
+
+spectra_plot
+```
+
+
+
+ Relative difference spectra of Sceanrio 1 and 2 with reference
+
+```{r}
+library(ggtext)
+# Join Scenario 1 spectra with reference and calculate symmetric relative difference
+sf1 <- left_join(ss_c_ref, ss_c_1,by = "w") %>%
+  mutate(rel_diff = (sim_meanN.y - sim_meanN.x) / (sim_meanN.x + sim_meanN.y))
+
+# Join Scenario 2 spectra with reference and calculate symmetric relative difference
+sf2 <- left_join(ss_c_ref, ss_c_2,by = "w") %>%
+  mutate(rel_diff = (sim_meanN.y - sim_meanN.x) / (sim_meanN.x + sim_meanN.y))
+# -----------------------------
+# 2. Add scenario labels
+# -----------------------------
+ss_c_ref <- ss_c_ref %>%mutate(scenario = "Reference period")
+ss_c_1 <- ss_c_1 %>%mutate(scenario = "Fishing without additional predation mortality")
+ss_c_2 <- ss_c_2 %>%mutate(scenario = "Fishing with additional predation mortality")
+
+# -----------------------------
+# 3. Ensure consistent column names
+# -----------------------------
+# Rename numeric columns to a common base name for relative difference calculation
+ss_c_ref <- ss_c_ref %>%rename(value = sim_meanN)
+ss_c_1 <- ss_c_1 %>%rename(value = sim_meanN)
+ss_c_2 <- ss_c_2 %>% rename(value = sim_meanN)
+
+# -----------------------------
+# 4. Compute relative differences between reference and each scenario
+# -----------------------------
+sf1 <- ss_c_ref %>%left_join(ss_c_1, by = "w", suffix = c(".ref", ".scen1")) %>%
+  mutate(rel_diff = (value.scen1 - value.ref) / (value.scen1 + value.ref),
+         scenario = "Fishing without additional predation mortality")
+
+sf2 <- ss_c_ref %>%left_join(ss_c_2, by = "w", suffix = c(".ref", ".scen2")) %>%
+  mutate(rel_diff = (value.scen2 - value.ref) / (value.scen2 + value.ref),
+         scenario = "Fishing with additional predation mortality")
+
+# 5. Combine both scenarios
+# -----------------------------
+combined_data <- bind_rows(sf1, sf2)
+
+# -----------------------------
+# 6. Define manual colors for the scenarios
+# -----------------------------
+linecolours <- c(
+  "Fishing without additional predation mortality" = "#4575B4",
+  "Fishing with additional predation mortality" = "#D73027")
+
+# -----------------------------
+# 7. Plot
+# Define y-axis limits for annotation (you can also use ggplot_build to get them dynamically)
+y_limits <- range(combined_data$rel_diff, na.rm = TRUE)
+
+Relative_trophic_plot <-  ggplot(combined_data, aes(x = w, y = rel_diff, colour = scenario)) +
+  geom_line(linewidth = 1.0) + labs(x = "Weight (g)", y = "Symmetric relative difference") +
+  scale_x_log10(  breaks = c(1e-1, 1e2, 1e5),labels = c("**1e-1**", "**10e+2**", "**1e+5**")) +
+  scale_color_manual(values = linecolours) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "darkgrey", linewidth = 0.75) +
+  annotate( "text", x = min(combined_data$w) * 0.2, y = max(y_limits) * 0.95,label = "(b)",
+    hjust = 0, vjust = 1,fontface = "bold",size = 6) +
+  theme_bw() +
+  theme(
+    text = element_text(size = 12, face = "bold"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    axis.text.x = element_markdown(size = 10),  # <- bold x-axis labels
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10, face = "bold"),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(linewidth = 1),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank())
+
+Relative_trophic_plot
+spectra = spectra_plot/Relative_trophic_plot #bind plots
+
+ggsave(filename = paste0(save_dir, "spectra_plot.jpeg"), plot = spectra, width = 11, height = 7.5, units = "in", dpi =400)
+
+```
+
+
+# Size distribution of seal "diets"
+```{r}
+
+aaa = plotYieldVsSize(sims_scen2[[1]],gear=c("Seals"), x_var = c("Length")) + theme_bw()
+ggsave(filename = paste0(save_dir, "aaa.jpeg"), plot = aaa,
+       width = 11, height = 7.5, units = "in",dpi = 400)
+```
+
+
+
