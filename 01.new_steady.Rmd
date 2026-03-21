@@ -31,7 +31,7 @@ Set up directories
 ```{r setup, include=FALSE}
 library("here")
 dir <- setwd(here())
-knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/Eastern Scotian Shelf Model_/")
+knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/ESS_restructured/")
 # Define the save directory
 save_dir <- paste0(here(), "/Ess_Output/")
 ```
@@ -103,7 +103,7 @@ Restrict to the 9 species of interest
 Rename columns
 ```{r}
 #Read observed biomass: DFO (Bundy et al., 2017)
-biomass_obs = read.csv("Ess_data/new_Alida_biomass_qcorrect.csv")
+biomass_obs = read.csv("Ess_data/")
 biomass_obs <- biomass_obs[, 1:17] # select species and omit Red Hake,Thorny Skate,	Smooth Skate,	Little Skate,	Winter Skate,	Cusk
 # covert to grams
 biomass_obs[,-1]<-biomass_obs[,-1]*1e3
