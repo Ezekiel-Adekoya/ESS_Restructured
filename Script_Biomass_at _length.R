@@ -7,13 +7,13 @@
     12,  "White Hake",
     14,  "Silver Hake",
     16,  "Pollock",
-    23,  "Redfish Unseparated",
+    23,  "Redfishes Unseparated",
     31,  "Greenland Halibut",
     40,  "American Plaice",
     41,  "Witch Flounder",
     42,  "Yellowtail Flounder",
     43,  "Winter Flounder",
-    60,  "Atlantic herring",
+    60,  "Atlantic Herring",
     61,  "Shad American",
     64,  "Capelin",
     70,  "Mackerel",
@@ -33,7 +33,7 @@
     6600, "Holothuroidea",
     6611, "Sea Cucumber")
   
-biomass_length<- read.csv("Alida_EZ_biomass_at_Length.csv")
+biomass_length<- read.csv("Ess_data/Alida_new cleaned_biomass_at_Length.csv")
 # Join species names into biomass_length
 biomass_length <- biomass_length %>%
   left_join(species_lookup_subset, by = c("SPECIES" = "CODE"))
@@ -44,13 +44,13 @@ biomass_length %>%
   head(20) %>%
   as.data.frame()
 
-write.csv(biomass_length, "biomass_length_with_names.csv", row.names = FALSE)
+write.csv(biomass_length, "Ess_data/biomass_length_with_names.csv", row.names = FALSE)
 
 
 # ----------------------------
 # Biomass % by length class across all species and all years
 # ----------------------------
-biomass_length<- read.csv("biomass_length_with_names.csv")
+biomass_length<- read.csv("Ess_data/biomass_length_with_names.csv")
 
 length_totals_short <- biomass_length %>%
   filter(LENGTH != -99) %>%                                      # remove unmeasured records

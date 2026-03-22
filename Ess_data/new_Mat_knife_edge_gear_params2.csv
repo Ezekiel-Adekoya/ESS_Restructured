@@ -1,17 +1,16 @@
 ﻿species,gear,sel_func,knife_edge_size,catchability
-Sand Lances,Sand Lances,knife_edge,,1
-Atlantic Herring,Atlantic Herring,knife_edge,,1
 Atlantic Cod,Atlantic Cod,knife_edge,,1
-Witch Flounder,Witch Flounder,knife_edge,,1
-American Plaice,American Plaice,knife_edge,,1
-Atlantic Halibut,Atlantic Halibut,knife_edge,,1
-Capelin,Capelin,knife_edge,,1
 Haddock,Haddock,knife_edge,,1
-Silver Hake,Silver Hake,knife_edge,,1
-Yellowtail Flounder,Yellowtail Flounder,knife_edge,,1
-Pollock,Pollock,knife_edge,,1
-Greenland Halibut,Greenland Halibut,knife_edge,,1
-Atlantic Mackerel,Atlantic Mackerel,knife_edge,,1
-Atlantic Redfishes,Atlantic Redfishes,knife_edge,,1
-Spiny Dogfish,Spiny Dogfish,knife_edge,,1
 White Hake,White Hake,knife_edge,,1
+Silver Hake,Silver Hake,knife_edge,,1
+Pollock,Pollock,knife_edge,,1
+Redfishes Unseparated,Redfishes Unseparated,knife_edge,,1
+Greenland Halibut,Greenland Halibut,knife_edge,,1
+American Plaice,American Plaice,knife_edge,,1
+Witch Flounder,Witch Flounder,knife_edge,,1
+Yellowtail Flounder,Yellowtail Flounder,knife_edge,,1
+Atlantic Herring,Atlantic Herring,knife_edge,,1
+Capelin,Capelin,knife_edge,,1
+Mackerel,Mackerel,knife_edge,,1
+Spiny Dogfish,Spiny Dogfish,knife_edge,,1
+Sand Lance,Sand Lance,knife_edge,,1
