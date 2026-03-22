@@ -58,14 +58,13 @@ species_lookup <- c(
   "Mallotus villosus"            = "Capelin",
   "Scomber scombrus"             = "Mackerel",
   "Squalus acanthias"            = "Spiny Dogfish",
-  "Ammodytes dubius"             = "Sand Lance"
+  "Ammodytes dubius"             = "Sand Lance",
+  "Hippoglossus hippoglossus"    = "Atlantic Halibut"
 )
 
 species_order <- c(
-  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake",
-  "Pollock", "Redfishes Unseparated", "Greenland Halibut",
-  "American Plaice", "Witch Flounder", "Yellowtail Flounder",
-  "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance")
+  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake","Pollock", "Redfishes Unseparated", "Greenland Halibut",
+  "American Plaice", "Witch Flounder", "Yellowtail Flounder","Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut")
 
 external_species_info <- external_species_info |> mutate(Species = recode(Species, !!!species_lookup)) |>
   filter(Species %in% species_order) |> mutate(Species = factor(Species, levels = species_order)) |>
@@ -73,9 +72,7 @@ external_species_info <- external_species_info |> mutate(Species = recode(Specie
 
 names(external_species_info)[1] <- "species"
 
-# verify
-external_species_info$species
-nrow(external_species_info)  # should be 15
+years_to_use<-as.character(1970:1985) #Assign years for the reference period
 
 ```
 
@@ -199,9 +196,8 @@ set intial effort as mean_effort
 # Load time-varying fishing effort data (relative effort by gear or species)
 fishing_history <- readRDS("Ess_data/new_relative_interp_effort_nafo.RDS")
 
-fishing_history <- fishing_history[as.character(1970:2018), ]
 # Subset effort data for the years 1970 to 2010
-effort <- fishing_history[as.character("1970":"2018"), ]
+effort <- fishing_history[as.character("1970":"2022"), ]
 
 # Calculate the mean effort over selected years (defined in `years_to_use`)
 # This assumes `years_to_use` is a vector of years like 1970:1984
@@ -213,22 +209,24 @@ initial_effort(params) <- unlist(mean_effort)
 
 ```
 
+set up initial catchability using this mean relative effort and catchability of 1 as initial value only - BUT WILL ESTIMARE LATER
+```{r}
+#assume catchability of 1, will be estimated further down
+gear_params(params)$catchability <- rep(1.0,16)
+gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
 
+```
 
 Setting up time series dynamical focusing and scenarios
 
 Plots of effort forcing through time (*need to add seals as a dashed line, for supplement)
 ```{r}
 
-# ============================================================
-# FISHING EFFORT: RESHAPE AND PLOT (1970–2018)
-# ============================================================
-# ------------------------------------------------------------
 # 1. Load, filter years, and reshape
 # ------------------------------------------------------------
 fishing_history <- readRDS("Ess_data/new_relative_interp_effort_nafo.RDS") |>
   as.data.frame() |> rownames_to_column("Year") |> mutate(Year = as.numeric(Year)) |>
-  filter(Year >= 1970, Year <= 2018) |>
+  filter(Year >= 1970, Year <= 2022) |>
   pivot_longer(cols  = -Year,names_to  = "Species",values_to = "Effort") |>
   arrange(Species, Year)
 # 2. Plot
@@ -265,17 +263,6 @@ fishing_effort_plot
 ```
 
 
-set up initial catchability using this mean relative effort and catchability of 1 as initial value only - BUT WILL ESTIMARE LATER
-```{r}
-#assume catchability of 1, will be estimated further down
-gear_params(params)$catchability <- rep(1.0,15)
-gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
-```
-
-
-```{r}
-
-```
 
 Biomass cutoff from length distributions
 ```{r}
@@ -314,7 +301,7 @@ species_order <- c(
   "Atlantic Cod", "Haddock", "White Hake", "Silver Hake", "Pollock",
   "Redfishes Unseparated", "Greenland Halibut", "American Plaice",
   "Witch Flounder", "Yellowtail Flounder", "Atlantic Herring",
-  "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance"
+  "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut"
 )
 
 # Reorder keeping YEAR and length_cm first
@@ -396,7 +383,7 @@ initial_effort(params) <- unlist(mean_effort)
 set up initial catchability using this mean relative effort and catchability of 1 as initial value only - BUT WILL ESTIMATE LATER
 ```{r}
 #assume catchability of 1, will be estimated further down
-gear_params(params)$catchability <- rep(1.0,15)
+gear_params(params)$catchability <- rep(1.0,16)
 gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
 ```
 

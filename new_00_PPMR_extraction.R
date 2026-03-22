@@ -35,8 +35,9 @@ scinames<-c("GADUS MORHUA",                    # Atlantic Cod
             "SCOMBER SCOMBRUS",                # Atlantic Mackerel
             #"ARGENTINA SILUS",                 # Argentine 
             "SQUALUS ACANTHIAS",               # Spiny Dogfish
-            "AMMODYTES DUBIUS"  
+            "AMMODYTES DUBIUS"  , 
             # MALLOTUS VILLOSUS excluded - no stomach data, assign beta/sigma manually
+            "HIPPOGLOSSUS HIPPOGLOSSUS"
 )
 # merge species names#merge species names
 

@@ -19,7 +19,8 @@ scinames_fb <- c(
   "Scomber scombrus",                # Atlantic Mackerel
   #"Argentina silus",                 # Argentine 
   "Squalus acanthias",               # Spiny Dogfish
-  "Ammodytes dubius"
+  "Ammodytes dubius",
+  "Hippoglossus hippoglossus"
 )
 
 
@@ -43,7 +44,8 @@ sciname_lookup <- tibble(
     "SCOMBER SCOMBRUS",                # Atlantic Mackerel
     #"ARGENTINA SILUS",                 # Argentine 
     "SQUALUS ACANTHIAS",               # Spiny Dogfish
-    "AMMODYTES DUBIUS" 
+    "AMMODYTES DUBIUS" ,
+    "HIPPOGLOSSUS HIPPOGLOSSUS"
   ))
  
 # get max length and convert to max weight

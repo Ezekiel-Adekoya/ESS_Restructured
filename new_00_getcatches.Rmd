@@ -52,24 +52,6 @@ ggplot(data, aes(x=Species.Name, y=prop_catch)) + geom_bar(stat = "identity") + 
 #top 10 species in prop_catch
 data[1:200,]
 
-# species to extract data for:
-# [1] "AMERICAN PLAICE"         
-# [2] "COD(ATLANTIC)"  
-# [3]"ATLANTIC HERRING"
-# [4] "HADDOCK"                 
-# [5] "REDFISH UNSEPARATED"     
-# [6] "SPINY DOGFISH"           
-# [7] "TURBOT,GREENLAND HALIBUT"
-# [8] "WITCH FLOUNDER"          
-# [9] "YELLOWTAIL FLOUNDER"
-# [10] "WHITE HAKE"
-# [11] "SILVER HAKE"       
-# [12] "SANDLANCES"       
-# [13] "ATLANTIC HALIBUT" 
-# [14] "POLLOCK (SAITHE)",
-# [15] "SKATES"
-# [16] "Atlantic mackerel"
-
 nafo_names <- c(
   "ATLANTIC COD - COD",
   "HADDOCK - HAD",
@@ -94,11 +76,12 @@ nafo_names <- c(
   #"LONGHORN SCULPIN - MXO",
   #"AMERICAN ANGLER - ANG",
   #"VARIOUS SHARKS NEI - SKH",
-  "SANDEELS (SANDLANCES) - SAN"
+  "SANDEELS (SANDLANCES) - SAN",
  # "ATLANTIC BUTTERFISH - BUT"
   #, "NORTHERN PRAWN - PRA",
   #"(NORTHERN) SHORTFIN SQUID - SQI"
-#  NA, NA
+#  NA, NA,
+"ATLANTIC HALIBUT - HAL"
 )
 
 #("THORNY SKATE (STARRY RAY) - RJR", "SMOOTH SKATE - RJS", "LITTLE SKATE - RJD" , "WINTER SKATE - RJT", "RED HAKE - HKR", "CUSK (TUSK) - USK")
@@ -148,7 +131,8 @@ stat$Species <- recode(stat$Species.Name,
   #"ATLANTIC BUTTERFISH - BUT" = "Butterfish"
   #"NORTHERN PRAWN - PRA" = "Pandalus borealis",
   #"(NORTHERN) SHORTFIN SQUID - SQI" = "Shortfin Squid"
-  #NA = "Holothuroidea", NA = "Sea Cucumber"
+  #NA = "Holothuroidea", NA = "Sea Cucumber",
+  "ATLANTIC HALIBUT - HAL" = "Atlantic Halibut"
 )
 
 ### Aggreagte over whole Division 4VW and convert to GRAMS WET WEIGHT
@@ -234,7 +218,7 @@ nafo_21B_grouped_daysfished<-nafo_21B%>% subset(SpeciesEffort=="2")%>%
 unique(nafo_21B_grouped_daysfished$MainSpecies)
 
 nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
-  MainSpecies %in% c("1","2","21","4","6","3","13","10","11","12","30","52","31","56","49"))
+  MainSpecies %in% c("1","2","21","4","6","3","13","10","11","12","30","52","31","56","49", "16"))
 # NO NUMBER FOR SANDLANCES - include 49 (Peleagic fish) as dummy to be overwritten with zeroes
 # All skakes were labelled 54, 
 # 53,  # Sharks (NS) removed NO NAFO CODE
@@ -246,11 +230,11 @@ nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
 # rename MainSpecies to match params
 nafo_21B_subset$MainSpecies <- factor(
   nafo_21B_subset$MainSpecies,
-  levels = c("1","2","21","4","6","3","13","10","11","12","30","52","31","56","49"))
+  levels = c("1","2","21","4","6","3","13","10","11","12","30","52","31","56","49", "16"))
 levels(nafo_21B_subset$MainSpecies) <- c(  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake",
   "Pollock", "Redfishes Unseparated", "Greenland Halibut",
   "American Plaice", "Witch Flounder", "Yellowtail Flounder",
-  "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance")
+  "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut")
 
 
 # nafo_21B_subset2$MainSpecies<-as.factor(nafo_21B_subset2$MainSpecies)
@@ -325,16 +309,16 @@ nafo_21B_grouped_daysfished <- nafo_21B %>%
 
 # filter to 17 species (Butterfish removed - no records in 4VW)
 nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
-  MainSpecies %in% c(1, 2, 21, 4, 6, 3, 13, 10, 11, 12, 30, 52, 31, 56, 49))
+  MainSpecies %in% c(1, 2, 21, 4, 6, 3, 13, 10, 11, 12, 30, 52, 31, 56, 49, 16))
 
 nafo_21B_subset$MainSpecies <- factor(
   nafo_21B_subset$MainSpecies,
-  levels = c(1, 2, 21, 4, 6, 3, 13, 10, 11, 12, 30, 52, 31, 56, 49))
+  levels = c(1, 2, 21, 4, 6, 3, 13, 10, 11, 12, 30, 52, 31, 56, 49, 16))
 levels(nafo_21B_subset$MainSpecies) <- c(
     "Atlantic Cod", "Haddock", "White Hake", "Silver Hake",
   "Pollock", "Redfishes Unseparated", "Greenland Halibut",
   "American Plaice", "Witch Flounder", "Yellowtail Flounder",
-  "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance")
+  "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut")
 
 # Tonnage to Power (kW) conversion (Anticamara et al. 2011)
 nafo_21B_subset$GT <- NA
@@ -359,7 +343,7 @@ ggplot(nafo_21B_effort, aes(x = Year, y = Effort_kW_Days_yr, group = MainSpecies
 
 ###### Build effort_matrix (wide, years as rownames)
 species_cols <- c( "Atlantic Cod", "Haddock", "White Hake", "Silver Hake",
-  "Pollock", "Redfishes Unseparated", "Greenland Halibut","American Plaice", "Witch Flounder", "Yellowtail Flounder", "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance")
+  "Pollock", "Redfishes Unseparated", "Greenland Halibut","American Plaice", "Witch Flounder", "Yellowtail Flounder", "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut")
 
 effort_wide <- nafo_21B_effort %>%
   pivot_wider(names_from = MainSpecies, values_from = Effort_kW_Days_yr) %>%
