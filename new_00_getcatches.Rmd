@@ -232,8 +232,7 @@ nafo_21B_subset$MainSpecies <- factor(
   nafo_21B_subset$MainSpecies,
   levels = c("1","2","21","4","6","3","13","10","11","12","30","52","31","56","49", "16"))
 levels(nafo_21B_subset$MainSpecies) <- c(  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake",
-  "Pollock", "Redfishes Unseparated", "Greenland Halibut",
-  "American Plaice", "Witch Flounder", "Yellowtail Flounder",
+  "Pollock", "Redfishes Unseparated", "Greenland Halibut","American Plaice", "Witch Flounder", "Yellowtail Flounder",
   "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut")
 
 
@@ -282,7 +281,7 @@ library(zoo)
 cols  <- c("Year","Country","GearCode","Tonnage","MainSpecies","Divcode","Code","Effort","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
 cols2 <- c("Year","Country","Gear","Tonnage","MainSpecies","AreaCode","SpeciesEffort","Effort","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
 
-## read in each file
+###### Read data
 nafo60s   <- read_delim("Ess_data/nafo-21b-60-69/NAFO21B-60-69.txt")[, cols]
 nafo70s   <- read_delim("Ess_data/nafo-21b-70-79/NAFO21B-70-79.txt")[, cols]
 nafo80s   <- read_delim("Ess_data/nafo-21b-80-89/NAFO21B-80-89.txt")[, cols]
@@ -292,81 +291,107 @@ nafo10s   <- read_delim("Ess_data/NAFO-21B-2010-18/NAFO-21b-2010-18.txt")[, cols
 nafo10ss  <- read_delim("Ess_data/NAFO-21B-2010-19/NAFO-21B-2010-2019.txt")[, cols2]
 nafo10sss <- read_delim("Ess_data/NAFO-21B-2020-24/NAFO-21B-2020-24.txt")[, cols2]
 
+# Standardise column names
 names(nafo60s) <- names(nafo70s) <- names(nafo80s) <- names(nafo90s) <-
   names(nafo00s) <- names(nafo10s) <- names(nafo10ss) <- names(nafo10sss) <- cols2
 
-nafo_21B <- rbind(nafo60s, nafo70s, nafo80s, nafo90s, nafo00s, nafo10s, nafo10ss, nafo10sss)
-nafo_21B <- subset(nafo_21B, SpeciesEffort %in% c(1, 2, 3))
-nafo_21B <- subset(nafo_21B, AreaCode %in% c(44, 45, 46, 48))
+###### Combine and clean
+nafo_21B <- rbind(nafo60s, nafo70s, nafo80s, nafo90s, nafo00s, nafo10s, nafo10ss, nafo10sss) %>%
+  distinct() %>%                                              # remove duplicate rows from overlapping files
+  subset(SpeciesEffort %in% c(1, 2, 3)) %>%
+  subset(AreaCode %in% c(44, 45, 46, 48))
 
-nafo_21B$TotalEffort <- rowSums(nafo_21B[, c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")])
-nafo_21B <- nafo_21B[, c("Year","Country","Gear","Tonnage","MainSpecies","AreaCode","SpeciesEffort","Effort","TotalEffort")]
+nafo_21B$TotalEffort <- rowSums(nafo_21B[, c("Jan","Feb","Mar","Apr","May","Jun",
+                                               "Jul","Aug","Sep","Oct","Nov","Dec")])
+nafo_21B <- nafo_21B[, c("Year","Country","Gear","Tonnage","MainSpecies",
+                          "AreaCode","SpeciesEffort","Effort","TotalEffort")]
 
+###### Effort: days fished (SpeciesEffort == 2)
 nafo_21B_grouped_daysfished <- nafo_21B %>%
-  subset(SpeciesEffort == 2) %>%
+  filter(SpeciesEffort == 2) %>%
   group_by(Year, Gear, Tonnage, MainSpecies, SpeciesEffort) %>%
-  reframe(TotalDaysFished = sum(TotalEffort))
+  summarise(TotalDaysFished = sum(TotalEffort), .groups = "drop")
 
-# filter to 17 species (Butterfish removed - no records in 4VW)
-nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
-  MainSpecies %in% c(1, 2, 21, 4, 6, 3, 13, 10, 11, 12, 30, 52, 31, 56, 49, 16))
-
-nafo_21B_subset$MainSpecies <- factor(
-  nafo_21B_subset$MainSpecies,
-  levels = c(1, 2, 21, 4, 6, 3, 13, 10, 11, 12, 30, 52, 31, 56, 49, 16))
-levels(nafo_21B_subset$MainSpecies) <- c(
-    "Atlantic Cod", "Haddock", "White Hake", "Silver Hake",
+###### Filter to 16 species
+species_codes <- c(1, 2, 21, 4, 6, 3, 13, 10, 11, 12, 30, 52, 31, 56, 49, 16)
+species_cols  <- c(
+  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake",
   "Pollock", "Redfishes Unseparated", "Greenland Halibut",
   "American Plaice", "Witch Flounder", "Yellowtail Flounder",
-  "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut")
+  "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish",
+  "Sand Lance", "Atlantic Halibut"
+)
 
-# Tonnage to Power (kW) conversion (Anticamara et al. 2011)
-nafo_21B_subset$GT <- NA
-nafo_21B_subset$GT[nafo_21B_subset$Tonnage %in% c(1, 2)] <- (0 + 49.9) / 2
-nafo_21B_subset$GT[nafo_21B_subset$Tonnage == 3]          <- (50 + 149.9) / 2
-nafo_21B_subset$GT[nafo_21B_subset$Tonnage == 4]          <- (150 + 499.9) / 2
-nafo_21B_subset$GT[nafo_21B_subset$Tonnage == 5]          <- (500 + 999.9) / 2
-nafo_21B_subset$GT[nafo_21B_subset$Tonnage == 6]          <- (1000 + 1999.9) / 2
-nafo_21B_subset$GT[nafo_21B_subset$Tonnage == 7]          <- (2000 + 5000) / 2
-nafo_21B_subset$Power_kW <- 11.26 * nafo_21B_subset$GT ^ 0.71
+nafo_21B_subset <- nafo_21B_grouped_daysfished %>%
+  filter(MainSpecies %in% species_codes) %>%
+  mutate(MainSpecies = factor(MainSpecies,
+                              levels  = species_codes,
+                              labels  = species_cols))
 
-nafo_21B_subset$Effort_kW_Days_yr <- nafo_21B_subset$Power_kW * nafo_21B_subset$TotalDaysFished
+###### Tonnage → Power (kW) conversion (Anticamara et al. 2011)
+nafo_21B_subset <- nafo_21B_subset %>%
+  mutate(
+    GT = case_when(
+      Tonnage %in% c(1, 2) ~ (0    + 49.9)  / 2,
+      Tonnage == 3          ~ (50   + 149.9) / 2,
+      Tonnage == 4          ~ (150  + 499.9) / 2,
+      Tonnage == 5          ~ (500  + 999.9) / 2,
+      Tonnage == 6          ~ (1000 + 1999.9)/ 2,
+      Tonnage == 7          ~ (2000 + 5000)  / 2,
+      TRUE                  ~ NA_real_
+    ),
+    Power_kW        = 11.26 * GT ^ 0.71,
+    Effort_kW_Days_yr = Power_kW * TotalDaysFished
+  )
 
+###### Aggregate effort by Year × Species
 nafo_21B_effort <- nafo_21B_subset %>%
   group_by(Year, MainSpecies) %>%
-  reframe(Effort_kW_Days_yr = sum(Effort_kW_Days_yr))
+  summarise(Effort_kW_Days_yr = sum(Effort_kW_Days_yr), .groups = "drop")
 
+###### Diagnostic plot
 ggplot(nafo_21B_effort, aes(x = Year, y = Effort_kW_Days_yr, group = MainSpecies)) +
   geom_point(aes(color = MainSpecies)) +
-  geom_line(aes(color = MainSpecies)) +
-  facet_wrap(~MainSpecies, scales = "free")
+  geom_line(aes(color  = MainSpecies)) +
+  facet_wrap(~ MainSpecies, scales = "free") +
+  theme_bw()
 
-###### Build effort_matrix (wide, years as rownames)
-species_cols <- c( "Atlantic Cod", "Haddock", "White Hake", "Silver Hake",
-  "Pollock", "Redfishes Unseparated", "Greenland Halibut","American Plaice", "Witch Flounder", "Yellowtail Flounder", "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut")
-
+###### Build effort_wide — guarantee all 16 species present
 effort_wide <- nafo_21B_effort %>%
   pivot_wider(names_from = MainSpecies, values_from = Effort_kW_Days_yr) %>%
-  arrange(Year)
+  arrange(Year) %>%
+  complete(Year = full_seq(Year, 1)) %>%
+  mutate(across(all_of(species_cols), ~ replace_na(., 0)))
 
-# fill any missing species/year combos with 0
-effort_wide <- effort_wide %>%
-  complete(Year = full_seq(Year, 1), fill = list(Effort_kW_Days_yr = 0)) %>%
-  replace(is.na(.), 0)
+# Add completely missing species as zero columns
+missing_species <- setdiff(species_cols, names(effort_wide))
+if (length(missing_species) > 0) {
+  cat("Missing species added as zero:", paste(missing_species, collapse = ", "), "\n")
+  effort_wide[missing_species] <- 0
+}
+
+# Verify
+cat("Species in effort_wide:", ncol(effort_wide) - 1, "\n")  # minus Year col
 
 effort_matrix <- as.matrix(effort_wide[, species_cols])
-rownames(effort_matrix) <- effort_wide$Year
+rownames(effort_matrix) <- as.character(effort_wide$Year)
 
 ###### Interpolate effort across all years
 all_years <- as.character(min(effort_wide$Year):max(effort_wide$Year))
 
 effort_interp <- apply(effort_matrix, 2, function(x) {
+  if (all(x == 0)) return(rep(0, length(all_years)))   # protect all-zero columns
   ts <- zoo(x, order.by = as.numeric(rownames(effort_matrix)))
   as.numeric(na.approx(ts, xout = as.numeric(all_years), na.rm = FALSE))
 })
+
 rownames(effort_interp) <- all_years
-colnames(effort_interp) <- species_cols
+colnames(effort_interp) <- species_cols          # guarantee correct naming
 effort_interp[is.na(effort_interp)] <- 0
+
+# Verify all 16 present
+cat("Ncol effort_interp:", ncol(effort_interp), "\n")
+cat("Species:", colnames(effort_interp), "\n")
 
 ###### Catches
 catches <- readRDS("Ess_data/new_NAFO_4VW_Catches.RDS")
@@ -376,66 +401,65 @@ catches_wide <- catches %>%
   arrange(Year)
 
 catch_matrix <- as.matrix(catches_wide[, species_cols])
-rownames(catch_matrix) <- catches_wide$Year
+rownames(catch_matrix) <- as.character(catches_wide$Year)
 
-###### Align effort and catch years
-shared_years <- intersect(rownames(catch_matrix), rownames(effort_interp))
-shared_years <- sort(shared_years[shared_years >= "1970"])
-
+###### Align effort and catch on shared years (≥ 1970)
+shared_years <- sort(intersect(rownames(catch_matrix), rownames(effort_interp)))
+shared_years <- shared_years[shared_years >= "1970"]
 cat("Shared year range:", min(shared_years), "-", max(shared_years), "\n")
 
 catch_matrix  <- catch_matrix[shared_years, ]
 effort_matrix <- effort_matrix[shared_years, ]
 effort_interp <- effort_interp[shared_years, ]
 
-###### Helper: safe normalisation (avoids NaN when max == 0)
+###### Helper: safe normalisation
 safe_norm <- function(x, mx) {
   if (is.na(mx) | mx == 0) rep(0, length(x)) else x / mx
 }
 
-###### Diagnostic plots: relative catch vs effort
+###### Diagnostic PDF: relative catch vs effort
 pdf("Ess_Output/new_RelativeCatcheswithEffortInterpolated.pdf")
 par(mfrow = c(4, 4), mar = c(2, 2, 2, 1))
 
-for (i in 1:15) {
-  sp_name <- colnames(effort_interp)[i]
+for (i in seq_len(ncol(effort_interp))) {
+  sp_name  <- colnames(effort_interp)[i]
   e_interp <- effort_interp[, i]
   e_raw    <- effort_matrix[, i]
   c_raw    <- catch_matrix[, i]
 
-  e_interp_max <- max(e_interp, na.rm = TRUE)
-  e_raw_max    <- max(e_raw,    na.rm = TRUE)
-  c_max        <- max(c_raw,    na.rm = TRUE)
-
   plot(as.numeric(rownames(effort_interp)),
-    safe_norm(e_interp, e_interp_max),
-    type = "l", col = "blue", lty = 2,
-    ylim = c(0, 1),
-    main = sp_name,xlab = "", ylab = "Relative Effort or Catch")
+       safe_norm(e_interp, max(e_interp, na.rm = TRUE)),
+       type = "l", col = "blue", lty = 2, ylim = c(0, 1),
+       main = sp_name, xlab = "", ylab = "Relative Effort or Catch")
 
   lines(as.numeric(rownames(catch_matrix)),
-    safe_norm(c_raw, c_max), col = "red")
+        safe_norm(c_raw, max(c_raw, na.rm = TRUE)), col = "red")
 
   lines(as.numeric(rownames(effort_matrix)),
-    safe_norm(e_raw, e_raw_max),col = "blue", lty = 1)
+        safe_norm(e_raw, max(e_raw, na.rm = TRUE)), col = "blue", lty = 1)
 }
 
 plot.new()
-legend("center", legend = c("Effort (interpolated)", "Effort (raw)", "Catch"),
-  col    = c("blue", "blue", "red"),
-  lty    = c(2, 1, 1), bty    = "n", cex = 1.2)
+legend("center",
+       legend = c("Effort (interpolated)", "Effort (raw)", "Catch"),
+       col    = c("blue", "blue", "red"),
+       lty    = c(2, 1, 1), bty = "n", cex = 1.2)
 dev.off()
 
 ###### Relative effort scaling
-relative_effort_interp <- apply(effort_interp, 2,
-  function(x) safe_norm(x, max(x, na.rm = TRUE)))
-
+relative_effort_interp <- apply(effort_interp, 2, function(x) {
+  safe_norm(x, max(x, na.rm = TRUE))
+})
 relative_effort_interp <- as.matrix(relative_effort_interp)
 rownames(relative_effort_interp) <- rownames(effort_interp)
 colnames(relative_effort_interp) <- colnames(effort_interp)
 
-# Sand Lance has no real effort data - set to zero
+# Sand Lance — no reliable effort data in NAFO 4VW
 relative_effort_interp[, "Sand Lance"] <- 0.0
+
+# Final check
+cat("Final relative_effort_interp dim:", dim(relative_effort_interp), "\n")
+cat("Species:", colnames(relative_effort_interp), "\n")
 
 ###### Save outputs
 saveRDS(relative_effort_interp, file = "Ess_data/new_relative_interp_effort_nafo.RDS")

@@ -38,7 +38,7 @@ species_lookup_subset <- tibble::tribble(
 )
 
 
-biomass_length<- read.csv("Ess_data/Alida_new cleaned_biomass_at_Length.csv")
+biomass_length<- read.csv("Ess_data/Alida_Qadj_biomass_at_Length.csv")
 # Join species names into biomass_length
 biomass_length <- biomass_length %>%
   left_join(species_lookup_subset, by = c("SPECIES" = "CODE"))
@@ -49,11 +49,11 @@ biomass_length %>%
   head(20) %>%
   as.data.frame()
 
-write.csv(biomass_length, "Ess_data/biomass_length_with_names.csv", row.names = FALSE)
+write.csv(biomass_length, "Ess_data/biomass_Qadj_length_with_names.csv", row.names = FALSE)
 
 
 # Read, join names, build length table — all in one pipeline
-length_table <- read.csv("Ess_data/Alida_new cleaned_biomass_at_Length.csv") %>%
+length_table <- read.csv("Ess_data/biomass_Qadj_length_with_names.csv") %>%
   left_join(species_lookup_subset, by = c("SPECIES" = "CODE")) %>%
   filter(LENGTH != -99) %>%
   mutate(length_class = cut(

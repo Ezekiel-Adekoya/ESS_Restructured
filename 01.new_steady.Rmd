@@ -41,7 +41,8 @@ Read in Species Parameters
 external_species_info <- read.csv("Ess_data/new_ESS_species_params.csv") |>
   select(-beta) |>
   rename(beta = min_ppmr) |>
-  select(Species, w_max, w_mat, w_min, l_mat, beta, sigma, a, b, age_mat)
+  select(Species, w_max, w_mat, w_min, l_mat, beta, sigma, a, b, age_mat)|>
+  mutate(across(where(is.numeric), ~ round(., 2)))
 
 species_lookup <- c(
   "Gadus morhua"                 = "Atlantic Cod",
@@ -49,7 +50,7 @@ species_lookup <- c(
   "Urophycis tenuis"             = "White Hake",
   "Merluccius bilinearis"        = "Silver Hake",
   "Pollachius virens"            = "Pollock",
-  "Sebastes fasciatus"           = "Redfishes Unseparated",
+  "Sebastes fasciatus"           = "Redfish Unseparated",
   "Reinhardtius hippoglossoides" = "Greenland Halibut",
   "Hippoglossoides platessoides" = "American Plaice",
   "Glyptocephalus cynoglossus"   = "Witch Flounder",
@@ -63,8 +64,7 @@ species_lookup <- c(
 )
 
 species_order <- c(
-  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake","Pollock", "Redfishes Unseparated", "Greenland Halibut",
-  "American Plaice", "Witch Flounder", "Yellowtail Flounder","Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut")
+  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake","Pollock", "Redfish Unseparated", "Greenland Halibut","American Plaice", "Witch Flounder", "Yellowtail Flounder","Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut")
 
 external_species_info <- external_species_info |> mutate(Species = recode(Species, !!!species_lookup)) |>
   filter(Species %in% species_order) |> mutate(Species = factor(Species, levels = species_order)) |>
@@ -112,8 +112,8 @@ Restrict to the 9 species of interest
 Rename columns
 ```{r}
 #Read observed biomass: DFO (Bundy et al., 2017)
-biomass_obs <- read.csv("Ess_data/Alida_new_cleaned_Qaj_Biomass.csv")
-
+biomass_obs <- read.csv("Ess_data/Alida_Qadj_Biomass.csv")   # Q adjusted Biomass
+#biomass_obs <- read.csv("Ess_data/Alida_notQadj_biomass.csv") # NoT Q adjusted Biomass
 # convert to grams
 biomass_obs[, -1] <- biomass_obs[, -1] * 1e3
 
@@ -258,8 +258,8 @@ fishing_effort_plot <- ggplot(fishing_history, aes(x = Year, y = Effort, group =
     plot.margin      = margin(5, 5, 5, 5, "pt"))
 
 fishing_effort_plot
-# ggsave(filename = paste0(save_dir, "Fishing_effort_plott.jpeg"), plot = Fishing_effort_plot,
-#        width = 9,height = 7,units = "in",dpi = 400)
+ggsave(filename = paste0(save_dir, "Fishing_effort_plott.jpeg"), plot = Fishing_effort_plot,
+width = 9,height = 7,units = "in",dpi = 400)
 ```
 
 
@@ -267,7 +267,8 @@ fishing_effort_plot
 Biomass cutoff from length distributions
 ```{r}
 # read data
-lengthfreq <- read.csv("Ess_data/biomass_length_with_names.csv")
+lengthfreq <- read.csv("Ess_data/Alida_Qadj_biomass_at_Length.csv.csv")  #Q adjusted
+#lengthfreq <- read.csv("Ess_data/Alida_not_Qadj_biomass_at_Length.csv). # not Adjusted
 lengthfreq <- lengthfreq %>%
   select(YEAR, Species_name = SPECIES_NAME, LENGTH, ABUNDANCE) %>%
   rename(length_cm = LENGTH)
@@ -786,7 +787,7 @@ Create size spectrum plots by species with size distribution data from DFO RV Tr
 # ------------------------------------------------------------
 # 1. Load and reshape biomass-at-length to long format
 # ------------------------------------------------------------
-bio_size <- read.csv("Ess_data/new_Alida_biomass_at_length_DFO_model_spp.csv") |>
+bio_size <- read.csv("Ess_data/Alida_Qadj_biomass_at_Length.csv.csv") |>
   pivot_longer(cols = !c(length_cm, YEAR),names_to = "Species", values_to     = "Biomass",
     values_drop_na = TRUE ) |>rename(Year = YEAR)
 
@@ -876,9 +877,8 @@ size_distributions <- plotSpectra(params, power = 0, resource = FALSE) +
     panel.border     = element_rect(color = "black", linewidth = 0.8)
   )
 
-size_distributions
-# ggsave(filename = paste0(save_dir, "size_distributions.jpeg"), plot = size_distributions,
-#        width = 11, height = 8.5, units = "in",dpi = 400)
+# size_distributions
+ggsave(filename = paste0(save_dir, "Ess_Output/size_distributions.jpeg"), plot = size_distributions, width = 11, height = 8.5, units = "in",dpi = 400)
 ```
 
 
