@@ -12,8 +12,8 @@ select <- dplyr::select  # prevent masking conflicts
 
 # ── 1. DATA LOADING ───────────────────────────────────────────
 #long_df <- read.csv("Ess_data/Alida_Qadj_Biomass.csv") - no file
-# filter fish only codes and years 1970-2017, then identify codes with >=5 consecutive years of presence (BIOMASS>0 if BIOMASS exists) to retain for PCA; also restrict to species$CODE if available
-long_df <- read.csv("Ess_data/ESS q-adj data for Ezekiel 1970-2022.csv") |>
+# filter fish only codes and years 1978-2022, then identify codes with >=5 consecutive years of presence (BIOMASS>0 if BIOMASS exists) to retain for PCA; also restrict to species$CODE if available
+  filter(SPECIES < 1000, YEAR >=1978, YEAR <= 2022) |>
   filter(SPECIES < 1000, YEAR >=1978, YEAR <= 2017) |>
   filter(!is.na(SPECIES_NAME), !grepl("INCL |snail|unidentified|GADOIDEI|unid.|S.O.", SPECIES_NAME, ignore.case = TRUE))  |> 
   filter(!SPECIES_NAME %in% c(
@@ -120,9 +120,9 @@ long_df_phase <- long_df |>
   #filter(between(Year, 1978, 2017, Year != 2018) |> # if oulier is to be removed
   mutate(Phase = factor(if_else(Year <= 1992,
                                 "1978-1992 (Pre-Moratorium)",
-                                "1993-2017 (Post-Moratorium)"),
+                                "1993-2022 (Post-Moratorium)"),
                         levels = c("1978-1992 (Pre-Moratorium)",
-                                   "1993-2017 (Post-Moratorium)"))) |>
+                                   "1993-2022 (Post-Moratorium)"))) |>
   #pivot_longer(-c(Year, Phase), names_to="Species", values_to="BIOMASS") |>
   filter(!is.na(BIOMASS), BIOMASS > 0) |>
   group_by(Species) |> filter(n() >= 5) |> ungroup()
@@ -142,7 +142,7 @@ arrange(Phase, desc(Pct))|>
   mutate(Species = str_to_sentence(str_squish(str_replace_all(Species, "\\.+", " "))))
 
 pal <- c("1978-1992 (Pre-Moratorium)" = "#E07B2A",
-  "1993-2017 (Post-Moratorium)" = "#2471A3")
+  "1993-2022 (Post-Moratorium)" = "#2471A3")
 
 
 
@@ -183,7 +183,7 @@ make_phase_plot <- function(ph,df=phase_pct) {
 }
 
 make_phase_plot("1978-1992 (Pre-Moratorium)") +
-  make_phase_plot("1993-2017 (Post-Moratorium)") +
+  make_phase_plot("1993-2022 (Post-Moratorium)") +
   plot_layout(ncol=2) +
   plot_annotation(
     title    = "Species contribution to total biomass by time period",
