@@ -22,11 +22,11 @@ knitr::opts_knit$set(root.dir = "~/R/FISHMIP/NEW ESS/Eastern-Scotian-Shelf-Model
 
 ```{r}
 library(dplyr)
-stat <- read.csv("Ess_data/new_STATLANT 21A 4VX.csv.csv")
+stat <- read.csv("Ess_data/new_STATLANT 21A 4VX.csv")
 # take a look 
 head(stat)
 # exclude 4X for now, as not on survey data
-stat<-subset(stat,Division!="4X")
+stat<-subset(stat,Division=="4VW")
 unique(stat$Species.Name)
 
 

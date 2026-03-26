@@ -194,3 +194,46 @@ make_phase_plot("1978-1992 (Pre-Moratorium)") +
       plot.background = element_rect(fill="white", colour=NA)
     )
   )
+
+
+
+###### For determinning period to average over for steady state calibration; 
+
+library(zoo)
+
+
+# Calculate stability metrics for each year
+year_scores_stable <- year_scores |>
+  rownames_to_column("Year") |>
+  mutate(
+    Year = as.integer(Year),
+    euclidean_dist = sqrt(Dim.1^2 + Dim.2^2)  # distance from origin
+  ) |>
+  mutate(
+    rolling_mad = zoo::rollapply(euclidean_dist, width = 3, FUN = function(x) median(abs(x - median(x))), fill = NA),
+    rolling_sd = zoo::rollapply(euclidean_dist, width = 3, FUN = sd, fill = NA),
+    is_stable = rolling_mad < median(rolling_mad, na.rm = TRUE)
+  )
+
+# Extract stable periods
+stable_periods <- year_scores_stable |>
+  filter(is_stable) |>
+  summarise(
+    min_year = min(Year, na.rm = TRUE),
+    max_year = max(Year, na.rm = TRUE),
+    n_years = n(),
+    mean_dim1 = mean(Dim.1),
+    mean_dim2 = mean(Dim.2)
+  )
+
+# Or use your changepoints from segmented regression directly
+breakpoint <- confint(seg_fit2)["psi1.year", 1]
+
+phase_means <- year_scores |>
+  rownames_to_column("Year") |>
+  mutate(Year = as.integer(Year), Phase = Year <= breakpoint) |>
+  group_by(Phase) |>
+  summarise(
+    across(starts_with("Dim"), mean, na.rm = TRUE),
+    year_range = paste(min(Year), "-", max(Year))
+  )

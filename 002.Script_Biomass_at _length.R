@@ -125,7 +125,7 @@ length_table_wide %>%
 
 
 log10lengthclasses <- levels(length_table$log10length_class)
-
+#lengthclasses <- levels(length_table$log10length_class)
 
 newdf<-filter(length_table_wide,log10length_class==log10lengthclasses[1]) %>%
   select(-Total_Biomass) %>%
@@ -151,7 +151,9 @@ new_length <- newdf|>
   mutate(Species = str_to_sentence(str_squish(str_replace_all(Species, "\\.+", " "))))
 
 
-len<- lengthclasses[1]
+#len<- lengthclasses[1]
+
+len <- log10lengthclasses[1]
 
 make_length_plot <- function(len,df=new_length) {
 
@@ -248,3 +250,29 @@ species_80_table <- function(data=filter(biomass_length,Year >=1993 ),
 
 out1<-species_80_table(data=filter(biomass_length,Year >=1978 & Year <=1992),coverage = 0.8)
 out2<-species_80_table(data=filter(biomass_length,Year >=1993),coverage = 0.8)
+
+####### determine stable period for calibration of steady state model;
+
+species_biomass_standardized |>
+  ggplot(aes(x = Year, y = standardized_biomass, color = Species)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 1.5, alpha = 0.6) +
+  facet_wrap(~Species, scales = "free_y", ncol = 4) +
+  geom_segment(aes(x = 1978, xend = 1992, y = 1, yend = 1), 
+               color = "red", linewidth = 0.6, alpha = 0.7, inherit.aes = FALSE) +
+  geom_vline(xintercept = 1991.5, linetype = "dashed", color = "gray50", linewidth = 0.5) +
+  labs(
+    title = "Standardized Biomass by Species (Relative to Pre-Moratorium Geometric Mean)",
+    subtitle = "Red line = pre-moratorium baseline | Dashed line = moratorium (1992)",
+    x = "Year",
+    y = "Standardized Biomass",
+    color = "Species"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    strip.text.x = element_text(size = 9, face = "bold")
+  )
+
+
+### USE GEOEMTRIC MEAN TO CALIBRATE STEADY STATE MODEL, RATHER THAN ARITHMETIC MEAN, BECAUSE IT IS LESS INFLUENCED BY OUTLIERS (e.g. 1990-1992)
