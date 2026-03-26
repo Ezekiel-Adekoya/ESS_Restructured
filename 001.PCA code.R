@@ -12,9 +12,9 @@ select <- dplyr::select  # prevent masking conflicts
 
 # ── 1. DATA LOADING ───────────────────────────────────────────
 #long_df <- read.csv("Ess_data/Alida_Qadj_Biomass.csv") - no file
-# filter fish only codes and years 1978-2022, then identify codes with >=5 consecutive years of presence (BIOMASS>0 if BIOMASS exists) to retain for PCA; also restrict to species$CODE if available
+# filter fish only codes and years 1970-2017, then identify codes with >=5 consecutive years of presence (BIOMASS>0 if BIOMASS exists) to retain for PCA; also restrict to species$CODE if available
+long_df <- read.csv("Ess_data/ESS q-adj data for Ezekiel 1970-2022.csv") |>
   filter(SPECIES < 1000, YEAR >=1978, YEAR <= 2022) |>
-  filter(SPECIES < 1000, YEAR >=1978, YEAR <= 2017) |>
   filter(!is.na(SPECIES_NAME), !grepl("INCL |snail|unidentified|GADOIDEI|unid.|S.O.", SPECIES_NAME, ignore.case = TRUE))  |> 
   filter(!SPECIES_NAME %in% c(
     "INCL SHARK & CHONDRICHTHYES; SHARK",
@@ -77,8 +77,8 @@ ggplot(cos2_df, aes(reorder(Species, Cos2), Cos2)) +
 # ── 5. K-MEANS CLUSTERING ON PC1–PC2 ─────────────────────────
 set.seed(42)
 year_scores         <- as.data.frame(pca_res$ind$coord[, 1:2])
-year_scores$Cluster <- factor(kmeans(year_scores, centers=2)$cluster)
-fviz_cluster(kmeans(year_scores[,1:2], centers=2),
+year_scores$Cluster <- factor(kmeans(year_scores, centers=3)$cluster)
+fviz_cluster(kmeans(year_scores[,1:2], centers=3),
              data=year_scores[,1:2], repel=TRUE,
              ellipse.alpha=0) +
   theme(panel.background=element_blank(), plot.background=element_blank())
@@ -116,7 +116,7 @@ long_df_phase <- long_df |>
    #dplyr::select(-matches("^NA\\.?$"),
         #        -any_of(c("Sharks..Unspecified.", "Pandalus.borealis",
          #                 "Holothuroidea", "Sea.Cucumber"))) |>
-  filter(between(Year, 1978, 2017)) |>
+  filter(between(Year, 1978, 2022)) |>
   #filter(between(Year, 1978, 2017, Year != 2018) |> # if oulier is to be removed
   mutate(Phase = factor(if_else(Year <= 1992,
                                 "1978-1992 (Pre-Moratorium)",
