@@ -25,19 +25,21 @@ scinames<-c("GADUS MORHUA",                    # Atlantic Cod
             "MERLUCCIUS BILINEARIS",           # Silver Hake
             "POLLACHIUS VIRENS",               # Pollock
             "SEBASTES FASCIATUS",              # Redfishes Unseparated
-            "REINHARDTIUS HIPPOGLOSSOIDES",    # Greenland Halibut
+            #"REINHARDTIUS HIPPOGLOSSOIDES",    # Greenland Halibut
             "HIPPOGLOSSOIDES PLATESSOIDES",    # American Plaice
-            "GLYPTOCEPHALUS CYNOGLOSSUS",      # Witch Flounder
+            #"GLYPTOCEPHALUS CYNOGLOSSUS",      # Witch Flounder
             "LIMANDA FERRUGINEA",              # Yellowtail Flounder
             # "PSEUDOPLEURONECTES AMERICANUS",   # Winter Flounder 
             "CLUPEA HARENGUS",                 # Atlantic Herring
             "MALLOTUS VILLOSUS",               # Capelin
             "SCOMBER SCOMBRUS",                # Atlantic Mackerel
-            #"ARGENTINA SILUS",                 # Argentine 
-            "SQUALUS ACANTHIAS",               # Spiny Dogfish
-            "AMMODYTES DUBIUS"  , 
+            "ARGENTINA SILUS",                 # Argentines 
+            #"DIPTURUS LAEVIS" ,                # Barndoor Skate
+            "AMBLYRAJA RADIATA",               # Thorny Skate
+            #"SQUALUS ACANTHIAS",               # Spiny Dogfish
+            "AMMODYTES DUBIUS"                # Sand lance
             # MALLOTUS VILLOSUS excluded - no stomach data, assign beta/sigma manually
-            "HIPPOGLOSSUS HIPPOGLOSSUS"
+            #"HIPPOGLOSSUS HIPPOGLOSSUS" # Atlantic Halibut
 )
 # merge species names#merge species names
 

@@ -9,18 +9,20 @@ scinames_fb <- c(
   "Merluccius bilinearis",           # Silver Hake
   "Pollachius virens",               # Pollock
   "Sebastes fasciatus",              # Redfishes Unseparated
-  "Reinhardtius hippoglossoides",    # Greenland Halibut
+  #"Reinhardtius hippoglossoides",    # Greenland Halibut
   "Hippoglossoides platessoides",    # American Plaice
-  "Glyptocephalus cynoglossus",      # Witch Flounder
+  #"Glyptocephalus cynoglossus",      # Witch Flounder
   "Myzopsetta ferruginea",              # Yellowtail Flounder
   #"Pseudopleuronectes americanus",   # Winter Flounder 
   "Clupea harengus",                 # Atlantic Herring
   "Mallotus villosus",               # Capelin
   "Scomber scombrus",                # Atlantic Mackerel
-  #"Argentina silus",                 # Argentine 
-  "Squalus acanthias",               # Spiny Dogfish
-  "Ammodytes dubius",
-  "Hippoglossus hippoglossus"
+  "Argentina silus",                 # Atlantic Argentine 
+  #"Dipturus laevis",                 # Barndoor Skate
+  "Amblyraja radiata",               #Thorny Skate
+ # "Squalus acanthias",               # Spiny Dogfish
+  "Ammodytes dubius" # Sand Lance
+ # "Hippoglossus hippoglossus" ## Atlantic Halibut
 )
 
 
@@ -34,18 +36,20 @@ sciname_lookup <- tibble(
     "MERLUCCIUS BILINEARIS",           # Silver Hake
     "POLLACHIUS VIRENS",               # Pollock
     "SEBASTES FASCIATUS",              # Redfishes Unseparated
-    "REINHARDTIUS HIPPOGLOSSOIDES",    # Greenland Halibut
+    #"REINHARDTIUS HIPPOGLOSSOIDES",    # Greenland Halibut
     "HIPPOGLOSSOIDES PLATESSOIDES",    # American Plaice
-    "GLYPTOCEPHALUS CYNOGLOSSUS",      # Witch Flounder
+    #"GLYPTOCEPHALUS CYNOGLOSSUS",      # Witch Flounder
     "LIMANDA FERRUGINEA",              # Yellowtail Flounder Myzopsetta MYZOPSETTA.  LIMANDA
     #"PSEUDOPLEURONECTES AMERICANUS",   # Winter Flounder 
     "CLUPEA HARENGUS",                 # Atlantic Herring
     "MALLOTUS VILLOSUS",               # Capelin
     "SCOMBER SCOMBRUS",                # Atlantic Mackerel
-    #"ARGENTINA SILUS",                 # Argentine 
-    "SQUALUS ACANTHIAS",               # Spiny Dogfish
-    "AMMODYTES DUBIUS" ,
-    "HIPPOGLOSSUS HIPPOGLOSSUS"
+    "ARGENTINA SILUS",                 # Atlantic Argentine 
+    #"DIPTURUS LAEVIS" ,                # Barndoor Skate
+    "AMBLYRAJA RADIATA",               # Thorny Skate
+    #"SQUALUS ACANTHIAS",               # Spiny Dogfish
+    "AMMODYTES DUBIUS"                # Sand Lance
+   # "HIPPOGLOSSUS HIPPOGLOSSUS"        ## Atlantic Halibut
   ))
  
 # get max length and convert to max weight

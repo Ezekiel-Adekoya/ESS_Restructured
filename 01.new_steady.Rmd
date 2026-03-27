@@ -38,12 +38,6 @@ save_dir <- paste0(here(), "/Ess_Output/")
 
 Read in Species Parameters
 ```{r}
-external_species_info <- read.csv("Ess_data/new_ESS_species_params.csv") |>
-  select(-beta) |>
-  rename(beta = min_ppmr) |>
-  select(Species, w_max, w_mat, w_min, l_mat, beta, sigma, a, b, age_mat)|>
-  mutate(across(where(is.numeric), ~ round(., 2)))
-
 species_lookup <- c(
   "Gadus morhua"                 = "Atlantic Cod",
   "Melanogrammus aeglefinus"     = "Haddock",
@@ -51,28 +45,35 @@ species_lookup <- c(
   "Merluccius bilinearis"        = "Silver Hake",
   "Pollachius virens"            = "Pollock",
   "Sebastes fasciatus"           = "Redfish Unseparated",
-  "Reinhardtius hippoglossoides" = "Greenland Halibut",
   "Hippoglossoides platessoides" = "American Plaice",
-  "Glyptocephalus cynoglossus"   = "Witch Flounder",
-  "Myzopsetta ferruginea"           = "Yellowtail Flounder",
+  "Myzopsetta ferruginea"        = "Yellowtail Flounder",
   "Clupea harengus"              = "Atlantic Herring",
   "Mallotus villosus"            = "Capelin",
   "Scomber scombrus"             = "Mackerel",
-  "Squalus acanthias"            = "Spiny Dogfish",
-  "Ammodytes dubius"             = "Sand Lance",
-  "Hippoglossus hippoglossus"    = "Atlantic Halibut"
+  "Argentina silus"              = "Atlantic Argentine",
+  "Amblyraja radiata"            = "Thorny Skate",
+  "Ammodytes dubius"             = "Sand Lance"
 )
 
 species_order <- c(
-  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake","Pollock", "Redfish Unseparated", "Greenland Halibut","American Plaice", "Witch Flounder", "Yellowtail Flounder","Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut")
+  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake", "Pollock",
+  "Redfish Unseparated", "American Plaice", "Yellowtail Flounder",
+  "Atlantic Herring", "Capelin", "Mackerel", "Atlantic Argentine",
+  "Thorny Skate", "Sand Lance"
+)
 
-external_species_info <- external_species_info |> mutate(Species = recode(Species, !!!species_lookup)) |>
-  filter(Species %in% species_order) |> mutate(Species = factor(Species, levels = species_order)) |>
-  arrange(Species) |> mutate(Species = as.character(Species))
+external_species_info <- read.csv("Ess_data/new_ESS_species_params.csv") |>
+  select(-beta) |>
+  rename(beta = min_ppmr_adj) |>
+  select(Species, w_max, w_mat, w_min, l_mat, beta, sigma, a, b, age_mat) |>
+  mutate(across(where(is.numeric), ~ round(., 3)),
+         Species = factor(recode(Species, !!!species_lookup), levels = species_order)) |>
+  filter(!is.na(Species)) |>
+  arrange(Species) |>
+  mutate(Species = as.character(Species)) |>
+  rename(species = Species)
 
-names(external_species_info)[1] <- "species"
-
-years_to_use<-as.character(1970:1985) #Assign years for the reference period
+years_to_use<-as.character(1979:1992) #Assign years for the reference period
 
 ```
 
@@ -81,12 +82,24 @@ Read in catch data/Subset and average the catch data
 ```{r}
 catches <- readRDS("Ess_data/new_catches_nafo.RDS")
 catches <- catches[as.character(1970:2022), ]
+
 # convert matrix → data.frame
 catches <- as.data.frame(catches)
 yield_ts <- catches |> rownames_to_column("Year") |>
 pivot_longer(-Year, names_to = "Species", values_to = "Yield") |>
 mutate(Year = as.numeric(Year), Yield = ifelse(is.na(Yield), 0, Yield) )
-
+## Check plot 
+ggplot(yield_ts, aes(x = Year, y = Yield)) +
+  geom_line(linewidth = 0.4) +
+  facet_wrap(~ Species, scales = "free_y", ncol = 4) +
+  theme_minimal(base_size = 8) +
+  theme(
+    strip.text = element_text(size = 6),
+    axis.text = element_text(size = 6),
+    axis.title = element_text(size = 7),
+    panel.spacing = unit(0.5, "lines")
+  ) +
+  labs(x = "Year", y = "Yield")
 ```
 
 Aggregate to mean observed yield between 1970 and 1985 
@@ -95,13 +108,11 @@ Aggregate to mean observed yield between 1970 and 1985
 mean_catch_nafo <- subset(yield_ts, Year <= max(years_to_use)) %>%
   group_by(Species) %>%
   summarise(yield_observed = mean(Yield, na.rm = TRUE)) %>%
-  ungroup() %>%
-  arrange(factor(Species, levels = new_order))
-
-mean_catch_nafo
-
+  ungroup() %>% arrange(factor(Species, levels = species_order))
 # set sandlance catches to NA; assume not fished (only sporadic catches)
-mean_catch_nafo$yield_observed[15] <-NA
+mean_catch_nafo$yield_observed[13] <- NA
+
+mean_catch_nafo ### 0 Thorny Skate Why??
 
 ```
 
@@ -111,34 +122,16 @@ convert from KG??? to grams (need to check with Alida Bundy to be sure)
 Restrict to the 9 species of interest
 Rename columns
 ```{r}
-#Read observed biomass: DFO (Bundy et al., 2017)
-biomass_obs <- read.csv("Ess_data/Alida_Qadj_Biomass.csv")   # Q adjusted Biomass
-#biomass_obs <- read.csv("Ess_data/Alida_notQadj_biomass.csv") # NoT Q adjusted Biomass
-# convert to grams
+biomass_obs <- read.csv("Ess_data/Alida_Qadj_Biomass.csv")
 biomass_obs[, -1] <- biomass_obs[, -1] * 1e3
-
-# rename columns using exact gsub output, then fix manually
-colnames(biomass_obs) <- gsub("\\.", " ", colnames(biomass_obs))
-colnames(biomass_obs) <- trimws(colnames(biomass_obs))         # remove trailing spaces
-colnames(biomass_obs) <- gsub("\\s+", " ", colnames(biomass_obs))  # collapse double spaces
-
-# fix remaining mismatches
-colnames(biomass_obs)[colnames(biomass_obs) == "Redfish Unseparated"]  <- "Redfishes Unseparated"
-colnames(biomass_obs)[colnames(biomass_obs) == "Short fin Squid"]      <- "Shortfin Squid"
-colnames(biomass_obs)[colnames(biomass_obs) == "NA"]                   <- "Unknown"
-
-# verify all names
-colnames(biomass_obs)
-
-# remove unwanted species
+colnames(biomass_obs) <- gsub("\\s+", " ", trimws(gsub("\\.", " ", colnames(biomass_obs))))
+colnames(biomass_obs)[colnames(biomass_obs) == "Short fin Squid"] <- "Shortfin Squid"
+colnames(biomass_obs)[colnames(biomass_obs) == "Argentine"]       <- "Atlantic Argentine"
 biomass_obs <- biomass_obs %>%
-  select(-any_of(c(
-    "Winter Flounder", "Barndoor Skate", "Argentine", "Longhorn Sculpin",
-    "Thorny Skate", "Monkfish", "Winter Skate", "Shad American",
-    "Sharks Unspecified", "Pandalus borealis", "Butterfish",
-    "Shortfin Squid", "Holothuroidea", "Sea Cucumber", "Unknown"
-  )))
-
+  select(Year, "Atlantic Cod", "Haddock", "White Hake", "Silver Hake", "Pollock",
+         "Redfish Unseparated", "American Plaice", "Yellowtail Flounder",
+         "Atlantic Herring", "Capelin", "Mackerel", "Atlantic Argentine",
+         "Thorny Skate", "Sand Lance")
 biomass_obs[is.na(biomass_obs)] <- 0
 
 ```
@@ -212,7 +205,7 @@ initial_effort(params) <- unlist(mean_effort)
 set up initial catchability using this mean relative effort and catchability of 1 as initial value only - BUT WILL ESTIMARE LATER
 ```{r}
 #assume catchability of 1, will be estimated further down
-gear_params(params)$catchability <- rep(1.0,16)
+gear_params(params)$catchability <- rep(1.0,14)
 gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
 
 ```
@@ -266,75 +259,47 @@ width = 9,height = 7,units = "in",dpi = 400)
 
 Biomass cutoff from length distributions
 ```{r}
-# read data
-lengthfreq <- read.csv("Ess_data/Alida_Qadj_biomass_at_Length.csv.csv")  #Q adjusted
-#lengthfreq <- read.csv("Ess_data/Alida_not_Qadj_biomass_at_Length.csv). # not Adjusted
-lengthfreq <- lengthfreq %>%
-  select(YEAR, Species_name = SPECIES_NAME, LENGTH, ABUNDANCE) %>%
-  rename(length_cm = LENGTH)
-
-# Remove unwanted species first
-remove_species <- c(
-  "Winter Flounder", "Barndoor Skate", "Argentine", "Longhorn Sculpin",
-  "Thorny Skate", "Monkfish", "Winter Skate", "Shad American",
-  "Sharks (Unspecified)", "Pandalus borealis", "Butterfish",
-  "Short-Fin Squid", "Holothuroidea", "Sea Cucumber")
-
-lengthfreq <- lengthfreq %>%
-  mutate(Species_name = trimws(Species_name)) %>%
-  filter(!Species_name %in% remove_species & !is.na(Species_name))
-
-# Filter by year BEFORE averaging (while YEAR still exists)
-lengthfreq <- lengthfreq %>%
-  filter(YEAR <= max(years_to_use))
-
-# Now compute mean abundance per length (averaging over years)
-lengthfreq <- lengthfreq %>%
-  group_by(YEAR, Species_name, length_cm) %>%
-  summarise(meanN = mean(ABUNDANCE, na.rm = TRUE), .groups = "drop")
-
-# Pivot wider keeping YEAR as an id variable alongside length_cm
-lengthfreq_wide <- lengthfreq %>%
-  pivot_wider(names_from = Species_name, values_from = meanN)
-
-# Define desired species order (matching your species_params order)
-species_order <- c(
-  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake", "Pollock",
-  "Redfishes Unseparated", "Greenland Halibut", "American Plaice",
-  "Witch Flounder", "Yellowtail Flounder", "Atlantic Herring",
-  "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut"
+species_code_lookup <- c(
+  "10"  = "Atlantic Cod",
+  "11"  = "Haddock",
+  "14"  = "White Hake",
+  "12"  = "Silver Hake",
+  "23"  = "Pollock",
+  "40"  = "Redfish Unseparated",
+  "41"  = "American Plaice",
+  "42"  = "Yellowtail Flounder",
+  "60"  = "Atlantic Herring",
+  "64"  = "Capelin",
+  "2525"= "Mackerel",
+  "160" = "Atlantic Argentine",
+  "201" = "Thorny Skate",
+  "43"  = "Sand Lance"
 )
 
-# Reorder keeping YEAR and length_cm first
-lengthfreq_wide <- lengthfreq_wide %>%
-  select(YEAR, length_cm, all_of(species_order))
+lengthfreq <- read.csv("Ess_data/Alida_Qadj_biomass_at_Length.csv.csv") |>
+  select(YEAR, species_code = SPECIES, length_cm = LENGTH, ABUNDANCE) |>
+  mutate(Species_name = recode(as.character(species_code), !!!species_code_lookup)) |>
+  filter(Species_name %in% keep_species, YEAR <= max(years_to_use)) |>
+  group_by(Species_name, length_cm) |>
+  summarise(meanN = mean(ABUNDANCE, na.rm = TRUE), .groups = "drop")
 
-
-# Melt back, preserving both YEAR and length_cm
-lengthfreq <- melt(lengthfreq_wide, id.vars = c("YEAR", "length_cm"))
-
-# Now YEAR exists and can be filtered
-lengthfreq <- lengthfreq %>%
-  filter(YEAR <= max(years_to_use)) %>%
-  group_by(variable, length_cm) %>%
-  summarise(meanN = mean(value, na.rm = TRUE)) %>%
-  ungroup()
-# ----------------------------
-# 5. Plot length spectra
-# ----------------------------
-p <- ggplot(lengthfreq, aes(x=log10(length_cm),y=log10(meanN), group=variable)) + 
-  geom_line()+
-  facet_wrap(~variable)
+p <- ggplot(lengthfreq, aes(x = log10(length_cm), y = log10(meanN), group = Species_name)) +
+  geom_line() +
+  facet_wrap(~Species_name)
 p
-biomass_cutoff<- lengthfreq |> 
-  filter(meanN>=0) |>
-  group_by(variable) |> 
-  summarise(min_l=min(length_cm),max_l=max(length_cm))|> 
-  mutate(Species=species_params(params)$species,min_w=round(species_params(params)$a*min_l^species_params(params)$b,1),max_w=round(species_params(params)$a*max_l^species_params(params)$b,1))|>
-  select(Species,min_l,max_l,min_w,max_w)|>
-  ungroup()
-external_species_info$biomass_cutoff <- biomass_cutoff$min_w
 
+biomass_cutoff <- lengthfreq |>
+  filter(meanN >= 0) |>
+  group_by(Species_name) |>
+  summarise(min_l = min(length_cm), max_l = max(length_cm)) |>
+  mutate(
+    Species = species_params(params)$species,
+    min_w   = round(species_params(params)$a * min_l ^ species_params(params)$b, 1),
+    max_w   = round(species_params(params)$a * max_l ^ species_params(params)$b, 1)
+  ) |>
+  select(Species, min_l, max_l, min_w, max_w)
+
+external_species_info$biomass_cutoff <- biomass_cutoff$min_w
 # adjust max_w for some species (too small max_w from RFishBase)
 # ratio<-biomass_cutoff$max_w/species_params(params)$w_max
 # corrections<-which(ratio>1)

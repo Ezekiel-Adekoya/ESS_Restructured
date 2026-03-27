@@ -59,29 +59,29 @@ nafo_names <- c(
   "SILVER HAKE - HKS",
   "POLLOCK (SAITHE) - POK",
   "ATLANTIC REDFISHES (NS) - RED",
-  "GREENLAND HALIBUT - GHL",
+  #"GREENLAND HALIBUT - GHL",
   "AMERICAN PLAICE - PLA",
-  "WITCH FLOUNDER - WIT",
+  #"WITCH FLOUNDER - WIT",
   "YELLOWTAIL FLOUNDER - YEL",
   #"WINTER FLOUNDER - FLW",
   "ATLANTIC HERRING - HER",
-  # "AMERICAN SHAD - SHA",
+  #"AMERICAN SHAD - SHA",
   "CAPELIN - CAP",
   "ATLANTIC MACKEREL - MAC",
-  #"ARGENTINES (NS) - ARG",
-  # "BARNDOOR SKATE - RJL",
-  # "THORNY SKATE (STARRY RAY) - RJR",
+  "ARGENTINES (NS) - ARG",
+  #"BARNDOOR SKATE - RJL",
+  "THORNY SKATE (STARRY RAY) - RJR",
   # "WINTER SKATE - RJT",
-  "SPINY (=PICKED) DOGFISH - DGS",
+  #"SPINY (=PICKED) DOGFISH - DGS",
   #"LONGHORN SCULPIN - MXO",
   #"AMERICAN ANGLER - ANG",
   #"VARIOUS SHARKS NEI - SKH",
-  "SANDEELS (SANDLANCES) - SAN",
+  "SANDEELS (SANDLANCES) - SAN"
  # "ATLANTIC BUTTERFISH - BUT"
   #, "NORTHERN PRAWN - PRA",
   #"(NORTHERN) SHORTFIN SQUID - SQI"
-#  NA, NA,
-"ATLANTIC HALIBUT - HAL"
+  #  NA, NA,
+  #"ATLANTIC HALIBUT - HAL"
 )
 
 #("THORNY SKATE (STARRY RAY) - RJR", "SMOOTH SKATE - RJS", "LITTLE SKATE - RJD" , "WINTER SKATE - RJT", "RED HAKE - HKR", "CUSK (TUSK) - USK")
@@ -109,21 +109,21 @@ stat$Species <- recode(stat$Species.Name,
   "WHITE HAKE - HKW" = "White Hake",
   "SILVER HAKE - HKS" = "Silver Hake",
   "POLLOCK (SAITHE) - POK" = "Pollock",
-  "ATLANTIC REDFISHES (NS) - RED" = "Redfishes Unseparated",
-  "GREENLAND HALIBUT - GHL" = "Greenland Halibut",
+  "ATLANTIC REDFISHES (NS) - RED" = "Redfish Unseparated",
+  #"GREENLAND HALIBUT - GHL" = "Greenland Halibut",
   "AMERICAN PLAICE - PLA" = "American Plaice",
-  "WITCH FLOUNDER - WIT" = "Witch Flounder",
+  #"WITCH FLOUNDER - WIT" = "Witch Flounder",
   "YELLOWTAIL FLOUNDER - YEL" = "Yellowtail Flounder",
   #"WINTER FLOUNDER - FLW" = "Winter Flounder",
   "ATLANTIC HERRING - HER" = "Atlantic Herring",
-  "AMERICAN SHAD - SHA" = "Shad American",
+  #"AMERICAN SHAD - SHA" = "Shad American",
   "CAPELIN - CAP" = "Capelin",
   "ATLANTIC MACKEREL - MAC" = "Mackerel",
-  "ARGENTINES (NS) - ARG" = "Argentine",
+  "ARGENTINES (NS) - ARG" = "Atlantic Argentine",
   #"BARNDOOR SKATE - RJL" = "Barndoor Skate",
-  #"THORNY SKATE (STARRY RAY) - RJR" = "Thorny Skate",
+  "THORNY SKATE (STARRY RAY) - RJR" = "Thorny Skate",
   #"WINTER SKATE - RJT" = "Winter Skate",
-  "SPINY (=PICKED) DOGFISH - DGS" = "Spiny Dogfish",
+  #"SPINY (=PICKED) DOGFISH - DGS" = "Spiny Dogfish",
   #"LONGHORN SCULPIN - MXO" = "Longhorn Sculpin",
   #"AMERICAN ANGLER - ANG" = "Monkfish",
   #"VARIOUS SHARKS NEI - SKH" = "Sharks Unspecified",
@@ -132,7 +132,7 @@ stat$Species <- recode(stat$Species.Name,
   #"NORTHERN PRAWN - PRA" = "Pandalus borealis",
   #"(NORTHERN) SHORTFIN SQUID - SQI" = "Shortfin Squid"
   #NA = "Holothuroidea", NA = "Sea Cucumber",
-  "ATLANTIC HALIBUT - HAL" = "Atlantic Halibut"
+ # "ATLANTIC HALIBUT - HAL" = "Atlantic Halibut"
 )
 
 ### Aggreagte over whole Division 4VW and convert to GRAMS WET WEIGHT
@@ -218,7 +218,7 @@ nafo_21B_grouped_daysfished<-nafo_21B%>% subset(SpeciesEffort=="2")%>%
 unique(nafo_21B_grouped_daysfished$MainSpecies)
 
 nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
-  MainSpecies %in% c("1","2","21","4","6","3","13","10","11","12","30","52","31","56","49", "16"))
+  MainSpecies %in% c("1","2","21","4","6","3","10","12","30","52","31","51","54","49"))
 # NO NUMBER FOR SANDLANCES - include 49 (Peleagic fish) as dummy to be overwritten with zeroes
 # All skakes were labelled 54, 
 # 53,  # Sharks (NS) removed NO NAFO CODE
@@ -230,10 +230,9 @@ nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
 # rename MainSpecies to match params
 nafo_21B_subset$MainSpecies <- factor(
   nafo_21B_subset$MainSpecies,
-  levels = c("1","2","21","4","6","3","13","10","11","12","30","52","31","56","49", "16"))
-levels(nafo_21B_subset$MainSpecies) <- c(  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake",
-  "Pollock", "Redfishes Unseparated", "Greenland Halibut","American Plaice", "Witch Flounder", "Yellowtail Flounder",
-  "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish", "Sand Lance", "Atlantic Halibut")
+  levels = c("1","2","21","4","6","3","10","12","30","52","31","51","54","49"))
+levels(nafo_21B_subset$MainSpecies) <- c( 
+  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake","Pollock", "Redfish Unseparated","American Plaice", "Yellowtail Flounder","Atlantic Herring", "Capelin", "Mackerel","Atlantic Argentine", "Thorny Skate" ,"Sand Lance")
 
 
 # nafo_21B_subset2$MainSpecies<-as.factor(nafo_21B_subset2$MainSpecies)
@@ -274,8 +273,6 @@ ggplot(nafo_21B_effort,aes(x=Year,y=Effort_kW_Days_yr,group=MainSpecies)) + geom
 
 
 ```{r}
-library(dplyr)
-library(tidyr)
 library(zoo)
 
 cols  <- c("Year","Country","GearCode","Tonnage","MainSpecies","Divcode","Code","Effort","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
@@ -313,13 +310,13 @@ nafo_21B_grouped_daysfished <- nafo_21B %>%
   summarise(TotalDaysFished = sum(TotalEffort), .groups = "drop")
 
 ###### Filter to 16 species
-species_codes <- c(1, 2, 21, 4, 6, 3, 13, 10, 11, 12, 30, 52, 31, 56, 49, 16)
+species_codes <- c(1,2,21,4,6,3,10,12,30,52,31,51,54,49)
 species_cols  <- c(
   "Atlantic Cod", "Haddock", "White Hake", "Silver Hake",
-  "Pollock", "Redfishes Unseparated", "Greenland Halibut",
-  "American Plaice", "Witch Flounder", "Yellowtail Flounder",
-  "Atlantic Herring", "Capelin", "Mackerel", "Spiny Dogfish",
-  "Sand Lance", "Atlantic Halibut"
+  "Pollock", "Redfish Unseparated", 
+  "American Plaice",  "Yellowtail Flounder",
+  "Atlantic Herring", "Capelin", "Mackerel","Atlantic Argentine",  
+  "Thorny Skate" ,"Sand Lance"
 )
 
 nafo_21B_subset <- nafo_21B_grouped_daysfished %>%
