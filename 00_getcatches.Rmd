@@ -1,0 +1,859 @@
+---
+title: "Get ESS Catch"
+author: "Ezekiel"
+date: "2024-11-12"
+output: Extracted Catch data from NAFO
+---
+Extraction of Catch data from NAFO
+https://www.nafo.int/Data/Catch-Statistics-STATLANT-21B
+
+Also for background on fisheries management see these documents:
+https://www.dfo-mpo.gc.ca/fisheries-peches/ifmp-gmp/groundfish-poisson-fond/groundfish-poisson-fond-4vwx5-eng.html
+https://www.dfo-mpo.gc.ca/oceans/publications/scotian-atlas-ecossais/index-eng.html#hake
+
+
+```{r setup, include=FALSE}
+{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "~/R/FISHMIP/NEW ESS/Eastern-Scotian-Shelf-Model")
+```
+
+####### Catch Data: Explore STATLANT 21A Database
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+
+#### Catch Data: explore the NAFO Statlant 21A Data
+
+stat <- read.csv("Ess_data/NAFO-21A-Full.csv")
+# take a look 
+head(stat)
+# Filter to 4VS and 4W divisions
+stat <- filter(stat, Division == "4VS" | Division == "4W")
+unique(stat$Species.Name)
+unique(stat$Division)
+
+# Quick check to explore species in catch
+stat_grouped_all <- stat |>
+  rename(V = Year) |>
+  group_by(V, Species.Name) |>
+  summarise(catch_g = sum(Metric.Tonnes) * 1e6, .groups = "drop") |>
+  filter(V >= 1970, V <= 2024) |>
+  group_by(Species.Name) |>
+  summarise(prop_catch = mean(catch_g), .groups = "drop") |>
+  mutate(prop_catch = prop_catch / sum(prop_catch) * 100) |>
+  arrange(desc(prop_catch))
+
+data_plot <- stat_grouped_all |>
+  mutate(Species.Name = reorder(Species.Name, prop_catch))
+
+# Barplot
+ggplot(data_plot, aes(x = Species.Name, y = prop_catch)) + 
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+# top species in prop_catch (ignore squid)
+stat_grouped_all[1:15, ]
+
+# species to extract data for:
+# [1] "AMERICAN PLAICE"         
+# [2] "COD(ATLANTIC)"  
+# [3]"ATLANTIC HERRING"
+# [4] "HADDOCK"                 
+# [5] "REDFISH UNSEPARATED"     
+# [6] "SPINY DOGFISH"           
+# [7] "TURBOT,GREENLAND HALIBUT"
+# [8] "WITCH FLOUNDER"          
+# [9] "YELLOWTAIL FLOUNDER"
+# [10] "WHITE HAKE"
+# [11] "SILVER HAKE"       
+# [12] "SANDLANCES"       
+# [13] "ATLANTIC HALIBUT"       
+
+
+nafo_names <- c(
+  "AMERICAN PLAICE - PLA",
+  "ATLANTIC COD - COD",
+  "ATLANTIC HERRING - HER",
+  "ATLANTIC HALIBUT - HAL",
+  "ATLANTIC MACKEREL - MAC",      # ← ADD
+  "ATLANTIC REDFISHES (NS) - RED",
+  "CAPELIN - CAP",                 # ← ADD
+  #"GREENLAND HALIBUT - GHL", # remove
+  "POLLOCK (SAITHE) - POK", # ADD
+  "HADDOCK - HAD",
+  "SANDEELS (SANDLANCES) - SAN",
+  "SILVER HAKE - HKS",
+  "SPINY (=PICKED) DOGFISH - DGS",
+  "WHITE HAKE - HKW",
+  "WITCH FLOUNDER - WIT",
+  "YELLOWTAIL FLOUNDER - YEL"
+)
+
+
+# Return to orginal data to subet species in model
+stat<-subset(stat,Species.Name %in% nafo_names)
+
+# rename 
+stat$Species<-as.factor(stat$Species.Name)
+levels(stat$Species)
+#CAREFUL: THE BELOW NAMES NEED TO BE MATCHED TO THE CORRECT SPECIES NAMES
+
+levels(stat$Species) <- c(
+  "AMERICAN PLAICE",
+  "ATLANTIC COD",
+  "ATLANTIC HALIBUT",
+  "ATLANTIC HERRING",
+  "ATLANTIC MACKEREL",
+  "ATLANTIC REDFISHES",
+  "CAPELIN",
+  "HADDOCK",
+  "POLLOCK",
+  "SANDLANCES",
+  "SILVER HAKE",
+  "SPINY DOGFISH",
+  "WHITE HAKE",
+  "WITCH FLOUNDER",
+  "YELLOWTAIL FLOUNDER"
+)
+
+### Aggreagte over whole Division 4VW and convert to GRAMS WET WEIGHT
+
+stat_grouped<-stat%>% rename(Year = V) %>%
+  group_by(Year,Species) %>%
+  reframe(catch_g = sum(Metric.Tonnes)*1e6)
+
+#### check plots
+
+names(stat_grouped)<-c("Year","Species","Catches_g_per_yr")
+ggplot(stat_grouped,aes(x=Year,y=Catches_g_per_yr,group=Species)) + geom_line() + facet_wrap(~Species,scales="free_y") 
+
+
+ggplot(stat_grouped,aes(x=Year,y=Catches_g_per_yr,fill=Species)) + geom_area() 
+
+
+ggplot(filter(stat_grouped,Year >= 1978), 
+       aes(x = Year, y = Catches_g_per_yr, fill = Species)) + 
+  geom_area() +
+  geom_vline(xintercept = 1992.5, linetype = "dashed", color = "red", linewidth = 0.8) +
+  labs(
+    title = "NAFO 4VW Total Catch by Species (1978-2024)",
+    subtitle = "Red dashed line = moratorium (1992)",
+    x = "Year",
+    y = "Catch (grams/year)"
+  ) +
+  theme_minimal()
+
+saveRDS(stat_grouped, file = "Ess_data/NAFO_4VW_Catches.RDS")
+#saveRDS(stat_grouped,"NAFO_4VW_Catches.RDS")
+
+
+# Re-create catch_matrix_mizer with all 15 species in the same order as effort
+catch_matrix_mizer <- stat_grouped |>
+  filter(between(Year, 1978, 2024)) |>
+  pivot_wider(names_from = Species, values_from = Catches_g_per_yr, values_fill = 0) |>
+  arrange(Year) |>
+  column_to_rownames("Year") |>
+  as.matrix()
+
+# Ensure all 15 species are present (add SANDLANCES if missing)
+catch_matrix_mizer <- cbind(catch_matrix_mizer, SANDLANCES = 0)
+
+# Re-order to match effort_matrix_mizer_scaled exactly
+catch_matrix_mizer <- catch_matrix_mizer[, c(
+  "AMERICAN PLAICE", "ATLANTIC COD", "ATLANTIC HALIBUT", "ATLANTIC HERRING",
+  "ATLANTIC MACKEREL", "ATLANTIC REDFISHES", "CAPELIN", "HADDOCK", "POLLOCK",
+  "SANDLANCES", "SILVER HAKE", "SPINY DOGFISH", "WHITE HAKE", "WITCH FLOUNDER",
+  "YELLOWTAIL FLOUNDER"
+)]
+
+# Standardize catches (0-1 scale)
+catch_matrix_mizer_scaled <- catch_matrix_mizer |>
+  apply(2, function(x) x / max(x, na.rm = TRUE))
+
+
+```
+
+
+####### Effort Data: Explore STATLANT 21B Database
+
+```{r}
+## get data
+cols_old <- c("Year", "Country", "GearCode", "Tonnage", "MainSpecies", "Divcode", "Code", "Effort", 
+              "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+cols_new <- c("Year", "Country", "Gear", "Tonnage", "MainSpecies", "AreaCode", "SpeciesEffort", "Effort",
+              "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+## read in each file and rename columns to standard names
+nafo60s <- read_delim("Ess_data/nafo-21b-60-69/NAFO21B-60-69.txt") |>
+  select(all_of(cols_old)) |>
+  rename(Gear = GearCode, AreaCode = Divcode, SpeciesEffort = Code)
+nafo70s <- read_delim("Ess_data/nafo-21b-70-79/NAFO21B-70-79.txt") |>
+  select(all_of(cols_old)) |>
+  rename(Gear = GearCode, AreaCode = Divcode, SpeciesEffort = Code)
+nafo80s <- read_delim("Ess_data/nafo-21b-80-89/NAFO21B-80-89.txt") |>
+  select(all_of(cols_old)) |>
+  rename(Gear = GearCode, AreaCode = Divcode, SpeciesEffort = Code)
+nafo90s <- read_delim("Ess_data/nafo-21b-90-99/NAFO21B-90-99.txt") |>
+  select(all_of(cols_old)) |>
+  rename(Gear = GearCode, AreaCode = Divcode, SpeciesEffort = Code)
+nafo00s <- read_delim("Ess_data/nafo-21b-2000-09/NAFO21B-2000-09.txt") |>
+  select(all_of(cols_old)) |>
+  rename(Gear = GearCode, AreaCode = Divcode, SpeciesEffort = Code)
+nafo10s <- read_delim("Ess_data/NAFO-21B-2010-19/NAFO-21B-2010-2019.txt") |>
+  select(all_of(cols_new))
+nafo20s <- read_delim("Ess_data/NAFO-21B-2020-24/NAFO-21B-2020-24.txt") |>
+  select(all_of(cols_new))
+
+## combine all datasets (without 2020-24)
+nafo_21B <- bind_rows(nafo60s, nafo70s, nafo80s, nafo90s, nafo00s, nafo10s,nafo20s) |>
+  filter(SpeciesEffort %in% c(1, 2, 3)) |>
+  filter(AreaCode %in% c(45, 46)) #4VsW (see divisions.txt for codes)
+
+## rename columns & combine & subset to effort data
+# names(nafo60s)<-names(nafo70s)<-names(nafo80s)<-names(nafo90s)<-names(nafo00s)<-names(nafo10s)<-names(nafo20s)
+# nafo_21B<-rbind(nafo60s,nafo70s,nafo80s,nafo90s,nafo00s,nafo10s,nafo20s)
+# nafo_21B<-subset(nafo_21B,SpeciesEffort %in% c(1,2,3))
+# # subset to 4VW
+# nafo_21B<-subset(nafo_21B,AreaCode %in% c(44,45,46,48))
+
+# subset to 4VW
+
+nafo_21B$TotalEffort = rowSums(nafo_21B[,c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")])
+nafo_21B<-nafo_21B[,c("Year","Country", "Gear","Tonnage","MainSpecies", "AreaCode","SpeciesEffort", "Effort","TotalEffort")
+]
+
+
+# subset to effort data that is  SpeciesEffort code "2" Days Fished
+nafo_21B_grouped_daysfished<-nafo_21B%>% subset(SpeciesEffort=="2")%>%
+  group_by(Year,Gear,Tonnage,MainSpecies,SpeciesEffort) %>%
+  reframe(TotalDaysFished = sum(TotalEffort))
+
+
+### IGNORE THIS - only use if not doing species -specific effort but instead by gear type
+### which Gear Codes to include? Trawls only?
+# Bottom otter trawl (charters),8,OTB*
+# Midwater trawl,9,OTM*
+# Bottom otter trawl (side or stern not specified),10,OTB
+# Bottom otter trawl (side),11,OTB-1
+# Bottom otter trawl,12,OTB-2
+# Midwater trawl (side or stern not specified),13,OTM
+# Midwater trawl (side),14,OTM-1
+# Midwater trawl (stern),15,OTM-2
+# Bottom pair trawl (2 boats),16,PTB
+# Midwater pair trawl (2 boats),17,PTM
+# Beam trawl,18,TBB
+# Otter shrimp twin trawl,19,OTS
+# Otter twin trawl,192,OTT
+# "Set gillnets",41,"GNS"
+# "Drift gillnets",42,"GND"
+#"Longlines (charters)",49,"LL*"
+#"Longlines (not specified)",50,"LL"
+ 
+ nafo_21B_gear_subset<-filter(nafo_21B_grouped_daysfished,Gear %in% c(8,9,10,11,12,13,14,15,51,41,49,50))
+ 
+
+# Define gear groups and calculate effort
+nafo_21B_effort_by_gear <- nafo_21B_gear_subset |>
+  mutate(
+    # Convert Tonnage to Gross Tonnage (GT)
+    GT = case_when(
+      Tonnage %in% c(1, 2) ~ (0 + 49.9) / 2,
+      Tonnage == 3 ~ (50 + 149.9) / 2,
+      Tonnage == 4 ~ (150 + 499.9) / 2,
+      Tonnage == 5 ~ (500 + 999.9) / 2,
+      Tonnage == 6 ~ (1000 + 1999.9) / 2,
+      Tonnage == 7 ~ (2000 + 5000) / 2,
+      TRUE ~ NA_real_
+    ),
+    # Calculate power and effort
+    Power_kW = 11.26 * GT^0.71,
+    Effort_kW_Days_yr = Power_kW * TotalDaysFished,
+    # Define gear groups
+    Gear_Group = case_when(
+      Gear %in% c(8, 10, 11, 12, 16) ~ "Bottom Trawl",
+      Gear %in% c(9, 13, 14, 15, 17) ~ "Midwater Trawl",
+      #Gear %in% c(18, 19, 192) ~ "Other Trawl",
+      Gear %in% c(41, 42) ~ "Gillnet",
+      Gear == 51 ~ "Purse Seine",
+      Gear %in% c(49, 50) ~ "Longline",
+      TRUE ~ "Other"
+    )
+  ) |>
+  group_by(Year, Gear_Group) |>
+  summarise(Effort_kW_Days_yr = sum(Effort_kW_Days_yr, na.rm = TRUE), .groups = "drop") |>
+  filter(Year >= 1978)
+
+# Plot by gear group
+ggplot(nafo_21B_effort_by_gear, aes(x = Year, y = Effort_kW_Days_yr, fill = Gear_Group)) +
+  geom_area() +
+  geom_vline(xintercept = 1992.5, linetype = "dashed", color = "red", linewidth = 0.8) +
+  labs(
+    title = "Fishing Effort by Gear Type (1960-2013)",
+    x = "Year",
+    y = "Effort (kW-Days/year)",
+    fill = "Gear Type"
+  ) +
+  theme_minimal()
+
+
+
+# Gear-species targeting matrix for your 15 selected species:
+
+gear_species_matrix <- tibble(
+  Gear_Group = c(
+    "Bottom Trawl",
+    "Midwater Trawl",
+    "Gillnet",
+    "Longline",
+    "Purse Seine"
+  ),
+  Target_Species = c(
+    "American plaice, witch flounder, yellowtail flounder, haddock, cod",
+    "Atlantic herring, capelin, Atlantic mackerel, sandlance",
+    "Atlantic halibut, white hake",
+    "Atlantic halibut, cod, white hake",
+    "Atlantic herring, Atlantic mackerel, capelin"
+  ),
+  Notes = c(
+    "Demersal, benthic interaction",
+    "Pelagic schooling fish",
+    "Passive gear, size selective",
+    "Highly size-selective, large demersals",
+    "Pelagic, schooling"
+  )
+)
+
+gear_species_matrix <- tibble(
+  Gear_Group = c(
+    "Bottom Trawl",
+    "Bottom Trawl",
+    "Midwater Trawl",
+    "Gillnet",
+    "Longline",
+    "Purse Seine"
+  ),
+  Target_Species = c(
+    "AMERICAN PLAICE, WITCH FLOUNDER, YELLOWTAIL FLOUNDER, HADDOCK, ATLANTIC COD",
+    "ATLANTIC HALIBUT (bycatch), SILVER HAKE (bycatch), SPINY DOGFISH (bycatch)",
+    "ATLANTIC HERRING, CAPELIN, ATLANTIC MACKEREL, SANDLANCES",
+    "ATLANTIC HALIBUT, WHITE HAKE",
+    "ATLANTIC HALIBUT, ATLANTIC COD, WHITE HAKE",
+    "ATLANTIC HERRING, ATLANTIC MACKEREL, CAPELIN"
+  ),
+  Notes = c(
+    "Demersal, primary targets, benthic interaction",
+    "Incidental catch in groundfish fishery",
+    "Pelagic schooling fish, primary targets",
+    "Passive gear, size-selective, secondary targets",
+    "Highly size-selective, large demersals, secondary targets",
+    "Pelagic, primary targets, schooling"
+  )
+)
+
+gear_species_matrix
+
+
+
+
+
+# unique(nafo_21B_gear_subset$Gear)
+unique(nafo_21B_grouped_daysfished$MainSpecies)
+
+# Read the mainspecies.txt file to get codes and names
+mainspecies <- read.table("Ess_data/nafo-21b-70-79/mainspecies.txt", 
+                          header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+head(mainspecies, 50)
+
+
+# Filter to find POLLOCK, CAPELIN, ATLANTIC MACKEREL
+mainspecies |>
+  filter(grepl("POLLOCK|SAITHE|CAPELIN|MACKEREL",   MainSpecies.Abbrev.Species, ignore.case = TRUE))
+
+## selected species:
+nafo_21B_subset<-filter(nafo_21B_grouped_daysfished,MainSpecies %in% c("10","1","30","16","3","2","49","4", "56", "29","11","12","6","31","52"))
+
+# MainSpecies codes for your 15 selected species:
+# 1 = COD (Atlantic cod)
+# 2 = HAD (Haddock)
+# 3 = RED (Atlantic redfishes)
+# 4 = HKS (Silver hake)
+# 6 = POK (Pollock/saithe) ← NOW INCLUDED
+# 10 = PLA (American plaice)
+# 11 = WIT (Witch flounder)
+# 12 = YEL (Yellowtail flounder)
+# 16 = HAL (Atlantic halibut)
+# 21 = HKW (White hake)
+# 30 = HER (Atlantic herring)
+# 31 = MAC (Atlantic mackerel) ← NOW INCLUDED
+# 49 = PEL (Pelagic fish - dummy for SANDLANCES)
+# 52 = CAP (Capelin) ← NOW INCLUDED
+# 56 = DGX (Dogfish)
+
+
+# rename MainSpecies to match params
+nafo_21B_subset$MainSpecies<-as.factor(nafo_21B_subset$MainSpecies)
+
+
+# Update the levels assignment
+levels(nafo_21B_subset$MainSpecies) <- c(
+  "AMERICAN PLAICE",        # 10
+  "ATLANTIC COD",           # 1
+  "ATLANTIC HALIBUT",       # 16
+  "ATLANTIC HERRING",       # 30
+  "ATLANTIC MACKEREL",      # 31
+  "ATLANTIC REDFISHES",     # 3
+  "CAPELIN",                # 52
+  "HADDOCK",                # 2
+  "POLLOCK",                # 6
+  "SANDLANCES",             # 49
+  "SILVER HAKE",            # 4
+  "SPINY DOGFISH",          # 56
+  "WHITE HAKE",             # 21
+  "WITCH FLOUNDER",         # 11
+  "YELLOWTAIL FLOUNDER"     # 12
+)
+# NO NUMBER FOR SANDLANCES - include 49 (Peleagic fish) as dummy to be overwritten with zeroes
+# Bycatch species (with and yellowtail flounder)
+# 19,"FLX","Flatfishes (NS)"
+# Bycatch species (white hake)
+# 29,"GRO","Groundfish (NS)"
+
+
+
+
+
+
+levels(nafo_21B_subset$MainSpecies)
+
+
+# nafo_21B_subset2$MainSpecies<-as.factor(nafo_21B_subset2$MainSpecies)
+# levels(nafo_21B_subset2$MainSpecies)<-c("AMERICAN PLAICE", "COD(ATLANTIC)", "HERRING(ATLANTIC)","ATLANTIC HALIBUT","REDFISH UNSEPARATED", "TURBOT, GREENLAND HALIBUT", "HADDOCK","SANDLANCES", "SILVER HAKE", "SPINY DOGFISH",  "GROUNDFISH", "FLATFISH")
+
+# Effort calculations:
+### Need to convert Tonnage to Power (kW) by Gear type (FAO guidelines)
+### Then multiply Power by Days Fished to get kW days per yr
+### Anticamara et al 2011: 
+###Power (kW) = 0.436 x (Length^2.021); R2 = 0.9; P < 0.0001
+###Power (kW) = 11.26 x (Gross Tonnage^0.71)
+#1. Calculate median of each length/tonnage category
+#2. Calculate effort in kw*daysfished 
+
+
+nafo_21B_subset$GT<-nafo_21B_subset$Power_kW<-NA
+#code 1 or 2
+nafo_21B_subset$GT[nafo_21B_subset$Tonnage %in% c(1,2)]<-(0+49.9)/2	
+nafo_21B_subset$GT[nafo_21B_subset$Tonnage ==3]<-(50+149.9)/2
+nafo_21B_subset$GT[nafo_21B_subset$Tonnage ==4]<-(150+499.9)/2	
+nafo_21B_subset$GT[nafo_21B_subset$Tonnage ==5]<-(500+999.9)/2	
+nafo_21B_subset$GT[nafo_21B_subset$Tonnage ==6]<-(1000+1999.9)/2	
+nafo_21B_subset$GT[nafo_21B_subset$Tonnage ==7]<-(2000 +5000)/2
+nafo_21B_subset$Power_kW<-11.26*nafo_21B_subset$GT^0.71
+
+nafo_21B_subset$Effort_kW_Days_yr<-nafo_21B_subset$Power_kW*nafo_21B_subset$TotalDaysFished
+
+
+nafo_21B_effort_by_species <- nafo_21B_subset %>% 
+  group_by(Year, MainSpecies) %>%
+  reframe(Effort_kW_Days_yr = sum(Effort_kW_Days_yr))
+
+
+
+ggplot(nafo_21B_effort_by_species, aes(x = Year, y = Effort_kW_Days_yr)) + 
+  geom_point() + 
+  geom_line() +
+  facet_wrap(~MainSpecies, scales = "free_y") +
+  labs(
+    title = "Fishing Effort by Species (1960-2013)",
+    x = "Year",
+    y = "Effort (kW-Days/year)"
+  ) +
+  theme_minimal()
+
+```
+
+
+ALLOCATE EFFORT TO SPECIES BASED ON PROPORTIONS OF CATCH (avoids need for interpolation of missing years in effort data, but assumes proportionality of catch and effort across species, which is a strong assumption but may be reasonable given the multispecies nature of the fishery and lack of species-specific effort data)
+```{r}
+# Create final effort matrix for mizer input
+# Step 1: Get catch proportions by species and year (1978-2021)
+catch_proportions <- stat_grouped |>
+  filter(between(Year, 1978, 2024)) |>
+  group_by(Year) |>
+  mutate(
+    Total_Catch_yr = sum(Catches_g_per_yr, na.rm = TRUE),
+    Catch_Proportion = Catches_g_per_yr / Total_Catch_yr
+  ) |>
+  select(Year, Species, Catch_Proportion) |>
+  pivot_wider(names_from = Species, values_from = Catch_Proportion, values_fill = 0)
+
+# Step 2: Get total gear effort by year (1978-2021)
+total_effort_by_year <- nafo_21B_effort_by_gear |>
+  filter(between(Year, 1978, 2024)) |>
+  group_by(Year) |>
+  summarise(Total_Effort_kW_Days = sum(Effort_kW_Days_yr), .groups = "drop")
+
+# Step 3: Allocate gear effort to species based on catch proportions
+effort_by_species_allocated <- catch_proportions |>
+  left_join(total_effort_by_year, by = "Year") |>
+  pivot_longer(cols = -c(Year, Total_Effort_kW_Days), 
+               names_to = "Species", values_to = "Catch_Prop") |>
+  mutate(Effort_Allocated = Total_Effort_kW_Days * Catch_Prop) |>
+  select(Year, Species, Effort_Allocated)
+
+# Step 4: Create effort matrix (40 years × 15 species)
+effort_matrix_mizer <- effort_by_species_allocated |>
+  pivot_wider(names_from = Species, values_from = Effort_Allocated, values_fill = 0) |>
+  arrange(Year) |>
+  column_to_rownames("Year") |>
+  as.matrix()
+
+# Step 5: Verify dimensions and save
+dim(effort_matrix_mizer)  # Should be 40 × 15
+colnames(effort_matrix_mizer)  # Check species names
+
+# Standardize effort (0-1 scale for mizer)
+effort_matrix_mizer_scaled <- effort_matrix_mizer |>
+  apply(2, function(x) x / max(x, na.rm = TRUE))
+
+# Save for mizer input
+saveRDS(effort_matrix_mizer, file = "Ess_data/effort_matrix_mizer.RDS")
+saveRDS(effort_matrix_mizer_scaled, file = "Ess_data/effort_matrix_mizer_scaled.RDS")
+write.csv(effort_matrix_mizer, file = "Ess_data/effort_matrix_mizer.csv")
+write.csv(effort_matrix_mizer_scaled, file = "Ess_data/effort_matrix_mizer_scaled.csv")
+
+# Final plot showing effort allocation by species
+ggplot(effort_by_species_allocated, aes(x = Year, y = Effort_Allocated, fill = Species)) +
+  geom_area() +
+  geom_vline(xintercept = 1992.5, linetype = "dashed", color = "red", linewidth = 0.8) +
+  labs(
+    title = "Fishing Effort Allocated to Species (1978-2017)",
+    subtitle = "Effort allocation based on catch proportions | Red line = moratorium (1992)",
+    x = "Year",
+    y = "Effort (kW-Days/year)",
+    fill = "Species"
+  ) +
+  theme_minimal()
+
+
+# Add SANDLANCES as zero (no catch, no effort)
+effort_matrix_mizer_scaled <- cbind(effort_matrix_mizer_scaled, SANDLANCES = 0)
+
+# Re-order to 15 species
+effort_matrix_mizer_scaled <- effort_matrix_mizer_scaled[, c(
+  "AMERICAN PLAICE", "ATLANTIC COD", "ATLANTIC HALIBUT", "ATLANTIC HERRING",
+  "ATLANTIC MACKEREL", "ATLANTIC REDFISHES", "CAPELIN", "HADDOCK", "POLLOCK",
+  "SANDLANCES", "SILVER HAKE", "SPINY DOGFISH", "WHITE HAKE", "WITCH FLOUNDER",
+  "YELLOWTAIL FLOUNDER"
+)]
+
+dim(effort_matrix_mizer_scaled) 
+
+effort_matrix_mizer_scaled
+
+### CHECK PLOT OF EFFORT MATRIX TO VERIFY PROPORTIONALITY AND TRENDS
+
+# Convert effort_matrix_mizer_scaled to long format for line plot
+effort_mizer_long <- as.data.frame(effort_matrix_mizer_scaled) |>
+  rownames_to_column("Year") |>
+  mutate(Year = as.numeric(Year)) |>
+  pivot_longer(cols = -Year, names_to = "Species", values_to = "Effort_Scaled")
+
+# Line plot of effort by species
+ggplot(effort_mizer_long, aes(x = Year, y = Effort_Scaled, color = Species)) +
+  geom_line(linewidth = 0.8) +
+  geom_vline(xintercept = 1992.5, linetype = "dashed", color = "gray50", linewidth = 0.5) +
+  labs(
+    title = "Mizer Input: Scaled Fishing Effort by Species (1978-2024)",
+    subtitle = "Effort normalized to 0-1 scale | Red dashed line = moratorium (1992)",
+    x = "Year",
+    y = "Scaled Effort (0-1)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+# Or with facets for clarity
+ggplot(effort_mizer_long, aes(x = Year, y = Effort_Scaled)) +
+  geom_line(color = "blue", linewidth = 0.8) +
+  geom_vline(xintercept = 1992.5, linetype = "dashed", color = "red", linewidth = 0.5) +
+  facet_wrap(~Species, ncol = 4) +
+  labs(
+    title = "Mizer Input: Scaled Fishing Effort by Species (1978-2024)",
+    x = "Year",
+    y = "Scaled Effort (0-1)"
+  ) +
+  theme_minimal()
+# Add SANDLANCES as zero row (if you want it visible on plot)
+sandlances_row <- tibble(
+  Year = 1978:2017,
+  Species = "SANDLANCES",
+  Effort_Allocated = 0,
+  Catches = NA,
+  Effort_Scaled = 0,
+  Catch_Scaled = NA
+)
+
+effort_mizer_long_with_catch_with_sandlances <- 
+  bind_rows(effort_mizer_long_with_catch, sandlances_row)
+
+# Plot with SANDLANCES (shows as flat zero line)
+ggplot(effort_mizer_long_with_catch_with_sandlances, aes(x = Year)) +
+  geom_line(aes(y = Effort_Scaled, color = "Effort"), linewidth = 0.8, linetype = "solid") +
+  geom_line(aes(y = Catch_Scaled, color = "Catch"), linewidth = 0.8, linetype = "dashed") +
+  geom_vline(xintercept = 1992.5, linetype = "dotted", color = "gray50", linewidth = 0.5) +
+  facet_wrap(~Species, ncol = 4) +
+  labs(
+    title = "Mizer Input: Scaled Effort vs. Catches by Species (1978-2021)",
+    x = "Year",
+    y = "Scaled (0-1)",
+    color = "Type"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+
+### save files for mizer input
+
+```{r}
+# Save effort matrix files (if not already saved)
+saveRDS(effort_matrix_mizer, file = "Ess_data/effort_matrix_mizer.RDS")
+saveRDS(effort_matrix_mizer_scaled, file = "Ess_data/effort_matrix_mizer_scaled.RDS")
+write.csv(effort_matrix_mizer, file = "Ess_data/effort_matrix_mizer.csv", row.names = TRUE)
+write.csv(effort_matrix_mizer_scaled, file = "Ess_data/effort_matrix_mizer_scaled.csv", row.names = TRUE)
+
+# Save catch matrix files (already done above, but verify)
+saveRDS(catch_matrix_mizer, file = "Ess_data/catch_matrix_mizer.RDS")
+saveRDS(catch_matrix_mizer_scaled, file = "Ess_data/catch_matrix_mizer_scaled.RDS")
+write.csv(catch_matrix_mizer, file = "Ess_data/catch_matrix_mizer.csv", row.names = TRUE)
+write.csv(catch_matrix_mizer_scaled, file = "Ess_data/catch_matrix_mizer_scaled.csv", row.names = TRUE)
+
+# Verify all files are saved
+list.files("Ess_data/", pattern = "mizer")
+
+
+```
+
+## DO NOT US BELOW: species approach interpolate missing too many years for most species; instead use gear-based approach and allocate to species based on catch proportions (see above). Suggest delete below code to avoid confusion, but keeping here for now for reference.
+
+```{r}
+
+# ggplot(nafo_21B_effort_by_gear,aes(x=Year,y=Effort_kW_Days_yr)) + geom_point() + geom_area(aes(fill=Gear_Group))  + 
+# facet_wrap(~Gear_Group) 
+
+# library(zoo)
+# # nafo_21B_effort_interp<-nafo_21B_effort %>%
+# # mutate(Effort_kW_Days_yr_interp = na.spline(Effort_kW_Days_yr, na.rm=F))
+# # ggplot(nafo_21B_effort_interp,aes(x=Year,y=Effort_kW_Days_yr_interp,group=MainSpecies)) + geom_point(aes(color=MainSpecies)) + facet_wrap(~MainSpecies,scales = "free") 
+
+
+# ###### Create effort matrix by each species:
+# effort_ts<-nafo_21B_effort_by_species[,c("Year","Effort_kW_Days_yr","MainSpecies")] %>%
+# pivot_wider(names_from = MainSpecies, values_from = Effort_kW_Days_yr)
+
+
+# #re-arrange species to me same as gear_param object
+# # species to extract data for:
+# # [1] "AMERICAN PLAICE"         
+# # [2] "COD(ATLANTIC)"           
+# # [3] "HADDOCK"                 
+# # [4] "REDFISH UNSEPARATED"     
+# # [5] "SPINY DOGFISH"           
+# # [6] "TURBOT,GREENLAND HALIBUT"
+# # [7] "WITCH FLOUNDER"          
+# # [8] "YELLOWTAIL FLOUNDER"
+# # [9] "WHITE HAKE"
+# # [10] "SILVER HAKE"       
+# # [11] "SANDLANCES"       
+# # [12] "ATLANTIC HALIBUT" 
+
+# # Replace witch and yellowtail with American plaice effort due to data limitations; multispecie fishery (https://www.dfo-mpo.gc.ca/fisheries-peches/ifmp-gmp/groundfish-poisson-fond/groundfish-poisson-fond-4vwx5-eng.html#app-13)
+
+# # Replace white hake with cod - as bycatch only
+# # Create effort matrix with 15 selected species (1978-2017)
+# effort_matrix <- effort_ts |>
+#   filter(between(Year, 1978, 2018)) |>
+#   select(
+#     Year,
+#     "AMERICAN PLAICE",
+#     "ATLANTIC COD",
+#     "ATLANTIC HERRING",
+#     "ATLANTIC HALIBUT",
+#     "ATLANTIC REDFISHES",
+#     "HADDOCK",
+#     "SANDLANCES",
+#     "SILVER HAKE",
+#     "SPINY DOGFISH",
+#     "WHITE HAKE",
+#     "WITCH FLOUNDER",
+#     "YELLOWTAIL FLOUNDER",
+#     "POLLOCK",
+#     "CAPELIN",
+#     "ATLANTIC MACKEREL"
+#   ) |>
+#   as.matrix()
+
+# # Set row names to Year
+# rownames(effort_matrix) <- effort_matrix[, "Year"]
+# effort_matrix <- effort_matrix[, -1]  # Remove Year column
+
+# effort_matrix
+
+
+# # Your effort_matrix already has the correct 15 species in the right order
+# # Just update the column names to match
+
+# # Match the exact column order from effort_ts
+# colnames(effort_matrix) <- c(
+#   "AMERICAN PLAICE",
+#   "ATLANTIC COD",
+#   "ATLANTIC HERRING",
+#   "ATLANTIC HALIBUT",
+#   "ATLANTIC REDFISHES",
+#   "HADDOCK",
+#   "SANDLANCES",
+#   "SILVER HAKE",
+#   "SPINY DOGFISH",
+#   "WHITE HAKE",
+#   "WITCH FLOUNDER",
+#   "YELLOWTAIL FLOUNDER",
+#   "POLLOCK",
+#   "CAPELIN",
+#   "ATLANTIC MACKEREL"
+# )
+
+# # Verify
+# colnames(effort_matrix)
+
+
+
+
+# # Verify the matrix
+# effort_matrix
+
+# ### no data row for 2014 or 2017? ....check and for this effort data type mostly coded as "29	GRO	Groundfish (NS)"
+# ### how to deal with this issue?
+# ### include "29	GRO	Groundfish (NS)" and "19	FLX	Flatfishes (NS)" and spread across groups? 
+# ### Or use Gear types instead of species?
+# ### For now I have left it out years not inclusive of 1970 - 2013... over 4 decades long, not too bad?
+# ### The DFO survey data start in 1970.
+
+# effort_matrix<-effort_matrix
+
+# library(zoo)
+
+# # Ensure effort_matrix is numeric and has correct dimensions
+# effort_matrix_clean <- effort_matrix
+# storage.mode(effort_matrix_clean) <- "numeric"
+
+# # Interpolate missing values with consistent output length
+# effort_interp <- apply(effort_matrix_clean, 2, function(x) {
+#   result <- na.approx(x, na.rm = FALSE, maxgap = 30, rule = 2)
+#   # Ensure output is same length as input
+#   if (length(result) != length(x)) {
+#     result <- c(result, rep(NA, length(x) - length(result)))
+#   }
+#   result[1:length(x)]
+# })
+
+# # Convert back to matrix with proper row/column names
+# effort_interp <- as.matrix(effort_interp)
+# rownames(effort_interp) <- rownames(effort_matrix_clean)
+# colnames(effort_interp) <- colnames(effort_matrix_clean)
+
+# # Better plot with improvements
+# par(mfrow = c(4, 4), mar = c(2, 2, 2, 1))
+# for (i in 1:ncol(effort_interp)) {
+#   years <- as.numeric(rownames(effort_interp))
+  
+#   plot(x = years, y = effort_interp[, i], 
+#        typ = "l", col = "blue", lty = 2, lwd = 2,
+#        main = colnames(effort_interp)[i], 
+#        xlab = "Year", ylab = "Effort (kW-Days/yr)",
+#        ylim = range(c(effort_interp[, i], effort_matrix_clean[, i]), na.rm = TRUE))
+  
+#   points(x = years, y = effort_matrix_clean[, i], 
+#          typ = "l", col = "blue", lty = 1, lwd = 1.5)
+# }
+
+# par(mfrow = c(1, 1))
+# ### dashed lines show the interpolated values
+
+# # effort_ts2<-nafo_21B_effort_interp[,c("Year","Effort_kW_Days_yr_interp","MainSpecies")] %>%
+# #   pivot_wider(names_from = MainSpecies, values_from = Effort_kW_Days_yr_interp)
+# # 
+# # for (i in 2:9) plot(x=unlist(effort_ts2[,1]),unlist(effort_ts2[,i]),type="l")
+
+
+# #saveRDS(effort_interp,"interp_effort_nafo.RDS")
+# saveRDS(effort_interp, file = "Ess_data/interp_effort_nafo.RDS")
+
+# ```
+
+# ####### Check relationship woth catches:
+
+# ```{r}
+
+# catches<-readRDS("Ess_data/NAFO_4VW_Catches.RDS")
+
+# catches<-catches %>%
+#   pivot_wider(names_from = Species, values_from = Catches_g_per_yr)
+
+# catches<-cbind(catches[,"Year"],catches[,"AMERICAN PLAICE"],catches[,"COD(ATLANTIC)"],catches[,"HERRING(ATLANTIC)"],catches[,"ATLANTIC HALIBUT"],catches[,"REDFISH UNSEPARATED"], catches[,"TURBOT, GREENLAND HALIBUT"],catches[,"HADDOCK"],catches[,"SANDLANCES"],catches[,"SILVER HAKE"],catches[,"SPINY DOGFISH"],catches[,"WHITE HAKE"],catches[,"WITCH FLOUNDER"],catches[,"YELLOWTAIL FLOUNDER"])
+
+
+# catch_matrix<-catches[,-1]
+# rownames(catch_matrix)<-unlist(catches[,"Year"])
+# colnames(catch_matrix)<-c("AMERICAN PLAICE", "COD(ATLANTIC)", "HERRING(ATLANTIC)","ATLANTIC HALIBUT","REDFISH UNSEPARATED", "TURBOT, GREENLAND HALIBUT", "HADDOCK","SANDLANCES", "SILVER HAKE", "SPINY DOGFISH",  "WHITE HAKE", "WITCH FLOUNDER", "YELLOWTAIL FLOUNDER")
+
+
+# #limit catches to same years as effort
+# catch_matrix<-catch_matrix[as.character(1970:2013),]
+# effort_matrix<-effort_matrix[as.character(1970:2013),]
+# effort_interp<-effort_interp[as.character(1970:2013),]
+
+# pdf("Ess_Output/RelativeCatcheswithEffortInterpolated.pdf")
+# #pdf("RelativeCatcheswithEffortInterpolated.pdf")
+# par(mfrow=c(4,4), mar=c(2, 2, 2, 1))  # Adjust margins to fit plots
+
+# # Loop to generate plots
+# for (i in 1:13) {
+#   plot(
+#     x = rownames(effort_interp),
+#     unlist(effort_interp[,i] / max(effort_interp[,i], na.rm = TRUE)),
+#     typ = "l", col = "blue", lty = 2,
+#     main = colnames(effort_interp)[i],
+#     xlab = "", ylab = "Relative Effort or Catch"
+#   )
+#   points(
+#     x = rownames(catch_matrix),
+#     unlist(catch_matrix[,i] / max(catch_matrix[,i], na.rm = TRUE)),
+#     typ = "l", col = "red"
+#   )
+#    points(
+#      x = rownames(effort_matrix),
+#      unlist(effort_matrix[,i] / max(effort_matrix[,i], na.rm = TRUE)),
+#      typ = "l", col = "blue", lty = 1
+#    )
+# }
+# dev.off()
+
+# relative_effort_interp<-effort_interp
+# for (i in 1:13) relative_effort_interp[,i]<-unlist(effort_interp[,i]/max(effort_interp[,i],na.rm=T))
+# #Make all effort of Sandlances zero because there are no effort data of Sndlances on NAFO database
+# relative_effort_interp[, "SANDLANCES"] <- 0.0
+# #make yellowtail flounder
+# #saveRDS(relative_effort_interp,"relative_interp_effort_nafo.RDS")
+# saveRDS(relative_effort_interp, file = "Ess_data/relative_interp_effort_nafo.RDS")
+# #saveRDS(catch_matrix,"catches_nafo.RDS")
+# saveRDS(catch_matrix, file = "Ess_data/catches_nafo.RDS")
+#  # catches_nafo <- readRDS("relative_interp_effort_nafo.RDS")
+# #catches_nafo <- readRDS("relative_interp_effort_nafo.RDS")
+#  # write.csv(catches_nafo, "catches_nafo.csv", row.names = FALSE)
+# catches_nafo <- readRDS("Ess_data/catches_nafo.RDS")  # Read the RDS file
+# write.csv(catches_nafo, file = "Ess_data/catches_nafo.csv", row.names = FALSE)
+# ```
+
+
