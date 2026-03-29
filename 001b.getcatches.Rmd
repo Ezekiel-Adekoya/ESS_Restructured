@@ -13,7 +13,7 @@ Also for background on fisheries management see these documents:
 https://www.dfo-mpo.gc.ca/oceans/publications/scotian-atlas-ecossais/index-eng.html#hake
 
 ```{r setup, include=FALSE}
-#knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/Eastern-Scotian")
+knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/ESS_restructured")
 knitr::opts_knit$set(root.dir = "~/R/FISHMIP/NEW ESS/Eastern-Scotian-Shelf-Model")
 ```
 
@@ -21,20 +21,20 @@ knitr::opts_knit$set(root.dir = "~/R/FISHMIP/NEW ESS/Eastern-Scotian-Shelf-Model
 ####### Catch Data: Explore STATLANT 21A Database
 
 ```{r}
+
 library(dplyr)
-stat <- read.csv("Ess_data/new_STATLANT 21A 4VX.csv")
+  stat <- read.csv("Ess_data/new_STATLANT 21A 4VX.csv.csv")
 # take a look 
 head(stat)
 # exclude 4X for now, as not on survey data
-stat<-subset(stat,Division=="4VW")
+stat<-subset(stat,Division!="4X")
 unique(stat$Species.Name)
-
 
 # Quick check to explore species in catch
 stat_grouped_all<-stat%>%
   group_by(Year,Species.Name) %>%
   reframe(catch_g = sum(Metric.Tonnes)*1e6) %>%
-  filter(Year>= 1970) %>%
+  filter(Year >= 1970) %>%
   filter(Year <= 1985) %>%
   ungroup()%>%
   group_by(Species.Name)%>%
@@ -44,13 +44,14 @@ stat_grouped_all$prop_catch<-stat_grouped_all$prop_catch/sum(stat_grouped_all$pr
 stat_grouped_all<- stat_grouped_all |> arrange(desc(prop_catch))
 
 
-data <- transform(stat_grouped_all, Species.Name = reorder(Species.Name, 
-        order(prop_catch, decreasing = TRUE)))
+data <- transform(stat_grouped_all,Species.Name = reorder(Species.Name, 
+            order(prop_catch, decreasing = TRUE)))
 # Barplot
-ggplot(data, aes(x=Species.Name, y=prop_catch)) + geom_bar(stat = "identity") + coord_flip()
-
+ggplot(data, aes(x=Species.Name, y=prop_catch)) + 
+  geom_bar(stat = "identity") +
+  coord_flip()
 #top 10 species in prop_catch
-data[1:200,]
+data[1:50,]
 
 nafo_names <- c(
   "ATLANTIC COD - COD",
@@ -76,33 +77,17 @@ nafo_names <- c(
   #"LONGHORN SCULPIN - MXO",
   #"AMERICAN ANGLER - ANG",
   #"VARIOUS SHARKS NEI - SKH",
-  "SANDEELS (SANDLANCES) - SAN"
+  "SANDEELS (SANDLANCES) - SAN",
  # "ATLANTIC BUTTERFISH - BUT"
   #, "NORTHERN PRAWN - PRA",
   #"(NORTHERN) SHORTFIN SQUID - SQI"
   #  NA, NA,
-  #"ATLANTIC HALIBUT - HAL"
+  "ATLANTIC HALIBUT - HAL"
 )
-
-#("THORNY SKATE (STARRY RAY) - RJR", "SMOOTH SKATE - RJS", "LITTLE SKATE - RJD" , "WINTER SKATE - RJT", "RED HAKE - HKR", "CUSK (TUSK) - USK")
-
- 
-# # Species Absent
-# Spotted Hake
-# Fourbeard Rockling
-# Lumpfish
-# Windowpane Flounder
-# Unidentified Flounder
-# Spinytail Skate
-# Round Skate
-# Longhorn Sculpin
-# Shorthorn Sculpin
-
 # Return to orginal data to subet species in model
 stat<-subset(stat,Species.Name %in% nafo_names)
 
 # rename 
-
 stat$Species <- recode(stat$Species.Name,
   "ATLANTIC COD - COD" = "Atlantic Cod",
   "HADDOCK - HAD" = "Haddock",
@@ -118,7 +103,7 @@ stat$Species <- recode(stat$Species.Name,
   "ATLANTIC HERRING - HER" = "Atlantic Herring",
   #"AMERICAN SHAD - SHA" = "Shad American",
   "CAPELIN - CAP" = "Capelin",
-  "ATLANTIC MACKEREL - MAC" = "Mackerel",
+  "ATLANTIC MACKEREL - MAC" = "Atlantic Mackerel",
   "ARGENTINES (NS) - ARG" = "Atlantic Argentine",
   #"BARNDOOR SKATE - RJL" = "Barndoor Skate",
   "THORNY SKATE (STARRY RAY) - RJR" = "Thorny Skate",
@@ -132,17 +117,16 @@ stat$Species <- recode(stat$Species.Name,
   #"NORTHERN PRAWN - PRA" = "Pandalus borealis",
   #"(NORTHERN) SHORTFIN SQUID - SQI" = "Shortfin Squid"
   #NA = "Holothuroidea", NA = "Sea Cucumber",
- # "ATLANTIC HALIBUT - HAL" = "Atlantic Halibut"
+ "ATLANTIC HALIBUT - HAL" = "Atlantic Halibut"
 )
 
-### Aggreagte over whole Division 4VW and convert to GRAMS WET WEIGHT
-stat_grouped <-stat%>%group_by(Year,Species) %>% reframe(catch_g = sum(Metric.Tonnes)*1e6)
+stat_grouped<-stat%>%
+  group_by(Year,Species) %>%
+  reframe(catch_g = sum(Metric.Tonnes)*1e6)
 
 #### check plots
 
 names(stat_grouped)<-c("Year","Species","Catches_g_per_yr")
-stat_grouped <- stat_grouped %>%
-  filter(Year >= 1970)
 ggplot(stat_grouped,aes(x=Year,y=Catches_g_per_yr,group=Species)) + geom_line() + facet_wrap(~Species,scales="free_y") 
 
 
@@ -151,6 +135,8 @@ ggplot(stat_grouped,aes(x=Year,y=Catches_g_per_yr,fill=Species)) + geom_area()
 saveRDS(stat_grouped, file = "Ess_data/new_NAFO_4VW_Catches.RDS")
 #saveRDS(stat_grouped,"NAFO_4VW_Catches.RDS")
 ```
+
+
 
 
 ####### Effort Data: Explore STATLANT 21B Database
@@ -218,7 +204,7 @@ nafo_21B_grouped_daysfished<-nafo_21B%>% subset(SpeciesEffort=="2")%>%
 unique(nafo_21B_grouped_daysfished$MainSpecies)
 
 nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
-  MainSpecies %in% c("1","2","21","4","6","3","10","12","30","52","31","51","54","49"))
+  MainSpecies %in% c("1","2","21","4","6","3","10","12","30","52","31","51","54","49", "16"))
 # NO NUMBER FOR SANDLANCES - include 49 (Peleagic fish) as dummy to be overwritten with zeroes
 # All skakes were labelled 54, 
 # 53,  # Sharks (NS) removed NO NAFO CODE
@@ -230,9 +216,9 @@ nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
 # rename MainSpecies to match params
 nafo_21B_subset$MainSpecies <- factor(
   nafo_21B_subset$MainSpecies,
-  levels = c("1","2","21","4","6","3","10","12","30","52","31","51","54","49"))
+  levels = c("1","2","21","4","6","3","10","12","30","52","31","51","54","49", "16"))
 levels(nafo_21B_subset$MainSpecies) <- c( 
-  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake","Pollock", "Redfish Unseparated","American Plaice", "Yellowtail Flounder","Atlantic Herring", "Capelin", "Mackerel","Atlantic Argentine", "Thorny Skate" ,"Sand Lance")
+  "Atlantic Cod", "Haddock", "White Hake", "Silver Hake","Pollock", "Redfish Unseparated","American Plaice", "Yellowtail Flounder","Atlantic Herring", "Capelin", "Atlantic Mackerel","Atlantic Argentine", "Thorny Skate" ,"Sand Lance","Atlantic Halibut")
 
 
 # nafo_21B_subset2$MainSpecies<-as.factor(nafo_21B_subset2$MainSpecies)
@@ -310,13 +296,12 @@ nafo_21B_grouped_daysfished <- nafo_21B %>%
   summarise(TotalDaysFished = sum(TotalEffort), .groups = "drop")
 
 ###### Filter to 16 species
-species_codes <- c(1,2,21,4,6,3,10,12,30,52,31,51,54,49)
+species_codes <- c(1,2,21,4,6,3,10,12,30,52,31,51,54,49, 16)
 species_cols  <- c(
   "Atlantic Cod", "Haddock", "White Hake", "Silver Hake",
-  "Pollock", "Redfish Unseparated", 
-  "American Plaice",  "Yellowtail Flounder",
-  "Atlantic Herring", "Capelin", "Mackerel","Atlantic Argentine",  
-  "Thorny Skate" ,"Sand Lance"
+  "Pollock", "Redfish Unseparated", "American Plaice",  "Yellowtail Flounder",
+  "Atlantic Herring", "Capelin", "Atlantic Mackerel","Atlantic Argentine",  
+  "Thorny Skate" ,"Sand Lance", "Atlantic Halibut"
 )
 
 nafo_21B_subset <- nafo_21B_grouped_daysfished %>%

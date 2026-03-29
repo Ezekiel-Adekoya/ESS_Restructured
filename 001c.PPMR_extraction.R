@@ -37,9 +37,9 @@ scinames<-c("GADUS MORHUA",                    # Atlantic Cod
             #"DIPTURUS LAEVIS" ,                # Barndoor Skate
             "AMBLYRAJA RADIATA",               # Thorny Skate
             #"SQUALUS ACANTHIAS",               # Spiny Dogfish
-            "AMMODYTES DUBIUS"                # Sand lance
+            "AMMODYTES DUBIUS"   ,             # Sand lance
             # MALLOTUS VILLOSUS excluded - no stomach data, assign beta/sigma manually
-            #"HIPPOGLOSSUS HIPPOGLOSSUS" # Atlantic Halibut
+            "HIPPOGLOSSUS HIPPOGLOSSUS" # Atlantic Halibut
 )
 # merge species names#merge species names
 

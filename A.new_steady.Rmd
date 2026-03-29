@@ -49,21 +49,24 @@ species_lookup <- c(
   "Myzopsetta ferruginea"        = "Yellowtail Flounder",
   "Clupea harengus"              = "Atlantic Herring",
   "Mallotus villosus"            = "Capelin",
-  "Scomber scombrus"             = "Mackerel",
+  "Scomber scombrus"             = "Atlantic Mackerel",
   "Argentina silus"              = "Atlantic Argentine",
   "Amblyraja radiata"            = "Thorny Skate",
-  "Ammodytes dubius"             = "Sand Lance"
+  "Ammodytes dubius"         = "Sand Lance",
+  "Hippoglossus hippoglossus"    = "Atlantic Halibut"
 )
 
 species_order <- c(
   "Atlantic Cod", "Haddock", "White Hake", "Silver Hake", "Pollock",
   "Redfish Unseparated", "American Plaice", "Yellowtail Flounder",
-  "Atlantic Herring", "Capelin", "Mackerel", "Atlantic Argentine",
-  "Thorny Skate", "Sand Lance"
+  "Atlantic Herring", "Capelin", "Atlantic Mackerel", "Atlantic Argentine",
+  "Thorny Skate", "Sand Lance", "Atlantic Halibut"
 )
 
 external_species_info <- read.csv("Ess_data/new_ESS_species_params.csv") |>
-  select(-beta) |>
+ #Hartvig et al. 2011 ; preferred (roughly) should be realised ppmr divided by 2
+# I think min_ppmr_adj or min_ppmr probably best reflection of "preferred" ppmr; else could use a box predation kernel
+ select(-beta) |>
   rename(beta = min_ppmr_adj) |>
   select(Species, w_max, w_mat, w_min, l_mat, beta, sigma, a, b, age_mat) |>
   mutate(across(where(is.numeric), ~ round(., 3)),
@@ -74,6 +77,9 @@ external_species_info <- read.csv("Ess_data/new_ESS_species_params.csv") |>
   rename(species = Species)
 
 years_to_use<-as.character(1979:1992) #Assign years for the reference period
+
+# #The initial Rmax was estimated from an empirical equation as in (Blanchard et al., 2014)
+external_species_info <- external_species_info |> mutate(R_max = 10^11 * w_max^-1.5) 
 
 ```
 
@@ -110,7 +116,7 @@ mean_catch_nafo <- subset(yield_ts, Year <= max(years_to_use)) %>%
   summarise(yield_observed = mean(Yield, na.rm = TRUE)) %>%
   ungroup() %>% arrange(factor(Species, levels = species_order))
 # set sandlance catches to NA; assume not fished (only sporadic catches)
-mean_catch_nafo$yield_observed[13] <- NA
+mean_catch_nafo$yield_observed[14] <- NA
 
 mean_catch_nafo ### 0 Thorny Skate Why??
 
@@ -127,11 +133,12 @@ biomass_obs[, -1] <- biomass_obs[, -1] * 1e3
 colnames(biomass_obs) <- gsub("\\s+", " ", trimws(gsub("\\.", " ", colnames(biomass_obs))))
 colnames(biomass_obs)[colnames(biomass_obs) == "Short fin Squid"] <- "Shortfin Squid"
 colnames(biomass_obs)[colnames(biomass_obs) == "Argentine"]       <- "Atlantic Argentine"
+colnames(biomass_obs)[colnames(biomass_obs) == "Mackerel"]       <- "Atlantic Mackerel"
 biomass_obs <- biomass_obs %>%
   select(Year, "Atlantic Cod", "Haddock", "White Hake", "Silver Hake", "Pollock",
          "Redfish Unseparated", "American Plaice", "Yellowtail Flounder",
-         "Atlantic Herring", "Capelin", "Mackerel", "Atlantic Argentine",
-         "Thorny Skate", "Sand Lance")
+         "Atlantic Herring", "Capelin", "Atlantic Mackerel", "Atlantic Argentine",
+         "Thorny Skate", "Sand Lance", "Atlantic Halibut")
 biomass_obs[is.na(biomass_obs)] <- 0
 
 ```
@@ -189,11 +196,11 @@ set intial effort as mean_effort
 # Load time-varying fishing effort data (relative effort by gear or species)
 fishing_history <- readRDS("Ess_data/new_relative_interp_effort_nafo.RDS")
 
-# Subset effort data for the years 1970 to 2010
+# Subset effort data for the years 1970 to 2022
 effort <- fishing_history[as.character("1970":"2022"), ]
 
 # Calculate the mean effort over selected years (defined in `years_to_use`)
-# This assumes `years_to_use` is a vector of years like 1970:1984
+# This assumes `years_to_use` is a vector of years like 1979:1992
 mean_effort <- apply(effort[years_to_use, ], 2, mean, na.rm = TRUE)
 
 # Set initial fishing effort in the model to the average over the reference period
@@ -205,7 +212,7 @@ initial_effort(params) <- unlist(mean_effort)
 set up initial catchability using this mean relative effort and catchability of 1 as initial value only - BUT WILL ESTIMARE LATER
 ```{r}
 #assume catchability of 1, will be estimated further down
-gear_params(params)$catchability <- rep(1.0,14)
+gear_params(params)$catchability <- rep(1.0,15)
 gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
 
 ```
@@ -219,7 +226,7 @@ Plots of effort forcing through time (*need to add seals as a dashed line, for s
 # ------------------------------------------------------------
 fishing_history <- readRDS("Ess_data/new_relative_interp_effort_nafo.RDS") |>
   as.data.frame() |> rownames_to_column("Year") |> mutate(Year = as.numeric(Year)) |>
-  filter(Year >= 1970, Year <= 2022) |>
+  filter(Year >= 1992, Year <= 2022) |>
   pivot_longer(cols  = -Year,names_to  = "Species",values_to = "Effort") |>
   arrange(Species, Year)
 # 2. Plot
@@ -251,8 +258,8 @@ fishing_effort_plot <- ggplot(fishing_history, aes(x = Year, y = Effort, group =
     plot.margin      = margin(5, 5, 5, 5, "pt"))
 
 fishing_effort_plot
-ggsave(filename = paste0(save_dir, "Fishing_effort_plott.jpeg"), plot = Fishing_effort_plot,
-width = 9,height = 7,units = "in",dpi = 400)
+# ggsave(filename = paste0(save_dir, "Fishing_effort_plott.jpeg"), plot = Fishing_effort_plot,
+# width = 9,height = 7,units = "in",dpi = 400)
 ```
 
 
@@ -262,51 +269,71 @@ Biomass cutoff from length distributions
 species_code_lookup <- c(
   "10"  = "Atlantic Cod",
   "11"  = "Haddock",
-  "14"  = "White Hake",
-  "12"  = "Silver Hake",
-  "23"  = "Pollock",
-  "40"  = "Redfish Unseparated",
-  "41"  = "American Plaice",
-  "42"  = "Yellowtail Flounder",
+  "12"  = "White Hake",
+  "14"  = "Silver Hake",
+  "16"  = "Pollock",
+  "23"  = "Redfish Unseparated",
+  "30"  = "Atlantic Halibut",
+  "40"  = "American Plaice",
   "60"  = "Atlantic Herring",
   "64"  = "Capelin",
-  "2525"= "Mackerel",
-  "160" = "Atlantic Argentine",
+  "70"  = "Atlantic Mackerel",
   "201" = "Thorny Skate",
-  "43"  = "Sand Lance"
+  "42"  = "Yellowtail Flounder",
+  "160" = "Atlantic Argentine",
+  "610"  = "Sand Lance"
 )
 
 lengthfreq <- read.csv("Ess_data/Alida_Qadj_biomass_at_Length.csv.csv") |>
-  select(YEAR, species_code = SPECIES, length_cm = LENGTH, ABUNDANCE) |>
-  mutate(Species_name = recode(as.character(species_code), !!!species_code_lookup)) |>
-  filter(Species_name %in% keep_species, YEAR <= max(years_to_use)) |>
-  group_by(Species_name, length_cm) |>
-  summarise(meanN = mean(ABUNDANCE, na.rm = TRUE), .groups = "drop")
+  select(year = YEAR, species_code = SPECIES, length_cm = LENGTH, abundance = ABUNDANCE) |>
+  mutate(species_name = species_code_lookup[as.character(species_code)] ) |>
+  filter(!is.na(species_name)) |>          # drops codes not in the lookup
+  summarise(
+    meanN = mean(abundance, na.rm = TRUE),
+    .by = c(species_name, length_cm))
 
-p <- ggplot(lengthfreq, aes(x = log10(length_cm), y = log10(meanN), group = Species_name)) +
+p <- ggplot(lengthfreq, aes(x = log10(length_cm), y = log10(meanN), group = species_name)) +
   geom_line() +
-  facet_wrap(~Species_name)
+  facet_wrap(~species_name)
 p
+
+
+name_bridge <- c(
+  "Atlantic Cod"        = "Gadus morhua",
+  "Haddock"             = "Melanogrammus aeglefinus",
+  "White Hake"          = "Urophycis tenuis",
+  "Silver Hake"         = "Merluccius bilinearis",
+  "Pollock"             = "Pollachius virens",
+  "Redfish Unseparated" = "Sebastes fasciatus",
+  "Atlantic Halibut"    = "Hippoglossus hippoglossus",
+  "American Plaice"     = "Hippoglossoides platessoides",
+  "Yellowtail Flounder" = "Myzopsetta ferruginea",
+  "Atlantic Herring"    = "Clupea harengus",
+  "Capelin"             = "Mallotus villosus",
+  "Atlantic Mackerel"   = "Scomber scombrus",
+  "Atlantic Argentine"  = "Argentina silus",
+  "Thorny Skate"        = "Amblyraja radiata",
+  "Sand Lance"          = "Ammodytes dubius"
+)
 
 biomass_cutoff <- lengthfreq |>
   filter(meanN >= 0) |>
-  group_by(Species_name) |>
-  summarise(min_l = min(length_cm), max_l = max(length_cm)) |>
+  group_by(species_name) |>
+  summarise(min_l = min(length_cm), max_l = max(length_cm), .groups = "drop") |>
+  mutate(latin_name = name_bridge[species_name]) |>
+  left_join(sp |> select(latin_name = Species, a, b), by = "latin_name") |>
   mutate(
-    Species = species_params(params)$species,
-    min_w   = round(species_params(params)$a * min_l ^ species_params(params)$b, 1),
-    max_w   = round(species_params(params)$a * max_l ^ species_params(params)$b, 1)
-  ) |>
-  select(Species, min_l, max_l, min_w, max_w)
-
+    min_w = round(a * min_l ^ b, 1),
+    max_w = round(a * max_l ^ b, 1)) |>
+  select(species_name, latin_name, min_l, max_l, min_w, max_w)
 external_species_info$biomass_cutoff <- biomass_cutoff$min_w
 # adjust max_w for some species (too small max_w from RFishBase)
-# ratio<-biomass_cutoff$max_w/species_params(params)$w_max
-# corrections<-which(ratio>1)
+ratio <-biomass_cutoff$max_w/species_params(params)$w_max
+corrections<-which(ratio>1)
 # 
-# external_species_info[corrections,"w_max"]<-biomass_cutoff[which(ratio>1),"max_w"]
+external_species_info[corrections,"w_max"]<-biomass_cutoff[which(ratio>1),"max_w"]
 # #correct sandlance maturation size too
-# external_species_info[15,"w_mat"]<-external_species_info[15,"w_max"]*0.10
+external_species_info[14,"w_mat"]<-external_species_info[14,"w_max"]*0.10
 external_species_info
 ```
 
@@ -314,11 +341,11 @@ external_species_info
 Copy species life history parameters into the species parameters for the model
 ```{r}
 external_species_info<-select(external_species_info,c("species","w_max","w_mat", "w_min","beta" ,"sigma" ,"a","b","age_mat", "biomass_observed", "yield_observed","biomass_cutoff"))
-#reasign for spp 8
-external_species_info[1,"w_max"]<-154
-external_species_info[1,"w_mat"]<-15
+# #reasign for spp 8 (sandlance)
+external_species_info[14,"w_max"]<-154
+external_species_info[14,"w_mat"]<-15
 
-params <- newMultispeciesParams(external_species_info,interaction = NULL, resource_dynamics = "resource_semichemostat",kappa = 1e12,gear_params = gear_params)
+params <- newMultispeciesParams(external_species_info,interaction = NULL, resource_dynamics = "resource_semichemostat",kappa = 1e8,gear_params = gear_params)
 
 ``` 
 
@@ -338,7 +365,7 @@ set intial effort as mean_effort
 ```{r}
 # load fishing effort : source NAFO
 fishing_history = readRDS("Ess_data/new_relative_interp_effort_nafo.RDS")
-effort<-fishing_history[as.character("1970":"2010"),]
+effort<-fishing_history[as.character("1979":"2022"),]
 
 mean_effort <- apply(effort[years_to_use, ], 2, mean, na.rm = T)
 # set initial effort to mean over first 15 years
@@ -349,7 +376,7 @@ initial_effort(params) <- unlist(mean_effort)
 set up initial catchability using this mean relative effort and catchability of 1 as initial value only - BUT WILL ESTIMATE LATER
 ```{r}
 #assume catchability of 1, will be estimated further down
-gear_params(params)$catchability <- rep(1.0,16)
+gear_params(params)$catchability <- rep(1.0,15)
 gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
 ```
 
