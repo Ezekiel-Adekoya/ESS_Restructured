@@ -68,7 +68,7 @@ external_species_info <- read.csv("Ess_data/new_ESS_species_params.csv") |>
 # I think min_ppmr_adj or min_ppmr probably best reflection of "preferred" ppmr; else could use a box predation kernel
  select(-beta) |>
   rename(beta = min_ppmr_adj) |>
-  select(Species, w_max, w_mat, w_min, l_mat, beta, sigma, a, b, age_mat) |>
+  select(Species, w_max, w_mat, w_min, l_mat, beta, sigma, k_vb, a, b, age_mat) |>
   mutate(across(where(is.numeric), ~ round(., 3)),
          Species = factor(recode(Species, !!!species_lookup), levels = species_order)) |>
   filter(!is.na(Species)) |>

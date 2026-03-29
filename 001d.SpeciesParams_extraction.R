@@ -63,9 +63,17 @@ maturity <- maturity_tbl |>
   summarise(l_mat = median(l_mat), age_mat = median(age_mat)) |>
   ungroup()
 
+# ── Von Bertalanffy K ─────────────────────────────────────────────────────────
+k_vb <- rfishbase::popgrowth(scinames_fb) |>
+  select(Species, K) |>
+  filter(!is.na(K)) |>
+  group_by(Species) |>
+  summarise(k_vb = median(K, na.rm = TRUE), .groups = "drop")
+
 # ── Combine ───────────────────────────────────────────────────────────────────
 sp <- max_weight |>
   left_join(maturity, by = "Species") |>
+  left_join(k_vb, by = "Species") |>        # <- added
   mutate(w_mat = a * l_mat ^ b)
 
 # ── Patch Sand Lance — separate query, same pattern as original ────────────────
