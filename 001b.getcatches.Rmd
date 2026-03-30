@@ -14,7 +14,7 @@ https://www.dfo-mpo.gc.ca/oceans/publications/scotian-atlas-ecossais/index-eng.h
 
 ```{r setup, include=FALSE}
 knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/ESS_restructured")
-knitr::opts_knit$set(root.dir = "~/R/FISHMIP/NEW ESS/Eastern-Scotian-Shelf-Model")
+#knitr::opts_knit$set(root.dir = "~/R/FISHMIP/NEW ESS/Eastern-Scotian-Shelf-Model")
 ```
 
 
