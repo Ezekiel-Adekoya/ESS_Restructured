@@ -14,7 +14,7 @@ select <- dplyr::select  # prevent masking conflicts
 #long_df <- read.csv("Ess_data/Alida_Qadj_Biomass.csv") - no file
 # filter fish only codes and years 1970-2017, then identify codes with >=5 consecutive years of presence (BIOMASS>0 if BIOMASS exists) to retain for PCA; also restrict to species$CODE if available
 long_df <- read.csv("Ess_data/ESS q-adj data for Ezekiel 1970-2022.csv") |>
-  filter(SPECIES < 1000, YEAR >=1979, YEAR <= 2022) |>
+  filter(SPECIES < 1000, YEAR >=1978, YEAR <= 2022) |>
   filter(!is.na(SPECIES_NAME), !grepl("INCL |snail|unidentified|GADOIDEI|unid.|S.O.", SPECIES_NAME, ignore.case = TRUE))  |> 
   filter(!SPECIES_NAME %in% c(
     "INCL SHARK & CHONDRICHTHYES; SHARK",
@@ -89,7 +89,7 @@ year_scores
 pettitt.test(year_scores$Dim.1)
 
 # Mann-Kendall: monotonic trend test
-mk.test(ts(year_scores$Dim.1, start=1979))
+mk.test(ts(year_scores$Dim.1, start=1978))
 
 # Segmented regression: structural breakpoint with CI (2018 excluded)
 df_clean <- data.frame(year = as.integer(rownames(year_scores)),
@@ -101,7 +101,7 @@ plot(seg_fit2, col="red", lwd=2)
 
 # ── 7. CHANGEPOINT ANALYSIS — PC2 ────────────────────────────
 pettitt.test(year_scores$Dim.2)
-mk.test(ts(year_scores$Dim.2, start=1979))
+mk.test(ts(year_scores$Dim.2, start=1978))
 
 df2_clean <- data.frame(year = as.integer(rownames(year_scores)),
                         dim2 = year_scores$Dim.2) |>
@@ -116,12 +116,12 @@ long_df_phase <- long_df |>
    #dplyr::select(-matches("^NA\\.?$"),
         #        -any_of(c("Sharks..Unspecified.", "Pandalus.borealis",
          #                 "Holothuroidea", "Sea.Cucumber"))) |>
-  filter(between(Year, 1979, 2022)) |>
-  #filter(between(Year, 1979, 2017, Year != 2018) |> # if oulier is to be removed
+  filter(between(Year, 1978, 2022)) |>
+  #filter(between(Year, 1978, 2017, Year != 2018) |> # if oulier is to be removed
   mutate(Phase = factor(if_else(Year <= 1992,
-                                "1979-1992 (Pre-Moratorium)",
+                                "1978-1992 (Pre-Moratorium)",
                                 "1993-2022 (Post-Moratorium)"),
-                        levels = c("1979-1992 (Pre-Moratorium)",
+                        levels = c("1978-1992 (Pre-Moratorium)",
                                    "1993-2022 (Post-Moratorium)"))) |>
   #pivot_longer(-c(Year, Phase), names_to="Species", values_to="BIOMASS") |>
   filter(!is.na(BIOMASS), BIOMASS > 0) |>
@@ -141,7 +141,7 @@ arrange(Phase, desc(Pct))|>
   filter(is.finite(Pct)) |>
   mutate(Species = str_to_sentence(str_squish(str_replace_all(Species, "\\.+", " "))))
 
-pal <- c("1979-1992 (Pre-Moratorium)" = "#E07B2A",
+pal <- c("1978-1992 (Pre-Moratorium)" = "#E07B2A",
   "1993-2022 (Post-Moratorium)" = "#2471A3")
 
 
@@ -157,12 +157,12 @@ make_phase_plot <- function(ph,df=phase_pct) {
   
   ggplot(df, aes(Pct, Species)) +
     annotate("rect", xmin=-Inf, xmax=Inf, ymin=ypos, ymax=Inf, fill=col, alpha=0.06) +
-    geom_col(aes(alpha=Above95), fill=col, colour="white", linewidth=0.2, width=0.72) +
+    geom_col(aes(alpha=Above95), fill=col, colour="white", linewidth=0.2, width=0.95) +
     scale_alpha_manual(values=c("TRUE"=0.85,"FALSE"=0.45), guide="none") +
     geom_hline(yintercept=ypos, colour=col, linetype="dashed", linewidth=0.8) +
     annotate("label", x=Inf, y=ypos, label="95% cumulative biomass",
              colour=col, fill="white", label.size=0,
-             hjust=1.1, vjust=-0.2, size=2.5, fontface="bold") +
+             hjust=1.0, vjust=-0.2, size=2.5, fontface="bold") +
     scale_x_continuous(labels=percent_format(accuracy=1),
                        expand=expansion(mult=c(0,.28))) +
     labs(title=ph, x=NULL, y=NULL) +
@@ -182,14 +182,14 @@ make_phase_plot <- function(ph,df=phase_pct) {
     )
 }
 
-make_phase_plot("1979-1992 (Pre-Moratorium)") +
+make_phase_plot("1978-1992 (Pre-Moratorium)") +
   make_phase_plot("1993-2022 (Post-Moratorium)") +
   plot_layout(ncol=2) +
   plot_annotation(
-    title    = "Species contribution to total biomass by time period",
-    subtitle = "Shaded area = species accounting for 95% of cumulative biomass",
+    #title    = "Species contribution to total biomass by time period",
+    #subtitle = "Shaded area = species accounting for 95% of cumulative biomass",
     theme    = theme(
-      plot.title      = element_text(face="bold", size=12, family="serif", margin=margin(b=3)),
+      plot.title      = element_text(face="bold", size=12, family="serif", margin=margin(b=5), hjust = 0.6),
       plot.subtitle   = element_text(colour="grey40", size=9, family="serif", margin=margin(b=10)),
       plot.background = element_rect(fill="white", colour=NA)
     )

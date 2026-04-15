@@ -230,7 +230,6 @@ fishing_history <- readRDS("Ess_data/new_relative_interp_effort_nafo.RDS") |>
   pivot_longer(cols  = -Year,names_to  = "Species",values_to = "Effort") |>
   arrange(Species, Year)
 # 2. Plot
-# ------------------------------------------------------------
 fishing_effort_plot <- ggplot(fishing_history, aes(x = Year, y = Effort, group = Species)) +
   geom_line(linewidth = 0.7, color = "steelblue", na.rm = TRUE) +
   facet_wrap(~Species, nrow = 4, scales = "free_y") +
@@ -239,7 +238,7 @@ fishing_effort_plot <- ggplot(fishing_history, aes(x = Year, y = Effort, group =
     y = "Relative Fishing Effort"
   ) +
   scale_x_continuous(
-    breaks = pretty_breaks(n = 5),
+    breaks = scales::pretty_breaks(n = 5),   # ✅ fixed
     expand = expansion(mult = c(0.02, 0.02))
   ) +
   scale_y_continuous(
@@ -255,14 +254,12 @@ fishing_effort_plot <- ggplot(fishing_history, aes(x = Year, y = Effort, group =
     axis.title.x     = element_text(size = 8, face = "bold", margin = margin(t = 6)),
     axis.title.y     = element_text(size = 8, face = "bold", margin = margin(r = 6)),
     legend.position  = "none",
-    plot.margin      = margin(5, 5, 5, 5, "pt"))
-
+    plot.margin      = margin(5, 5, 5, 5, "pt")
+  )
 fishing_effort_plot
 # ggsave(filename = paste0(save_dir, "Fishing_effort_plott.jpeg"), plot = Fishing_effort_plot,
 # width = 9,height = 7,units = "in",dpi = 400)
 ```
-
-
 
 Biomass cutoff from length distributions
 ```{r}
@@ -297,7 +294,6 @@ p <- ggplot(lengthfreq, aes(x = log10(length_cm), y = log10(meanN), group = spec
   facet_wrap(~species_name)
 p
 
-
 name_bridge <- c(
   "Atlantic Cod"        = "Gadus morhua",
   "Haddock"             = "Melanogrammus aeglefinus",
@@ -317,11 +313,10 @@ name_bridge <- c(
 )
 
 biomass_cutoff <- lengthfreq |>
-  filter(meanN >= 0) |>
-  group_by(species_name) |>
+  filter(meanN >= 0) |> group_by(species_name) |>
   summarise(min_l = min(length_cm), max_l = max(length_cm), .groups = "drop") |>
   mutate(latin_name = name_bridge[species_name]) |>
-  left_join(sp |> select(latin_name = Species, a, b), by = "latin_name") |>
+  left_join(external_species_info |> select(species, a, b), by = c("species_name" = "species") ) |>
   mutate(
     min_w = round(a * min_l ^ b, 1),
     max_w = round(a * max_l ^ b, 1)) |>
@@ -334,8 +329,8 @@ corrections<-which(ratio>1)
 external_species_info[corrections,"w_max"]<-biomass_cutoff[which(ratio>1),"max_w"]
 # #correct sandlance maturation size too
 external_species_info[14,"w_mat"]<-external_species_info[14,"w_max"]*0.10
-external_species_info
 ```
+
 
 
 Copy species life history parameters into the species parameters for the model
