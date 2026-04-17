@@ -37,7 +37,7 @@ long_wide <- long_df|>
   dplyr::group_by(Year, Species) |>
   dplyr::summarise(Biomass = sum(BIOMASS, na.rm = TRUE), .groups = "drop") |>
   tidyr::pivot_wider(names_from = Species, values_from = Biomass, values_fill = 0)
-
+write.csv(long_wide , "Ess_data/PCA.csv", row.names = FALSE)
 Biomass_pca <- long_wide |>
   dplyr::arrange(Year) |>
   tibble::column_to_rownames("Year") |>
@@ -113,16 +113,16 @@ plot(seg_fit3, col="red", lwd=2)
 # ── 8. BIOMASS CONTRIBUTION BY PHASE ─────────────────────────
 # Pre/post-moratorium split at 1992 based on cod moratorium (1992)
 long_df_phase <- long_df |>
-   #dplyr::select(-matches("^NA\\.?$"),
-        #        -any_of(c("Sharks..Unspecified.", "Pandalus.borealis",
-         #                 "Holothuroidea", "Sea.Cucumber"))) |>
+  #dplyr::select(-matches("^NA\\.?$"),
+  #        -any_of(c("Sharks..Unspecified.", "Pandalus.borealis",
+  #                 "Holothuroidea", "Sea.Cucumber"))) |>
   filter(between(Year, 1978, 2022)) |>
-  #filter(between(Year, 1978, 2017, Year != 2018) |> # if oulier is to be removed
+  #filter(between(Year, 1978, 2017, Year != 2018) |> # if outlier is to be removed
   mutate(Phase = factor(if_else(Year <= 1992,
-                                "1978-1992 (Pre-Moratorium)",
-                                "1993-2022 (Post-Moratorium)"),
-                        levels = c("1978-1992 (Pre-Moratorium)",
-                                   "1993-2022 (Post-Moratorium)"))) |>
+                                "1978-1992 (Reference Period)",
+                                "1993-2022 (Unconstrained Period)"),
+                        levels = c("1978-1992 (Reference Period)",
+                                   "1993-2022 (Unconstrained Period)"))) |>
   #pivot_longer(-c(Year, Phase), names_to="Species", values_to="BIOMASS") |>
   filter(!is.na(BIOMASS), BIOMASS > 0) |>
   group_by(Species) |> filter(n() >= 5) |> ungroup()
@@ -132,69 +132,65 @@ phase_pct <- long_df_phase |>
   summarise(BIOMASS = sum(BIOMASS)) |>
   mutate(Pct = BIOMASS / sum(BIOMASS)) |>
   ungroup()
-  
 
-phase_pct <- phase_pct|>
-arrange(Phase, desc(Pct))|>
+phase_pct <- phase_pct |>
+  arrange(Phase, desc(Pct)) |>
   group_by(Phase) |>
-  mutate(Rank=row_number(), CumPct=cumsum(Pct)) |>
+  mutate(Rank = row_number(), CumPct = cumsum(Pct)) |>
   filter(is.finite(Pct)) |>
   mutate(Species = str_to_sentence(str_squish(str_replace_all(Species, "\\.+", " "))))
 
-pal <- c("1978-1992 (Pre-Moratorium)" = "#E07B2A",
-  "1993-2022 (Post-Moratorium)" = "#2471A3")
+pal <- c("1978-1992 (Reference Period)"   = "#E07B2A",
+         "1993-2022 (Unconstrained Period)" = "#2471A3")
 
-
-
-make_phase_plot <- function(ph,df=phase_pct) {
+make_phase_plot <- function(ph, df = phase_pct) {
   col      <- pal[[ph]]
-  cut_rank <- phase_pct |> filter(Phase==ph) |>
+  cut_rank <- phase_pct |> filter(Phase == ph) |>
     summarise(min(Rank[CumPct >= 0.95])) |> pull()
-  df <- phase_pct |> filter(Phase==ph) |>
-    mutate(Species=factor(Species, levels=rev(unique(Species))),
-           Above95=Rank <= cut_rank)
-  ypos <- as.numeric(df$Species[df$Rank==cut_rank][1]) - 0.5
+  df <- phase_pct |> filter(Phase == ph) |>
+    mutate(Species  = factor(Species, levels = rev(unique(Species))),
+           Above95  = Rank <= cut_rank)
+  ypos <- as.numeric(df$Species[df$Rank == cut_rank][1]) - 0.5
   
   ggplot(df, aes(Pct, Species)) +
-    annotate("rect", xmin=-Inf, xmax=Inf, ymin=ypos, ymax=Inf, fill=col, alpha=0.06) +
-    geom_col(aes(alpha=Above95), fill=col, colour="white", linewidth=0.2, width=0.95) +
-    scale_alpha_manual(values=c("TRUE"=0.85,"FALSE"=0.45), guide="none") +
-    geom_hline(yintercept=ypos, colour=col, linetype="dashed", linewidth=0.8) +
-    annotate("label", x=Inf, y=ypos, label="95% cumulative biomass",
-             colour=col, fill="white", label.size=0,
-             hjust=1.0, vjust=-0.2, size=2.5, fontface="bold") +
-    scale_x_continuous(labels=percent_format(accuracy=1),
-                       expand=expansion(mult=c(0,.28))) +
-    labs(title=ph, x=NULL, y=NULL) +
-    theme_classic(base_size=10, base_family="serif") +
+    annotate("rect", xmin = -Inf, xmax = Inf, ymin = ypos, ymax = Inf, fill = col, alpha = 0.06) +
+    geom_col(aes(alpha = Above95), fill = col, colour = "white", linewidth = 0.2, width = 0.95) +
+    scale_alpha_manual(values = c("TRUE" = 0.85, "FALSE" = 0.45), guide = "none") +
+    geom_hline(yintercept = ypos, colour = col, linetype = "dashed", linewidth = 0.8) +
+    annotate("label", x = Inf, y = ypos, label = "95% cumulative biomass",
+             colour = col, fill = "white", label.size = 0,
+             hjust = 1.0, vjust = -0.2, size = 2.5, fontface = "bold") +
+    scale_x_continuous(labels = percent_format(accuracy = 1),
+                       expand = expansion(mult = c(0, .28))) +
+    labs(title = ph, x = NULL, y = NULL) +
+    theme_classic(base_size = 10, base_family = "serif") +
     theme(
-      panel.border       = element_rect(colour=col, fill=NA, linewidth=1.2),
-      plot.background    = element_rect(colour=col, fill="white", linewidth=0.4),
-      plot.title         = element_text(face="bold", size=10, colour=col, margin=margin(b=6)),
-      axis.text.y        = element_text(size=7.5, colour="grey20"),
-      axis.text.x        = element_text(size=7, colour="grey40"),
-      axis.ticks         = element_line(colour="grey60", linewidth=0.3),
+      panel.border       = element_rect(colour = col, fill = NA, linewidth = 1.2),
+      plot.background    = element_rect(colour = col, fill = "white", linewidth = 0.4),
+      plot.title         = element_text(face = "bold", size = 10, colour = col, margin = margin(b = 6)),
+      axis.text.y        = element_text(size = 7.5, colour = "grey20"),
+      axis.text.x        = element_text(size = 7, colour = "grey40"),
+      axis.ticks         = element_line(colour = "grey60", linewidth = 0.3),
       axis.line          = element_blank(),
-      panel.grid.major.x = element_line(colour="grey90", linewidth=0.3),
+      panel.grid.major.x = element_line(colour = "grey90", linewidth = 0.3),
       panel.grid.major.y = element_blank(),
       panel.grid.minor   = element_blank(),
       plot.margin        = margin(10, 14, 10, 10)
     )
 }
 
-make_phase_plot("1978-1992 (Pre-Moratorium)") +
-  make_phase_plot("1993-2022 (Post-Moratorium)") +
-  plot_layout(ncol=2) +
+make_phase_plot("1978-1992 (Reference Period)") +
+  make_phase_plot("1993-2022 (Unconstrained Period)") +
+  plot_layout(ncol = 2) +
   plot_annotation(
     #title    = "Species contribution to total biomass by time period",
     #subtitle = "Shaded area = species accounting for 95% of cumulative biomass",
-    theme    = theme(
-      plot.title      = element_text(face="bold", size=12, family="serif", margin=margin(b=5), hjust = 0.6),
-      plot.subtitle   = element_text(colour="grey40", size=9, family="serif", margin=margin(b=10)),
-      plot.background = element_rect(fill="white", colour=NA)
+    theme = theme(
+      plot.title      = element_text(face = "bold", size = 12, family = "serif", margin = margin(b = 5), hjust = 0.6),
+      plot.subtitle   = element_text(colour = "grey40", size = 9, family = "serif", margin = margin(b = 10)),
+      plot.background = element_rect(fill = "white", colour = NA)
     )
   )
-
 
 
 ###### For determinning period to average over for steady state calibration; 
@@ -237,3 +233,4 @@ phase_means <- year_scores |>
     across(starts_with("Dim"), mean, na.rm = TRUE),
     year_range = paste(min(Year), "-", max(Year))
   )
+

@@ -90,7 +90,7 @@ points(scores[,1], scores[,2],
 text(scores[,1], scores[,2],
      labels=rownames(scores),
      col=year_cols, cex=0.65, pos=3)
-
+#rownames(scores) <- 1970:2021   # adjust to your actual range
 # Legend for year gradient
 legend("topright", legend=c(rownames(scores)[1], rownames(scores)[n_years]),
        col=c("steelblue","firebrick"),pch=19, title="Year", bty="n", cex=0.8)
@@ -211,9 +211,13 @@ fviz_pca_ind(res.pca,
 # 5. VARIABLES PLOT  –  Colour by contribution
 # -----------------------------------------------------------------------------
 
-fviz_pca_var(res.pca, col.var= "contrib",
-             gradient.cols = c("#36648B", "#FFA500", "#8B2500"),repel= TRUE,
-             title= "PCA – Variables")
+fviz_pca_var(res.pca, 
+             col.var = "contrib",
+             gradient.cols = c("#36648B", "#FFA500", "#8B2500"),
+             repel = TRUE) +
+  theme(panel.border = element_rect(colour = "black", fill = NA, linewidth = 1),
+        plot.title = element_blank(),
+        legend.title = element_blank())
 
 # -----------------------------------------------------------------------------
 # 6. HIERARCHICAL CLUSTERING ON PRINCIPAL COMPONENTS (HCPC)
@@ -359,6 +363,7 @@ fig
 
 ################################# DENDROGRAMS ###############################
 # Dendrogram flowing down the page
+library(ape)
 dd <- dist(scale(pl.data), method = "euclidean")
 hc <- hclust(dd, method = "ward.D2")
 plot(hc, hang = -1, cex = 0.3)   # Put the labels at the same height: hang = -1
@@ -475,6 +480,7 @@ ggplot(data = final_catch, aes(x = Year, y = Catch, fill = Species)) +
   
 ################################# Heatmap ####################################################
 # Create row names and trim off first column
+library(heatmaply)
 pl.data <- read.table(filename,sep=",",header=T)
 
 SP_as_col <- pl.data
@@ -499,9 +505,8 @@ rownames(drRanked)[1:nSP] = as.character(rownames(Yr_as_col)[1:nSP])
 
 # Do ranking (using order() routine as want largest value to be rated 1)
 for (i in 1:nSP) {
-  drRanked[i,] <- rank(Yr_as_col[i,], ties.method ="dense")
+  drRanked[i,] <- dplyr::dense_rank(-Yr_as_col[i,])
 }
-
 # Create the heatmap - switch our row for both to see if years cluster up
 HeatmapTitle <- paste ("Heatmap of contribution to biomass through time, yellow represents a larger contribution",sep="") 
 HeatmapFile <- "HeatmapFilename.pdf"
@@ -513,6 +518,5 @@ heatmaply(drRanked,
           dendrogram = "row",
           #dendrogram = "both",
           fontsize_row = 10,
-          file = HeatmapFile
-)
+          file = HeatmapFile)
       
