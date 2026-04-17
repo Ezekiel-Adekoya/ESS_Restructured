@@ -136,6 +136,127 @@ text3D(pcx, pcy, pcz,
        cex = 0.7)
 ```
 
+Cluster plot
+```{r}
+# =========================
+# 1. LIBRARIES
+# =========================
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggrepel)
+library(factoextra)
+
+# =========================
+# 2. LOAD + CLEAN DATA
+# =========================
+long_df <- read.csv("Ess_data/ESS q-adj data for Ezekiel 1970-2022.csv") |>
+  filter(
+    SPECIES < 1000,
+    YEAR >= 1978,
+    YEAR <= 2022
+  ) |>
+  filter(
+    !is.na(SPECIES_NAME),
+    !grepl("INCL |snail|unidentified|GADOIDEI|unid.|S.O.",
+           SPECIES_NAME, ignore.case = TRUE)
+  ) |>
+  filter(
+    !SPECIES_NAME %in% c(
+      "INCL SHARK & CHONDRICHTHYES; SHARK",
+      "SAND LANCES",
+      "SKATES",
+      "EELPOUTS"
+    )
+  ) |>
+  rename(Year = YEAR, Species = SPECIES_NAME)
+
+# =========================
+# 3. COMMUNITY MATRIX
+# =========================
+long_wide <- long_df |>
+  group_by(Year, Species) |>
+  summarise(Biomass = sum(BIOMASS, na.rm = TRUE), .groups = "drop") |>
+  pivot_wider(names_from = Species,
+              values_from = Biomass,
+              values_fill = 0)
+
+# =========================
+# 4. FIX: KEEP TRUE YEARS (CRITICAL FIX)
+# =========================
+years <- long_wide$Year   # SAVE REAL YEARS FIRST
+
+pl.data <- long_wide |>
+  select(-Year)
+
+pl.data <- as.data.frame(lapply(pl.data, as.numeric))
+
+# =========================
+# 5. PCA
+# =========================
+res.pca <- prcomp(pl.data, center = TRUE, scale. = TRUE)
+
+PoV <- res.pca$sdev^2 / sum(res.pca$sdev^2)
+
+# =========================
+# 6. PCA SCORES + CORRECT YEARS
+# =========================
+scores <- as.data.frame(res.pca$x)
+scores$Year <- years
+
+# =========================
+# 7. HIERARCHICAL CLUSTERING
+# =========================
+dist_mat <- dist(scale(pl.data))
+hc <- hclust(dist_mat, method = "ward.D2")
+
+clusters <- cutree(hc, k = 3)
+
+scores$Cluster <- as.factor(clusters)
+
+# =========================
+# 8. CHECK (IMPORTANT)
+# =========================
+str(scores)
+head(scores$Year)
+
+# =========================
+# 9. PUBLICATION-READY FIGURE
+# =========================
+ggplot(scores, aes(PC1, PC2, color = Cluster)) +
+
+  geom_point(size = 2, alpha = 0.5) +
+
+  stat_ellipse(aes(fill = Cluster),
+               geom = "polygon",alpha = 0.12)+
+
+  geom_text_repel(aes(label = Year),size = 3,max.overlaps = 50) +
+
+  theme_classic(base_size = 12) +
+
+  theme(
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(color = "black")
+  ) +
+
+  labs(
+    #title = "Ecological Regimes in Fish Community (PCA + Clustering)",
+    #subtitle = "PCA ordination with hierarchical clustering and annual trajectories (1978–2022)",
+    x = paste0("PC1 (", round(PoV[1] * 100, 1), "% variance)"),
+    y = paste0("PC2 (", round(PoV[2] * 100, 1), "% variance)"),
+    color = "Cluster",
+    fill = "Cluster"
+  ) +
+
+  scale_color_brewer(palette = "Set1") +
+  scale_fill_brewer(palette = "Set1")
+# Good subtitle 
+# Figure X. Clustered PCA ordination of fish community biomass (1978–2022).
+```
+
 PCA using prcomp (SVD)
 ```{r}
 res.pca <- prcomp(pl.data, center = TRUE,scale. = TRUE)
@@ -153,6 +274,7 @@ fviz_pca_ind(res.pca,
                repel = TRUE)
 
 ```
+
 Hierarchical clustering on PCA (HCPC)
 ```{r}
 res.pca4 <- FactoMineR::PCA(pl.data,ncp = 3,graph = FALSE)

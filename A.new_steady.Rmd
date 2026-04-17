@@ -8,6 +8,7 @@ Running Eastern Scotian Model to steady State
 
 Load Libraries first
 ```{r}
+#remotes::install_github("sizespectrum/mizerExperimental")
 library(mizer)
 library("assertthat")
 library("optimParallel")
