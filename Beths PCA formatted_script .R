@@ -19,6 +19,9 @@ pl.data.clean <- as.data.frame(lapply(pl.data, function(x) {
   x
 }))
 
+# Restore row names lost by lapply
+rownames(pl.data.clean) <- rownames(pl.data)
+
 # Run PCA
 pl.pca <- prcomp(pl.data.clean, scale. = TRUE)
 
@@ -38,11 +41,11 @@ summary(pl.pca)
 plot(pl.pca, type="lines")
 
 # Plot year scores and label points
-plot(scores[,1], scores[,2],xlab="PC1", ylab="PC2",main="PCA Scores", type="n")
+plot(scores[,1], scores[,2], xlab="PC1", ylab="PC2", main="PCA Scores", type="n")
 plot(pl.pca, type="lines")
 
 # Plot points
-text(scores[,1], scores[,2],labels=rownames(pl.data),cex=0.7)
+text(scores[,1], scores[,2], labels=rownames(pl.data), cex=0.7)
 
 ###################################################################################
 # Colourful Biplot
@@ -63,9 +66,7 @@ scale_factor <- max(abs(scores[, 1:2])) / max(abs(loadings)) * 0.7
 plot(scores[,1], scores[,2],
      type="n",
      xlab=paste0("PC1 (", round(summary(pl.pca)$importance[2,1]*100, 1), "%)"),
-     ylab=paste0("PC2 (", round(summary(pl.pca)$importance[2,2]*100, 1), "%)")
-     #, main="PCA Biplot"
-     )
+     ylab=paste0("PC2 (", round(summary(pl.pca)$importance[2,2]*100, 1), "%)"))
 abline(h=0, v=0, col="grey80", lty=2)
 
 # Draw species arrows
@@ -90,11 +91,6 @@ points(scores[,1], scores[,2],
 text(scores[,1], scores[,2],
      labels=rownames(scores),
      col=year_cols, cex=0.65, pos=3)
-#rownames(scores) <- 1970:2021   # adjust to your actual range
-# Legend for year gradient
-legend("topright", legend=c(rownames(scores)[1], rownames(scores)[n_years]),
-       col=c("steelblue","firebrick"),pch=19, title="Year", bty="n", cex=0.8)
-
 
 ############################################ Alternative PCA approaches #########################################
 
@@ -104,8 +100,6 @@ library(plotly)
 
 PoV <- pl.pca$sdev^2 / sum(pl.pca$sdev^2)
 fviz_eig(pl.pca)
-
-#View(scores)
 
 pcx <- scores[, 1]
 pcy <- scores[, 2]
@@ -117,28 +111,31 @@ pczlab <- paste("PC3 (", round(PoV[3] * 100, 2), "%)")
 
 # 3D as points
 scatter3D(pcx, pcy, pcz, bty = "g", pch = 20, cex = 2,
-          col = gg.col(100), theta = 150, phi = 0, main = "PCA Scores", xlab = pcxlab,
-          ylab = pcylab, zlab = pczlab)
+          col = gg.col(100), theta = 150, phi = 0, main = "PCA Scores",
+          xlab = pcxlab, ylab = pcylab, zlab = pczlab)
 text3D(pcx, pcy, pcz, labels = rownames(scores), add = TRUE, colkey = FALSE, cex = 0.7)
 
 # 3D as connected line
 scatter3D(pcx, pcy, pcz, bty = "g", type = "b", pch = 20, cex = 2,
-          col = gg.col(100), theta = 150, phi = 0, lwd = 4, main = "PCA Scores", xlab = pcxlab,
-          ylab = pcylab, zlab = pczlab)
+          col = gg.col(100), theta = 150, phi = 0, lwd = 4, main = "PCA Scores",
+          xlab = pcxlab, ylab = pcylab, zlab = pczlab)
 text3D(pcx, pcy, pcz, labels = rownames(scores), add = TRUE, colkey = FALSE, cex = 0.7)
 
 # Plot 3D with plotly
 df3D <- data.frame(comp1 = scores[, 1],
                    comp2 = scores[, 2],
-                   comp3 = scores[, 3])
-fig <- plot_ly(df3D, x = ~comp1, y = ~comp2, z = ~comp3, color = ~comp3, mode = 'lines+markers',
-               text = ~rownames(scores))
+                   comp3 = scores[, 3],
+                   year  = rownames(scores))   # store row names as column for text labels
+
+fig <- plot_ly(df3D, x = ~comp1, y = ~comp2, z = ~comp3, color = ~comp3,
+               mode = 'lines+markers', text = ~year)
 fig <- fig %>% add_markers()
 fig <- fig %>% add_text(textposition = "top right")
 fig <- fig %>% layout(scene = list(xaxis = list(title = pcxlab),
                                    yaxis = list(title = pcylab),
                                    zaxis = list(title = pczlab)),
-          annotations = list( x = 1.13, y = 1.05,text = 'PC3 Score',showarrow = FALSE))
+                      annotations = list(x = 1.13, y = 1.05, text = 'PC3 Score',
+                                         showarrow = FALSE))
 fig
 
 

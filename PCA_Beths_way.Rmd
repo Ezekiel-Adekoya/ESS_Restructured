@@ -22,13 +22,12 @@ library(factoextra)
 library(ggplot2)
 library(ggrepel)
 library(FactoMineR)
-library(plot3D)
 library(plotly)
 ```
  Load and Clean
 ```{r}
 long_df <- read.csv("Ess_data/ESS q-adj data for Ezekiel 1970-2022.csv") |>
-  filter(SPECIES < 1000, YEAR >= 1978,YEAR <= 2022) |>
+  filter(SPECIES < 800, YEAR >= 1978,YEAR <= 2022) |>
   filter(!is.na(SPECIES_NAME),
          !grepl("INCL |snail|unidentified|GADOIDEI|unid.|S.O.",
                 SPECIES_NAME, ignore.case = TRUE)) |>
@@ -51,9 +50,7 @@ long_wide <- long_df |>
 
 write.csv(long_wide, "Ess_data/PCA.csv", row.names = FALSE)
 pl.data <- read.table("Ess_data/PCA.csv",
-                      sep = ",",
-                      header = TRUE,
-                      row.names = 1)
+                      sep = ",",header = TRUE, row.names = 1)
 ```
 
 
@@ -76,8 +73,7 @@ ggplot(scores, aes(PC1, PC2, label = Year)) +
          y = "PC2")
 # PCA Individuals
 fviz_pca_ind(res.pca,
-               col.ind = "contrib",
-               gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel = TRUE)
+               col.ind = "contrib",gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),repel = TRUE)
 # PCA Variables             
 
   fviz_pca_var(res.pca,
@@ -91,49 +87,42 @@ fviz_pca_ind(res.pca,
 ```{r}
 pcx <- res.pca$x[,1]
 pcy <- res.pca$x[,2]
-pcz <- res.pca$x[,3]
 
-df3D <- data.frame(
+df2D <- data.frame(
   PC1 = pcx,
   PC2 = pcy,
-  PC3 = pcz,
-  Year = rownames(res.pca$x)
-)
-fig <- plot_ly(df3D,
+  Year = rownames(res.pca$x))
+
+# Interactive plotly 2D
+fig <- plot_ly(df2D,
                x = ~PC1,
                y = ~PC2,
-               z = ~PC3,
-               type = "scatter3d",
+               type = "scatter",
                mode = "markers+lines",
                text = ~Year,
-               color = ~PC3)
-
-fig <- fig %>%
-  layout(scene = list(
-    xaxis = list(title = paste0("PC1 (", round(PoV[1]*100,2), "%)")),
-    yaxis = list(title = paste0("PC2 (", round(PoV[2]*100,2), "%)")),
-    zaxis = list(title = paste0("PC3 (", round(PoV[3]*100,2), "%)"))
-  ))
+               color = ~PC2) %>%
+  layout(
+    xaxis = list(title = paste0("PC1 (", round(PoV[1]*100, 2), "%)")),
+    yaxis = list(title = paste0("PC2 (", round(PoV[2]*100, 2), "%)")) )
 
 fig
-library(plot3D)
-#Static 3D PCA (plot3D)
-scatter3D(pcx, pcy, pcz,
-          bty = "g",
-          pch = 20,
-          cex = 2,
-          col = gg.col(100),
-          theta = 150,
-          phi = 0,
-          main = "PCA Scores (3D)",
-          xlab = "PC1",
-          ylab = "PC2",
-          zlab = "PC3")
 
-text3D(pcx, pcy, pcz,
-       labels = rownames(res.pca$x),
-       add = TRUE,
-       cex = 0.7)
+# Static base R 2D
+cols <- colorRampPalette(c("blue", "yellow", "red"))(length(pcy))
+
+plot(pcx, pcy,
+     pch = 19,
+     col = cols,
+     cex = 1.5,
+     main = "PCA Scores (2D)",
+     xlab = paste0("PC1 (", round(PoV[1]*100, 2), "%)"),
+     ylab = paste0("PC2 (", round(PoV[2]*100, 2), "%)"))
+
+text(pcx, pcy,
+     labels = rownames(res.pca$x),
+     cex = 0.7,
+     pos = 3)
+
 ```
 
 Cluster plot
@@ -147,93 +136,64 @@ library(ggplot2)
 library(ggrepel)
 library(factoextra)
 
-# =========================
-# 2. LOAD + CLEAN DATA
-# =========================
+# ─────────────────────────────────────────────
+# 1. LOAD & CLEAN DATA
+# ─────────────────────────────────────────────
 long_df <- read.csv("Ess_data/ESS q-adj data for Ezekiel 1970-2022.csv") |>
-  filter(
-    SPECIES < 1000,
-    YEAR >= 1978,
-    YEAR <= 2022
-  ) |>
-  filter(
-    !is.na(SPECIES_NAME),
-    !grepl("INCL |snail|unidentified|GADOIDEI|unid.|S.O.",
-           SPECIES_NAME, ignore.case = TRUE)
-  ) |>
-  filter(
-    !SPECIES_NAME %in% c(
-      "INCL SHARK & CHONDRICHTHYES; SHARK",
-      "SAND LANCES",
-      "SKATES",
-      "EELPOUTS"
-    )
-  ) |>
+  filter(SPECIES < 1000, YEAR >= 1978, YEAR <= 2022) |>
+  filter(!is.na(SPECIES_NAME),
+         !grepl("INCL |snail|unidentified|GADOIDEI|unid.|S.O.",
+                SPECIES_NAME, ignore.case = TRUE)) |>
+  filter(!SPECIES_NAME %in% c(
+    "INCL SHARK & CHONDRICHTHYES; SHARK",
+    "SAND LANCES", "SKATES", "EELPOUTS")) |>
   rename(Year = YEAR, Species = SPECIES_NAME)
 
-# =========================
-# 3. COMMUNITY MATRIX
-# =========================
+# ─────────────────────────────────────────────
+# 2. COMMUNITY MATRIX
+# ─────────────────────────────────────────────
 long_wide <- long_df |>
   group_by(Year, Species) |>
   summarise(Biomass = sum(BIOMASS, na.rm = TRUE), .groups = "drop") |>
-  pivot_wider(names_from = Species,
-              values_from = Biomass,
-              values_fill = 0)
+  pivot_wider(names_from = Species, values_from = Biomass, values_fill = 0)
 
-# =========================
-# 4. FIX: KEEP TRUE YEARS (CRITICAL FIX)
-# =========================
-years <- long_wide$Year   # SAVE REAL YEARS FIRST
-
-pl.data <- long_wide |>
-  select(-Year)
-
+# ─────────────────────────────────────────────
+# 3. PREPARE MATRIX
+# ─────────────────────────────────────────────
+years <- long_wide$Year
+pl.data <- long_wide |> select(-Year)
 pl.data <- as.data.frame(lapply(pl.data, as.numeric))
+rownames(pl.data) <- years
 
-# =========================
-# 5. PCA
-# =========================
+# ─────────────────────────────────────────────
+# 4. PCA
+# ─────────────────────────────────────────────
 res.pca <- prcomp(pl.data, center = TRUE, scale. = TRUE)
-
 PoV <- res.pca$sdev^2 / sum(res.pca$sdev^2)
 
-# =========================
-# 6. PCA SCORES + CORRECT YEARS
-# =========================
+# ─────────────────────────────────────────────
+# 5. PCA SCORES
+# ─────────────────────────────────────────────
 scores <- as.data.frame(res.pca$x)
 scores$Year <- years
 
-# =========================
-# 7. HIERARCHICAL CLUSTERING
-# =========================
-dist_mat <- dist(scale(pl.data))
+# ─────────────────────────────────────────────
+# 6. HIERARCHICAL CLUSTERING ON PC1-PC3
+# ─────────────────────────────────────────────
+pca_scores_3 <- res.pca$x[, 1:3]           # extract first 3 PCs
+dist_mat <- dist(pca_scores_3)              # Euclidean distance on PC1-PC3
 hc <- hclust(dist_mat, method = "ward.D2")
-
 clusters <- cutree(hc, k = 3)
-
 scores$Cluster <- as.factor(clusters)
 
-# =========================
-# 8. CHECK (IMPORTANT)
-# =========================
-str(scores)
-head(scores$Year)
-
-# =========================
-# 9. PUBLICATION-READY FIGURE
-# =========================
+# ─────────────────────────────────────────────
+# 7. CLUSTER PLOT
+# ─────────────────────────────────────────────
 ggplot(scores, aes(PC1, PC2, color = Cluster)) +
-
   geom_point(size = 2, alpha = 0.5) +
-
-  stat_ellipse(aes(fill = Cluster),
-               geom = "polygon",alpha = 0.12)+
-
-  geom_text_repel(aes(label = Year),size = 3,max.overlaps = 50) +
-
+  stat_ellipse(aes(fill = Cluster), geom = "polygon", alpha = 0.12) +
+  geom_text_repel(aes(label = Year), size = 3, max.overlaps = 50) +
   theme_classic(base_size = 12) +
-
   theme(
     legend.position = "right",
     legend.title = element_text(face = "bold"),
@@ -241,18 +201,15 @@ ggplot(scores, aes(PC1, PC2, color = Cluster)) +
     axis.title = element_text(face = "bold"),
     axis.text = element_text(color = "black")
   ) +
-
   labs(
-    #title = "Ecological Regimes in Fish Community (PCA + Clustering)",
-    #subtitle = "PCA ordination with hierarchical clustering and annual trajectories (1978–2022)",
     x = paste0("PC1 (", round(PoV[1] * 100, 1), "% variance)"),
     y = paste0("PC2 (", round(PoV[2] * 100, 1), "% variance)"),
     color = "Cluster",
     fill = "Cluster"
   ) +
-
   scale_color_brewer(palette = "Set1") +
   scale_fill_brewer(palette = "Set1")
+
 # Good subtitle 
 # Figure X. Clustered PCA ordination of fish community biomass (1978–2022).
 ```
@@ -309,45 +266,25 @@ pcxlab <- paste0("PC1 (", round(PoV[1] * 100, 2), "%)")
 pcylab <- paste0("PC2 (", round(PoV[2] * 100, 2), "%)")
 pczlab <- paste0("PC3 (", round(PoV[3] * 100, 2), "%)")
 
-library(plot3D)
+
 #3D scatter (plot3D)
-scatter3D(pcx, pcy, pcz,
-          bty = "g",
-          pch = 20,
-          cex = 2,
-          col = gg.col(100),
-          theta = 150,
-          phi = 0,
-          main = "PCA Scores",
-          xlab = pcxlab,
-          ylab = pcylab,
-          zlab = pczlab)
 
-text3D(pcx, pcy, pcz,
-       labels = rownames(res.pca$x),
-       add = TRUE,
-       colkey = FALSE,
-       cex = 0.7)
-#3D connected trajectory
-scatter3D(pcx, pcy, pcz,
-          bty = "g",
-          type = "b",
-          pch = 20,
-          cex = 2,
-          col = gg.col(100),
-          theta = 120,
-          phi = 0,
-          lwd = 2,
-          main = "PCA Trajectory",
-          xlab = pcxlab,
-          ylab = pcylab,
-          zlab = pczlab)
+#2D connected trajectory
+cols <- colorRampPalette(c("blue", "yellow", "red"))(length(pcx))
 
-text3D(pcx, pcy, pcz,
-       labels = rownames(res.pca$x),
-       add = TRUE,
-       colkey = FALSE,
-       cex = 0.7)
+plot(pcx, pcy,
+     type = "b",
+     pch = 20,
+     cex = 1.5,
+     col = cols,
+     lwd = 2,
+     xlab = pcxlab,
+     ylab = pcylab,
+     main = "PCA Trajectory (PC1 vs PC2)")
+text(pcx, pcy,
+     labels = rownames(res.pca$x),
+     pos = 3,
+     cex = 0.7)
 ```
 
 
@@ -413,7 +350,8 @@ fig <- fig %>%
 fig
 ```
 
-################################# DENDROGRAMS ###############################
+
+#DENDROGRAMS ###############################
 ```{r}
 #install.packages("ape")   # if needed
 library(ape)
@@ -498,17 +436,6 @@ M[is.na(M)] <- 0
 ############################
 # PLOT CORRELATION MATRIX (FIXED)
 ############################
-corrplot(
-  M,
-  type = "upper",
-  order = "hclust",
-  method = "color",
-  col = brewer.pal(8, "RdYlBu"),
-  tl.col = "black",
-  tl.cex = 0.6,        # reduce label size
-  tl.srt = 45,         # rotate labels (VERY IMPORTANT)
-  diag = FALSE
-)
 
 ############################
 # OPTIONAL: SAVE HIGH-QUALITY OUTPUT
@@ -556,49 +483,69 @@ Yr_as_col <- t(as.matrix(SP_as_colA))
 # Replace NA
 Yr_as_col[is.na(Yr_as_col)] <- 0
 
+# Filter rare species (present in at least 5 years)
+keep <- rowSums(Yr_as_col > 0) >= 5
+Yr_as_col <- Yr_as_col[keep, ]
+
 # Rank within each species (row-wise)
 drRanked <- t(apply(Yr_as_col, 1, function(i) {
   data.table::frank(i, ties.method = "dense")
 }))
-
 drRanked <- as.data.frame(drRanked)
-
 colnames(drRanked) <- colnames(Yr_as_col)
 rownames(drRanked) <- rownames(Yr_as_col)
 
 # Heatmap
 HeatmapTitle <- "Heatmap of ranked biomass contribution through time"
-
-heatmaply(
+jpeg("heatmap.tiff", width = 22, height = 8, units = "in", res = 300)
+pheatmap(
   drRanked,
-  xlab = "Year",
-  ylab = "Species",
-  main = HeatmapTitle,
-  dendrogram = "col",
+  cluster_rows = FALSE,
+  cluster_cols = F,
   fontsize_row = 5,
-  fontsize_col = 5,
-  grid_gap = 0.5,
-  colors = colorRampPalette(RColorBrewer::brewer.pal(11, "RdYlBu"))(100)
+  fontsize_col = 7,
+   cellwidth = 16,
+  #cellheight =12,
+ color = colorRampPalette(c("#2C7BB6","#ABD9E9","#FFFFBF","#FDAE61","#D7191C"))(100),
+  #main = HeatmapTitle,
+  xlab = "Year",
+  border_color = NA
 )
+dev.off()
+
+
+tiff("heatmap.tiffhhhh", width = 12, height = 6, units = "in", res = 300)
+pheatmap(
+  drRanked,
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
+  fontsize_row = 5,
+  fontsize_col = 7,
+  cellwidth = 16,
+  #cellheight = 12,
+  color = colorRampPalette(c("#2C7BB6","#ABD9E9","#FFFFBF","#FDAE61","#D7191C"))(100),
+  xlab = "Year",
+  border_color = NA,
+  margins = c(5, 8)  # bottom, right margins
+)
+dev.off()
+
 ```
 
 
 #Heatmap of contribution to biomass of all species that contribut 95% and above
+# Species that together account for 95% of the total biomass across all years.
 ```{r}
 library(tidyverse)
-library(heatmaply)
+library(pheatmap)
 library(RColorBrewer)
 
 # ─────────────────────────────────────────────
 # 1. LOAD DATA
 # ─────────────────────────────────────────────
 pl.data <- read.csv(filename)
-
-# Ensure Year is row index
 rownames(pl.data) <- pl.data$Year
 pl.data <- pl.data %>% select(-Year)
-
-# Replace NA with 0
 pl.data[is.na(pl.data)] <- 0
 
 # ─────────────────────────────────────────────
@@ -612,52 +559,72 @@ rel_biomass[is.na(rel_biomass)] <- 0
 # ─────────────────────────────────────────────
 mean_contrib <- colMeans(rel_biomass)
 mean_contrib <- sort(mean_contrib, decreasing = TRUE)
-
-# cumulative contribution (for filtering)
-cum_contrib <- cumsum(mean_contrib)
+cum_contrib  <- cumsum(mean_contrib)
 
 # ─────────────────────────────────────────────
-# 4. SELECT SPECIES (CHANGE THRESHOLD HERE)
+# 4. SELECT SPECIES (top 95% of biomass)
 # ─────────────────────────────────────────────
-threshold <- 0.95   # 50% (change to 0.80 or 0.95 if needed)
-
+threshold    <- 0.95
 keep_species <- names(cum_contrib[cum_contrib <= threshold])
-
-# ensure we include last exceeding species
 keep_species <- unique(c(
   keep_species,
   names(cum_contrib)[which(cum_contrib > threshold)[1]]
 ))
-
 mat_filtered <- rel_biomass[, keep_species, drop = FALSE]
-
-# reorder species by importance
 mat_filtered <- mat_filtered[, order(colMeans(mat_filtered), decreasing = TRUE)]
 
 # ─────────────────────────────────────────────
-# 5. ENSURE YEAR ORDER (IMPORTANT FIX)
+# 5. ENSURE YEAR ORDER (1978 → 2022)
 # ─────────────────────────────────────────────
 mat_filtered <- mat_filtered[order(as.numeric(rownames(mat_filtered))), ]
 
 # ─────────────────────────────────────────────
-# 6. HEATMAP (NO TIME CLUSTERING)
+# 6. TRANSPOSE & FIX COLUMN ORDER
 # ─────────────────────────────────────────────
-heatmaply(
-  mat_filtered,
-  xlab = "Species",
-  ylab = "Year",
-  main = paste0("Species contribution to biomass (~", threshold*100, "% of total)"),
-  
-  dendrogram = "row",   # ONLY cluster species, NOT years
+mat_t <- t(mat_filtered)
+
+# Prefix year colnames so pheatmap treats them as strings not numbers
+colnames(mat_t) <- paste0("y", colnames(mat_t))
+
+# ─────────────────────────────────────────────
+# 7. HEATMAP
+# ─────────────────────────────────────────────
+library(ggplotify)
+
+p <- as.ggplot(pheatmap(
+  mat_t,
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
   scale = "none",
-  fontsize_row = 5,
-  fontsize_col = 8,
-  
-  colors = colorRampPalette(brewer.pal(11, "RdYlBu"))(100)
-)
+  fontsize_row = 7,
+  fontsize_col = 6,
+  angle_col = 90,
+  border_color = NA,
+  cellwidth = 11,
+  cellheight = 11,
+  labels_col = gsub("y", "", colnames(mat_t)),
+  color = colorRampPalette(c("#2C7BB6","#ABD9E9","#FFFFBF","#FDAE61","#D7191C"))(100),
+  silent = TRUE
+))
+
+ggsave("heatmap.png",
+       plot = p,
+       width = 13,
+       height = 5,
+       units = "in",
+       dpi = 1000,
+       limitsize = FALSE)
+#  Species that together account for 95% of the total biomass across all years.
+
+# The PCA was conducted using annual fish species biomass as variables, where each species represented one variable and each year (1978–2022) was an observation.
+
+
 ```
 
 ```{r}
 
 ```
+
+
+
 
