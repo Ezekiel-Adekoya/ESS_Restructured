@@ -62,7 +62,7 @@ unique(sub_pdpylen$SCINAME)
 sub_pdpylen$PYLEN <-sub_pdpylen$PYLEN/100
 
 #save subset file
-write.csv(sub_pdpylen,"Ess_data/new_predpreylengths.csv")
+write.csv(sub_pdpylen,"Ess_data/predpreylengths.csv")
 
 
 

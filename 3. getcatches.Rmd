@@ -132,7 +132,7 @@ ggplot(stat_grouped,aes(x=Year,y=Catches_g_per_yr,group=Species)) + geom_line() 
 
 ggplot(stat_grouped,aes(x=Year,y=Catches_g_per_yr,fill=Species)) + geom_area() 
 
-saveRDS(stat_grouped, file = "Ess_data/new_NAFO_4VW_Catches.RDS")
+saveRDS(stat_grouped, file = "Ess_data/NAFO_4VW_Catches.RDS")
 #saveRDS(stat_grouped,"NAFO_4VW_Catches.RDS")
 ```
 
@@ -360,6 +360,14 @@ rownames(effort_matrix) <- as.character(effort_wide$Year)
 
 ###### Interpolate effort across all years
 all_years <- as.character(min(effort_wide$Year):max(effort_wide$Year))
+effort_interp<-apply(effort_matrix,2,na.approx,na.rm=T,maxgap=30,rule=2)
+
+par(mfrow=c(4,4), mar=c(2, 2, 1, 1)) # Adjust margins to reduce space
+for (i in 1:15) {
+  plot(x=rownames(effort_interp), unlist(effort_interp[,i]), typ="l", col="blue", lty=2, 
+       main=colnames(effort_interp)[i], xlab="", ylab="Effort")
+  points(x=rownames(effort_matrix), unlist(effort_matrix[,i]), typ="l", col="blue", lty=1)
+}
 
 effort_interp <- apply(effort_matrix, 2, function(x) {
   if (all(x == 0)) return(rep(0, length(all_years)))   # protect all-zero columns
@@ -376,7 +384,7 @@ cat("Ncol effort_interp:", ncol(effort_interp), "\n")
 cat("Species:", colnames(effort_interp), "\n")
 
 ###### Catches
-catches <- readRDS("Ess_data/new_NAFO_4VW_Catches.RDS")
+catches <- readRDS("Ess_data/NAFO_4VW_Catches.RDS")
 
 catches_wide <- catches %>%
   pivot_wider(names_from = Species, values_from = Catches_g_per_yr) %>%
@@ -398,34 +406,46 @@ effort_interp <- effort_interp[shared_years, ]
 safe_norm <- function(x, mx) {
   if (is.na(mx) | mx == 0) rep(0, length(x)) else x / mx
 }
+# Strip to just the clean name for catch and effort matrices
+# if their colnames look like "ATLANTIC COD - COD"
+harmonise_colnames <- function(x) {
+  gsub("^(.+) - [A-Z]+$", "\\1", colnames(x)) |>
+    stringr::str_to_title()
+}
 
-###### Diagnostic PDF: relative catch vs effort
+colnames(catch_matrix)  <- harmonise_colnames(catch_matrix)
+colnames(effort_matrix) <- harmonise_colnames(effort_matrix)
+
+
 pdf("Ess_Output/new_RelativeCatcheswithEffortInterpolated.pdf")
 par(mfrow = c(4, 4), mar = c(2, 2, 2, 1))
 
-for (i in seq_len(ncol(effort_interp))) {
-  sp_name  <- colnames(effort_interp)[i]
-  e_interp <- effort_interp[, i]
-  e_raw    <- effort_matrix[, i]
-  c_raw    <- catch_matrix[, i]
+shared_species <- colnames(effort_interp)  # drive loop from effort_interp names
 
-  plot(as.numeric(rownames(effort_interp)),
-       safe_norm(e_interp, max(e_interp, na.rm = TRUE)),
-       type = "l", col = "blue", lty = 2, ylim = c(0, 1),
-       main = sp_name, xlab = "", ylab = "Relative Effort or Catch")
-
-  lines(as.numeric(rownames(catch_matrix)),
-        safe_norm(c_raw, max(c_raw, na.rm = TRUE)), col = "red")
-
-  lines(as.numeric(rownames(effort_matrix)),
-        safe_norm(e_raw, max(e_raw, na.rm = TRUE)), col = "blue", lty = 1)
+for (sp in shared_species) {
+  
+  e_interp <- effort_interp[, sp]
+  e_raw    <- effort_matrix[,  sp]
+  catch    <- catch_matrix[,   sp]
+  x        <- as.numeric(rownames(effort_interp))
+  
+  plot(
+    x, e_interp / max(e_interp, na.rm = TRUE),
+    type = "l", col = "green", lty = 2,
+    ylim = c(0, 1),
+    main = sp, xlab = "", ylab = "Relative Effort or Catch"
+  )
+  lines(x, catch / max(catch,  na.rm = TRUE), col = "red")
+  lines(x, e_raw  / max(e_raw, na.rm = TRUE), col = "blue", lty = 1)
 }
 
 plot.new()
 legend("center",
        legend = c("Effort (interpolated)", "Effort (raw)", "Catch"),
-       col    = c("blue", "blue", "red"),
-       lty    = c(2, 1, 1), bty = "n", cex = 1.2)
+       col    = c("green", "blue", "red"),
+       lty    = c(2, 1, 1),
+       bty    = "n", cex = 1.3)
+
 dev.off()
 
 ###### Relative effort scaling
@@ -444,18 +464,15 @@ cat("Final relative_effort_interp dim:", dim(relative_effort_interp), "\n")
 cat("Species:", colnames(relative_effort_interp), "\n")
 
 ###### Save outputs
-saveRDS(relative_effort_interp, file = "Ess_data/new_relative_interp_effort_nafo.RDS")
-saveRDS(catch_matrix,           file = "Ess_data/new_catches_nafo.RDS")
+saveRDS(relative_effort_interp, file = "Ess_data/relative_interp_effort_nafo.RDS")
+saveRDS(catch_matrix, file = "Ess_data/catches_nafo.RDS")
 
-catches_nafo <- readRDS("Ess_data/new_catches_nafo.RDS")
-write.csv(catches_nafo, file = "Ess_data/new_catches_nafo.csv", row.names = TRUE)
+catches_nafo <- readRDS("Ess_data/catches_nafo.RDS")
+write.csv(catches_nafo, file = "Ess_data/catches_nafo.csv", row.names = TRUE)
 ```
-
 
 
 ```{r}
 
 ```
-
-
 

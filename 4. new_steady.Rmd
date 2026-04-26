@@ -64,7 +64,7 @@ species_order <- c(
   "Thorny Skate", "Sand Lance", "Atlantic Halibut"
 )
 
-external_species_info <- read.csv("Ess_data/new_ESS_species_params.csv") |>
+external_species_info <- read.csv("Ess_data/ESS_species_params.csv") |>
  #Hartvig et al. 2011 ; preferred (roughly) should be realised ppmr divided by 2
 # I think min_ppmr_adj or min_ppmr probably best reflection of "preferred" ppmr; else could use a box predation kernel
  select(-beta) |>
@@ -77,7 +77,7 @@ external_species_info <- read.csv("Ess_data/new_ESS_species_params.csv") |>
   mutate(Species = as.character(Species)) |>
   rename(species = Species)
 
-years_to_use<-as.character(1979:1992) #Assign years for the reference period
+years_to_use<-as.character(1978:1992) #Assign years for the reference period
 
 # #The initial Rmax was estimated from an empirical equation as in (Blanchard et al., 2014)
 external_species_info <- external_species_info |> mutate(R_max = 10^11 * w_max^-1.5) 
@@ -87,7 +87,7 @@ external_species_info <- external_species_info |> mutate(R_max = 10^11 * w_max^-
 Read in catch data/Subset and average the catch data 
 
 ```{r}
-catches <- readRDS("Ess_data/new_catches_nafo.RDS")
+catches <- readRDS("Ess_data/catches_nafo.RDS")
 catches <- catches[as.character(1970:2022), ]
 
 # convert matrix → data.frame
@@ -117,9 +117,9 @@ mean_catch_nafo <- subset(yield_ts, Year <= max(years_to_use)) %>%
   summarise(yield_observed = mean(Yield, na.rm = TRUE)) %>%
   ungroup() %>% arrange(factor(Species, levels = species_order))
 # set sandlance catches to NA; assume not fished (only sporadic catches)
-mean_catch_nafo$yield_observed[14] <- NA
-
-mean_catch_nafo ### 0 Thorny Skate Why??
+mean_catch_nafo$yield_observed[14] <- NA # Sand Lance
+#mean_catch_nafo$yield_observed[13] <- NA  ### 0 Thorny Skate Why??
+mean_catch_nafo
 
 ```
 
@@ -147,7 +147,8 @@ biomass_obs[is.na(biomass_obs)] <- 0
 Aggregate to mean biomass between 1970 and 1985
 ```{r}
 #Aggregate observed biomass to mean biomass
-biomass_obs_sub = subset(biomass_obs, Year < 2023)
+#biomass_obs_sub = subset(biomass_obs, Year < 2023)
+biomass_obs_sub <- subset(biomass_obs, Year >= 1978 & Year <= 2022)
 biomass_ts<-melt(biomass_obs_sub,id.vars = 1)
 names(biomass_ts)<-c("Year","Species","Biomass")
 
@@ -170,7 +171,7 @@ external_species_info$yield_observed <- mean_catch_nafo$yield_observed
 Set up fishing gear parameters
 ```{r}
 #load gear and knife_edge_gear
-fishing_type = read.csv("Ess_data/new_Mat_knife_edge_gear_params2.csv")
+fishing_type = read.csv("Ess_data/Mat_knife_edge_gear_params2.csv")
 fishing_type$knife_edge_size <- external_species_info$w_mat
 names(fishing_type)[1] = "species"
 gear_params <- fishing_type
@@ -195,7 +196,7 @@ Read the fishing history data/set fishing into params from NAFO
 set intial effort as mean_effort
 ```{r}
 # Load time-varying fishing effort data (relative effort by gear or species)
-fishing_history <- readRDS("Ess_data/new_relative_interp_effort_nafo.RDS")
+fishing_history <- readRDS("Ess_data/relative_interp_effort_nafo.RDS")
 
 # Subset effort data for the years 1970 to 2022
 effort <- fishing_history[as.character("1970":"2022"), ]
@@ -225,9 +226,9 @@ Plots of effort forcing through time (*need to add seals as a dashed line, for s
 
 # 1. Load, filter years, and reshape
 # ------------------------------------------------------------
-fishing_history <- readRDS("Ess_data/new_relative_interp_effort_nafo.RDS") |>
+fishing_history <- readRDS("Ess_data/relative_interp_effort_nafo.RDS") |>
   as.data.frame() |> rownames_to_column("Year") |> mutate(Year = as.numeric(Year)) |>
-  filter(Year >= 1992, Year <= 2022) |>
+  filter(Year >= 1978, Year <= 2022) |>
   pivot_longer(cols  = -Year,names_to  = "Species",values_to = "Effort") |>
   arrange(Species, Year)
 # 2. Plot
@@ -347,7 +348,7 @@ params <- newMultispeciesParams(external_species_info,interaction = NULL, resour
 
 Set up fishing gear parameters
 ```{r}
-fishing_type = read.csv("Ess_data/new_Mat_knife_edge_gear_params2.csv")
+fishing_type = read.csv("Ess_data/Mat_knife_edge_gear_params2.csv")
 fishing_type$knife_edge_size <- external_species_info$w_mat
 names(fishing_type)[1] = "species"
 gear_params <- fishing_type
@@ -360,8 +361,8 @@ Read the fishing history data/set fishing into params from NAFO
 set intial effort as mean_effort
 ```{r}
 # load fishing effort : source NAFO
-fishing_history = readRDS("Ess_data/new_relative_interp_effort_nafo.RDS")
-effort<-fishing_history[as.character("1979":"2022"),]
+fishing_history = readRDS("Ess_data/relative_interp_effort_nafo.RDS")
+effort<-fishing_history[as.character("1978":"2022"),]
 
 mean_effort <- apply(effort[years_to_use, ], 2, mean, na.rm = T)
 # set initial effort to mean over first 15 years

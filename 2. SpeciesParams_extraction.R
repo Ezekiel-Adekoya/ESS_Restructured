@@ -17,7 +17,7 @@ scinames_fb <- c(
   "Scomber scombrus",              # Atlantic Mackerel
   "Argentina silus",               # Atlantic Argentine
   "Amblyraja radiata",             # Thorny Skate
-  "Ammodytes dubius",          # Sand Lance
+  "Ammodytes dubius",              # Sand Lance
   "Hippoglossus hippoglossus"      # Atlantic Halibut
 )
 
@@ -93,7 +93,7 @@ sp[sand_lance_row, "age_mat"] <- 1.5
 nrow(sp)  # should be 15
 sp
 sp <- sp |> left_join(sciname_lookup, by = "Species")
-ppmr <- read.csv("Ess_data/new_predpreylengths.csv")
+ppmr <- read.csv("Ess_data/predpreylengths.csv")
 ppmr$SCINAME <- trimws(ppmr$SCINAME)
 
 # join a and b from sp by SCINAME
@@ -172,5 +172,5 @@ cat("Final nrow(sp):", nrow(sp), "\n")  # should be 15
 sp[, c("Species", "SCINAME", "beta", "sigma", "w_min")]
 
 # I think min_ppmr_adj or min_ppmr probably best reflection of "preferred" ppmr; else could use a box predation kernel
-write.csv(sp, "Ess_data/new_ESS_species_params.csv")
+write.csv(sp, "Ess_data/ESS_species_params.csv")
 
