@@ -88,17 +88,16 @@ PoV         <- res.pca$sdev^2 / sum(res.pca$sdev^2)
 # ─────────────────────────────────────────────
 # 7. PCA SCORES
 # ─────────────────────────────────────────────
-scores      <- as.data.frame(res.pca$x)
-scores$Year <- years
+pca_2d  <- res.pca$x[, 1:2]
+scores  <- as.data.frame(res.pca$x)         # rebuild from scratch
+scores$Year <- rownames(scores)             # rownames are already the years
 
 # ─────────────────────────────────────────────
-# 8. K-MEANS CLUSTERING ON PC1-PC2
+# 8. hierarchical clustering ON PC1-PC2....method 2
 # ─────────────────────────────────────────────
-k      <- 2
-pca_2d <- res.pca$x[, 1:2]
-km     <- kmeans(pca_2d, centers = k, nstart = 25)
-scores$Cluster <- factor(km$cluster)
-
+d  <- dist(pca_2d, method = "euclidean")
+hc <- hclust(d, method = "ward.D2")
+scores$Cluster <- factor(cutree(hc, k = 2))
 # ─────────────────────────────────────────────
 # 9. CLUSTER PLOT
 # ─────────────────────────────────────────────
@@ -130,8 +129,8 @@ p <- ggplot(scores, aes(PC1, PC2, color = Cluster)) +
 
 p
 
-ggsave("Ess_Output/CLUSTER_PLOT.tiff", plot = p, width = 8, height = 6,
-       dpi = 600, compression = "lzw")
+ggsave("Ess_Output/CLUSTER_PLOT.jpeg", plot = p, width = 8, height = 6,
+       dpi = 600)
 ```
 
 
