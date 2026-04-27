@@ -171,7 +171,7 @@ p <- sensitivity_long |>
 # Export
 # -----------------------------------------------------------------------------
 p
-ggsave("Ess_Output/sensitivity_plot.tiff", p, width = 180, height = 130, units = "mm",
-       dpi = 600, compression = "lzw")
+ggsave("Ess_Output/sensitivity_plot.jpeg", p, width = 180, height = 130, units = "mm",
+       dpi = 600)
 
 ggsave("Ess_Output/sensitivity_plot.pdf",  p, width = 180, height = 130, units = "mm")
