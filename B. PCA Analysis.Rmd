@@ -43,6 +43,7 @@ long_df <- read.csv(filename, header = TRUE) |>
   rename(Year = YEAR, Species = SPECIES_NAME)
 
 # Two survey years were excluded prior to analysis: 2018, which recorded anomalously few species (n = 27; long-term mean = 62 ± 9), consistent with incomplete sampling rather than a true ecological signal; and 2022, which fell below the minimum species richness threshold applied to ensure comparability across years (n ≥ 45 species per year). 
+## Outlier
 #"Years 2018 and 2022 were excluded from all analyses. The 2018 survey was omitted due to documented data irregularities that rendered biomass estimates non-comparable with adjacent years. The 2022 data were excluded as catchability-adjusted estimates for the terminal year had not been finalised at the time of analysis."
 
 ```
