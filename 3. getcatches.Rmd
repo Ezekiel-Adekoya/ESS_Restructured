@@ -19,6 +19,7 @@ knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/ESS_restructured")
 
 
 ####### Catch Data: Explore STATLANT 21A Database
+https://www.nafo.int/Data/STATLANT-21A
 
 ```{r}
 
@@ -31,7 +32,13 @@ stat <- read.csv("Ess_data/reviewed.STATLANT 21A 4VX.csv") ## Updated
 head(stat)
 
 # exclude 4X for now, as not on survey data
-stat <- subset(stat, Division != "4X")
+#stat <- subset(stat, Division != "4X")
+# 4VW is the eastern Scotian Shelf. The NAFO divisions break down as:
+# 
+# 4V — eastern Scotian Shelf (northern part), sometimes subdivided into 4Vn and 4Vs (north and south of 44°N)
+# 4W — eastern Scotian Shelf (western part)
+
+stat <- subset(stat, Division %in% c("4VN", "4VS", "4W"))
 
 unique(stat$Species.Name)
 names(stat)[1] <- "Year"
@@ -72,7 +79,7 @@ nafo_names <- c(
   "CAPELIN - CAP",
   "ATLANTIC MACKEREL - MAC",
   "ARGENTINES (NS) - ARG",
-  "THORNY SKATE (STARRY RAY) - RJR",
+  "SKATES (NS) - SKA",
   "SANDEELS (SANDLANCES) - SAN",
   "ATLANTIC HALIBUT - HAL"
 )
@@ -94,11 +101,13 @@ stat$Species <- case_match(stat$Species.Name,
   "CAPELIN - CAP"                 ~ "Capelin",
   "ATLANTIC MACKEREL - MAC"       ~ "Atlantic Mackerel",
   "ARGENTINES (NS) - ARG"         ~ "Atlantic Argentine",
-  "THORNY SKATE (STARRY RAY) - RJR" ~ "Thorny Skate",
+  "SKATES (NS) - SKA" ~ "Skates Unseparated",
   "SANDEELS (SANDLANCES) - SAN"   ~ "Sand Lance",
   "ATLANTIC HALIBUT - HAL"        ~ "Atlantic Halibut",
   .default = stat$Species.Name
 )
+# checking if thorny skate is in the East (found absent)
+# subset(stat, Species.Name == "THORNY SKATE (STARRY RAY) - RJR")
 
 stat_grouped <- stat %>%
   group_by(Year, Species) %>%
@@ -119,7 +128,6 @@ saveRDS(stat_grouped, file = "Ess_data/NAFO_4VW_Catches.RDS")
 
 
 ####### Effort Data: Explore STATLANT 21B Database
-
 ```{r}
 library(dplyr)
 library(ggplot2)
@@ -167,7 +175,7 @@ nafo_21B <- nafo_21B %>%
 
 # Calculate total annual effort across months
 nafo_21B$TotalEffort <- rowSums(nafo_21B[, c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")])
+                                              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")])
 
 # Keep only relevant columns
 nafo_21B <- nafo_21B[, c("Year", "Country", "Gear", "Tonnage", "MainSpecies",
@@ -188,20 +196,22 @@ unique(nafo_21B_grouped_daysfished$MainSpecies)
 nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
   MainSpecies %in% c("1", "2", "21", "4", "6", "3", "10", "12",
                      "30", "52", "31", "51", "54", "49", "16"))
-
+## removed thorny skate "54",
 # Convert species codes to readable names
 nafo_21B_subset$MainSpecies <- factor(
   nafo_21B_subset$MainSpecies,
   levels = c("1", "2", "21", "4", "6", "3", "10", "12",
              "30", "52", "31", "51", "54", "49", "16")
 )
+## removed thorny skate  "54"
 levels(nafo_21B_subset$MainSpecies) <- c(
   "Atlantic Cod",        "Haddock",             "White Hake",
   "Silver Hake",         "Pollock",             "Redfish Unseparated",
   "American Plaice",     "Yellowtail Flounder", "Atlantic Herring",
   "Capelin",             "Atlantic Mackerel",   "Atlantic Argentine",
-  "Thorny Skate",        "Sand Lance",          "Atlantic Halibut"
+  "Skates Unseparated",   "Sand Lance",       "Atlantic Halibut"
 )
+## removed thorny skate  "Thorny Skate",
 
 # Convert tonnage class to gross tonnage midpoint, then engine power (kW)
 # Formula: Power (kW) = 11.26 x (Gross Tonnage ^ 0.71)  [Anticamara et al. 2011]
@@ -237,9 +247,8 @@ group = MainSpecies, color = MainSpecies)) +
 ```
 
 
-
+## interp_effort
 ```{r}
-
 
 library(zoo)
 library(tidyr)
@@ -263,7 +272,7 @@ effort_matrix <- cbind(
   effort_ts[, "Pollock"],
   effort_ts[, "Atlantic Mackerel"], 
   effort_ts[, "Capelin"],      
-  effort_ts[, "Thorny Skate"], 
+  effort_ts[, "Skates Unseparated"], 
   effort_ts[, "Yellowtail Flounder"],
   effort_ts[, "Atlantic Argentine"]
 )
@@ -276,7 +285,7 @@ colnames(effort_matrix) <- c(
   "Atlantic Halibut",    "Redfish Unseparated", "White Hake",
   "Haddock",             "Sand Lance",          "Silver Hake",
   "Pollock",             "Atlantic Mackerel",   "Capelin",
-  "Thorny Skate",        "Yellowtail Flounder", "Atlantic Argentine"  # Fix 2: column names now match cbind order
+  "Skates Unseparated",    "Yellowtail Flounder", "Atlantic Argentine"  # Fix 2: column names now match cbind order
 )
 
 # Subset to 1960-2013
@@ -331,10 +340,22 @@ catches <- readRDS("Ess_data/NAFO_4VW_Catches.RDS")
 catches_wide <- catches %>%
   pivot_wider(names_from = Species, values_from = Catches_g_per_yr) %>%
   arrange(Year)
+
+species_cols <- c(
+  "American Plaice", "Atlantic Cod", "Atlantic Herring", "Atlantic Halibut",
+  "Redfish Unseparated", "White Hake", "Haddock", "Sand Lance",
+  "Silver Hake", "Pollock", "Atlantic Mackerel", "Capelin",
+  "Skates Unseparated", "Yellowtail Flounder", "Atlantic Argentine"
+)
+
+# Add missing species as zero columns
+missing_spp <- setdiff(species_cols, colnames(catches_wide))
+catches_wide[, missing_spp] <- 0
+
 catch_matrix <- as.matrix(catches_wide[, species_cols])
 rownames(catch_matrix) <- as.character(catches_wide$Year)
 
-###### Align effort and catch on shared years (≥ 1970)
+###### Align effort and catch on shared years (>= 1970)
 shared_years <- sort(intersect(rownames(catch_matrix), rownames(effort_interp)))
 shared_years <- shared_years[shared_years >= "1970"]
 cat("Shared year range:", min(shared_years), "-", max(shared_years), "\n")
@@ -348,13 +369,16 @@ safe_norm <- function(x, mx) {
   if (is.na(mx) | mx == 0) rep(0, length(x)) else x / mx
 }
 
-# Strip to just the clean name for catch and effort matrices
+# Harmonise column names
 harmonise_colnames <- function(x) {
   gsub("^(.+) - [A-Z]+$", "\\1", colnames(x)) |>
     stringr::str_to_title()
 }
 colnames(catch_matrix)  <- harmonise_colnames(catch_matrix)
 colnames(effort_matrix) <- harmonise_colnames(effort_matrix)
+
+# Align skate name between catch and effort matrices
+#colnames(catch_matrix)[colnames(catch_matrix) == "Skates Unseparated"] <- "Thorny Skate"
 
 ###### Plot: Relative Catches with Effort Interpolated
 pdf("Ess_Output/new_RelativeCatcheswithEffortInterpolated.pdf")
@@ -402,7 +426,6 @@ for (page in seq_len(n_pages)) {
   # Blank spacers then legend in final panel
   panels_used  <- length(page_spp)
   blank_panels <- panels_per_page - panels_used
-
   for (k in seq_len(blank_panels)) plot.new()
 
   plot.new()
@@ -414,8 +437,7 @@ for (page in seq_len(n_pages)) {
     lwd    = 2,
     bty    = "n",
     cex    = 1.2,
-    title  = "Legend"
-  )
+    title  = "Legend")
 }
 
 dev.off()
@@ -429,11 +451,11 @@ relative_effort_interp <- as.matrix(relative_effort_interp)
 rownames(relative_effort_interp) <- rownames(effort_interp)
 colnames(relative_effort_interp) <- colnames(effort_interp)
 
-# No reliable effort data in NAFO 4VW — set to zero manually
-relative_effort_interp[, "Sand Lance"]         <- 0.0
-relative_effort_interp[, "Capelin"]            <- 0.0
-relative_effort_interp[, "Atlantic Argentine"] <- 0.0
-relative_effort_interp[, "Thorny Skate"]       <- 0.0
+## No reliable directed effort in NAFO 4VW — set to zero
+# relative_effort_interp[, "Sand Lance"]         <- 0.0
+# relative_effort_interp[, "Capelin"]            <- 0.0
+# relative_effort_interp[, "Atlantic Argentine"] <- 0.0
+# relative_effort_interp[, "Skates Unseparated"]       <- 0.0
 
 
 ###### Save outputs
@@ -445,4 +467,33 @@ write.csv(catches_nafo, file = "Ess_data/catches_nafo.csv", row.names = TRUE)
 
 ```
 
+# Check
+```{r}
+# No reliable directed effort in NAFO 4VW — set to zero
+# relative_effort_interp[, "Sand Lance"]         <- 0.0
+# relative_effort_interp[, "Capelin"]            <- 0.0
+# relative_effort_interp[, "Atlantic Argentine"] <- 0.0
+# relative_effort_interp[, "Skates Unseparated"]       <- 0.0
+
+library(ggplot2)
+library(tidyr)
+
+# Convert to long format for ggplot
+relative_effort_df <- as.data.frame(relative_effort_interp) %>%
+  tibble::rownames_to_column("Year") %>%
+  mutate(Year = as.numeric(Year)) %>%
+  pivot_longer(cols = -Year, names_to = "Species", values_to = "Relative_Effort")
+
+ggplot(relative_effort_df, aes(x = Year, y = Relative_Effort)) +
+  geom_line(colour = "steelblue") +
+  facet_wrap(~Species, scales = "free_y") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(
+    x     = "Year",
+    y     = "Relative Effort",
+    title = "Relative Fishing Effort by Species (4VW - Eastern Scotian Shelf)"
+  )
+
+```
 
