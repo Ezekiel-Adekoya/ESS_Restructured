@@ -38,7 +38,7 @@ head(stat)
 # 4V — eastern Scotian Shelf (northern part), sometimes subdivided into 4Vn and 4Vs (north and south of 44°N)
 # 4W — eastern Scotian Shelf (western part)
 
-stat <- subset(stat, Division %in% c("4VN", "4VS", "4W"))
+stat <- subset(stat, Division %in% c("4VS", "4W"))
 
 unique(stat$Species.Name)
 names(stat)[1] <- "Year"
@@ -451,7 +451,7 @@ relative_effort_interp <- as.matrix(relative_effort_interp)
 rownames(relative_effort_interp) <- rownames(effort_interp)
 colnames(relative_effort_interp) <- colnames(effort_interp)
 
-## No reliable directed effort in NAFO 4VW — set to zero
+## No reliable directed effort in NAFO 4VsW — set to zero
 # relative_effort_interp[, "Sand Lance"]         <- 0.0
 # relative_effort_interp[, "Capelin"]            <- 0.0
 # relative_effort_interp[, "Atlantic Argentine"] <- 0.0
@@ -494,6 +494,10 @@ ggplot(relative_effort_df, aes(x = Year, y = Relative_Effort)) +
     y     = "Relative Effort",
     title = "Relative Fishing Effort by Species (4VW - Eastern Scotian Shelf)"
   )
+
+```
+
+```{r}
 
 ```
 
