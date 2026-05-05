@@ -146,7 +146,7 @@ nafo_21B$MainSpecies   <- as.character(nafo_21B$MainSpecies)
 nafo_21B <- nafo_21B %>%
   subset(SpeciesEffort %in% c(1, 2, 3)) %>%
   #subset(AreaCode %in% c(45))
-  subset(AreaCode %in% c(44, 45, 46, 48))
+  subset(AreaCode %in% c(45, 46))
 # Calculate total annual effort across months
 nafo_21B$TotalEffort <- rowSums(nafo_21B[, c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")])
@@ -171,7 +171,7 @@ unique(nafo_21B_grouped_daysfished$MainSpecies)
 # therefore produce zero effort, which is made explicit in the zeroing step below.
 nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
                           MainSpecies %in% c("1", "2", "21", "4", "6", "3", "10", "12",
-                                             "30", "52", "31", "72", "54", "89", "16"))
+                                             "30", "52", "31", "51", "54", "89", "16"))
 # 54	SKA	Skates (NS)
 # 51	ARG	Atlantic argentines
 # 52	CAP	Capelin
@@ -179,7 +179,7 @@ nafo_21B_subset <- filter(nafo_21B_grouped_daysfished,
 nafo_21B_subset$MainSpecies <- factor(
   nafo_21B_subset$MainSpecies,
   levels = c("1", "2", "21", "4", "6", "3", "10", "12",
-             "30", "52", "31", "72", "54", "89", "16")
+             "30", "52", "31", "51", "54", "89", "16")
 )
 
 levels(nafo_21B_subset$MainSpecies) <- c(
@@ -239,6 +239,11 @@ ggplot(nafo_21B_effort, aes(x = Year, y = Effort_kW_Days_yr,
   theme_minimal() +
   theme(legend.position = "none")
 
+
+
+
+I see from Ezekiel’s latest plots that effort data are missing for some years for several species, mostly in the later years and I see that the data for skates and mackerel are odd. Note that the groundfish moratorium has been in place since 1992/3 and there has been no targeted groundfish fisheries on the Scotian Shelf since then, so effort data should not be an issue. There are also no fisheries for sand lance, capelin or Argentine (since the 1980s). The main fisheries now are for Atlantic halibut, redfish (Unit 3), silver hake, and some mackerel.
+ 
 ```
 
 

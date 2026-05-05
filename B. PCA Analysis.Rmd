@@ -30,7 +30,7 @@ library(ape)
 # 2. LOAD & CLEAN DATA
 # ─────────────────────────────────────────────
 long_df <- read.csv("Ess_data/ESS (cleaned) q-adj data for 1970-2022.csv") |> ## Q corrected
-# long_df <- read.csv("Ess_data/ESS(cleaned)not-q-adj data for 1970-2022.csv") |> ## Not Q corrected
+#long_df <- read.csv("Ess_data/ESS(cleaned)not-q-adj data for 1970-2022.csv") |> ## Not Q corrected
   filter(SPECIES < 1000, YEAR >= 1970, YEAR <= 2022) |>
   filter(!is.na(SPECIES_NAME), SPECIES_NAME != "NA",
          !grepl("INCL |snail|unidentified|GADOIDEI|unid\\.|S\\.O\\.",
