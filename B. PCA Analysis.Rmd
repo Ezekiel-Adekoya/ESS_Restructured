@@ -31,7 +31,7 @@ library(ape)
 # ─────────────────────────────────────────────
 long_df <- read.csv("Ess_data/ESS (cleaned) q-adj data for 1970-2022.csv") |> ## Q corrected
 #long_df <- read.csv("Ess_data/ESS(cleaned)not-q-adj data for 1970-2022.csv") |> ## Not Q corrected
-  filter(SPECIES < 1000, YEAR >= 1970, YEAR <= 2022) |>
+  filter(SPECIES < 1000, YEAR >= 1978, YEAR <= 2022) |>
   filter(!is.na(SPECIES_NAME), SPECIES_NAME != "NA",
          !grepl("INCL |snail|unidentified|GADOIDEI|unid\\.|S\\.O\\.",
                 SPECIES_NAME, ignore.case = TRUE)) |>
@@ -52,7 +52,7 @@ long_wide <- long_df |>
 # 4. PRE/POST MORATORIUM PHASE DATA
 # ─────────────────────────────────────────────
 long_df_phase <- long_wide |>
-  filter(between(Year, 1978, 2022)) |>
+  filter(between(Year, 1978, 2018)) |>
   mutate(Phase = factor(if_else(Year <= 1992,
   "1978-1992 (Reference Period)", "1993-2022 (Unconstrained Period)"),
   levels = c("1978-1992 (Reference Period)","1993-2022 (Unconstrained Period)"))) |>
