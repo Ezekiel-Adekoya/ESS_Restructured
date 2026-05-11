@@ -285,16 +285,20 @@ ggplot(biomass_wide, aes(x = YEAR, y = .data[[species_col]] / 1e6)) +
 
 
 stat <- read.csv("Ess_data/LF_Biomass_Abund.csv")
-lengthfreq  <- stat %>%
+inv_keywords <- paste(
+  "CRAB|LOBSTER|SCALLOP|SQUID|OCTOPUS|JELLYFISH|AMPHIPODA|CRUSTACEA|CEPHALOPODA|MUNIDA|SHRIMP",
+  collapse = "|")
+
+lengthfreq <- stat %>%
   filter(!is.na(STRAT), STRAT != "") %>%
   filter(suppressWarnings(as.numeric(STRAT)) >= 440,
          suppressWarnings(as.numeric(STRAT)) <= 466) %>%
-  filter(SPEC < 1000) %>%
+  # remove invertebrates
+  filter(!grepl(inv_keywords, COMMON_NAME)) %>%
   group_by(YEAR, SPEC, COMMON_NAME, FLEN) %>%
   summarise(
     Abundance_Strata = sum(Abundance_Strata, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
+    .groups = "drop" ) %>%
   arrange(YEAR, SPEC, FLEN)
 
 write.csv(lengthfreq, "Ess_data/DFO_Abundance_at_length", row.names = FALSE)
