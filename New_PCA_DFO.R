@@ -14,11 +14,16 @@ stat <- read.csv("Ess_data/LF_Biomass_Abund.csv")
 # ─────────────────────────────────────────────
 # 2. WIDE BIOMASS TABLE
 # ─────────────────────────────────────────────
+inv_keywords <- paste(
+  "CRAB|LOBSTER|SCALLOP|SQUID|OCTOPUS|JELLYFISH|AMPHIPODA|CRUSTACEA|CEPHALOPODA|MUNIDA|SHRIMP",
+  collapse = "|")
+
 biomass_wide <- stat %>%
   filter(!is.na(STRAT), STRAT != "") %>%
   filter(suppressWarnings(as.numeric(STRAT)) >= 440,
          suppressWarnings(as.numeric(STRAT)) <= 466) %>%
-  filter(SPEC < 1000) %>%
+  # remove invertebrates here
+  filter(!grepl(inv_keywords, COMMON_NAME)) %>%
   group_by(YEAR, COMMON_NAME) %>%
   summarise(
     Biomass_Strata_KG = sum(Biomass_Strata_KG, na.rm = TRUE),
@@ -26,7 +31,8 @@ biomass_wide <- stat %>%
   pivot_wider(
     names_from  = COMMON_NAME,
     values_from = Biomass_Strata_KG,
-    values_fill = 0) %>% arrange(YEAR)
+    values_fill = 0) %>%
+  arrange(YEAR)
 write.csv(biomass_wide, "Ess_data/DFO_Biomas_all_species", row.names = FALSE)
 # ─────────────────────────────────────────────
 # 3. PHASE LABELS  — single source of truth
@@ -200,7 +206,7 @@ p <- ggplot(scores, aes(PC1, PC2)) +
                linewidth = 0.4) +
   geom_point(aes(color = Cluster),
              shape = 16,
-             size  = 3.2,
+             size  = 2,
              alpha = 0.85) +
   geom_text_repel(aes(label = Year, color = Cluster),
                   size          = 2.9,
