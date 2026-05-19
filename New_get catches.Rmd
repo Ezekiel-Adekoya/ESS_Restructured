@@ -49,7 +49,7 @@ stat <- subset(stat, Division %in% c("4VS","4VN", "4W"))
   "SKATES (NS) - SKA" ,  Unserprated
   "SCULPINS (NS) - SCU"
 ```{r}
-unique(stat$Species.Name)
+#unique(stat$Species.Name)
 
 names(stat)[1] <- "Year"
 
@@ -142,6 +142,80 @@ ggplot(stat_grouped, aes(x = Year, y = Catches_g_per_yr / 1e6)) +
 ```
 
 
+## Lets Split the Skates catches based on biomass ratios of each
+
+```{r}
+skate_ratio_wide <- read.csv("Ess_data/skate_ratios_biomass.csv") ## Skate ratios
+
+# ─────────────────────────────────────────────
+# 1. EXTRACT "SKATES UNSEPARATED"
+# ─────────────────────────────────────────────
+skates_unsep <- stat_grouped %>% filter(Species == "Skates Unseparated") %>%
+  transmute(Year, Total_Skate = Catches_g_per_yr)
+# ─────────────────────────────────────────────
+# 2. PREPARE RATIO TABLE
+# ─────────────────────────────────────────────
+skate_ratio_long <- skate_ratio_wide %>%
+  rename(Year = YEAR) %>% pivot_longer(cols = -Year, names_to = "Species", values_to = "Ratio" ) %>%
+  filter(!is.na(Species), Species != "", !is.na(Ratio))
+# ─────────────────────────────────────────────
+# 3. COMPLETE ALL YEARS
+# ─────────────────────────────────────────────
+skate_ratio_filled <- skate_ratio_long %>% complete(Year = 1970:2024, Species) %>%
+  arrange(Species, Year) %>%  group_by(Species) %>% fill(Ratio, .direction = "downup") %>% ungroup()
+
+# ─────────────────────────────────────────────
+# 4. SPLIT AGGREGATED SKATE CATCHES
+# ─────────────────────────────────────────────
+skates_split <- skates_unsep %>% left_join(skate_ratio_filled, by = "Year") %>%
+  mutate( Catches_g_per_yr = Total_Skate * Ratio ) %>%
+  select( Year,Species,Catches_g_per_yr)
+
+# ─────────────────────────────────────────────
+# 5. REPLACE "SKATES UNSEPARATED"
+# ─────────────────────────────────────────────
+stat_grouped_split <- stat_grouped %>% filter(Species != "Skates Unseparated") %>%
+  bind_rows(skates_split) %>% arrange(Year, Species)
+
+# ─────────────────────────────────────────────
+# 6. CHECK SKATE SPLIT
+# ─────────────────────────────────────────────
+stat_grouped_split %>% filter(grepl("skate", Species, ignore.case = TRUE)) %>%
+  print(n = Inf)
+
+skates_split_wide <- skates_split %>%
+  filter(Year >= 1970, Year <= 2024) %>%
+  pivot_wider(names_from = Species,values_from = Catches_g_per_yr,values_fill = 0 ) %>%
+  arrange(Year)
+# remove Skates Unseparated" from catches 
+stat_grouped <- stat_grouped %>% filter(Species != "Skates Unseparated")%>%
+  filter(Year >= 1970 & Year <= 2024)
+
+skates_long <- skates_split_wide %>%
+  select(Year, Thorny.skate, Winter.skate) %>%
+  pivot_longer(cols = c(Thorny.skate, Winter.skate),
+    names_to = "Species", values_to = "Catches_g_per_yr" ) %>%
+  mutate(Species = recode(Species,"Thorny.skate" = "Thorny Skate","Winter.skate" = "Winter Skate" ))
+
+stat_catches <- bind_rows(stat_grouped, skates_long) # with Thorny Skate and Winter Skate now present
+stat_catches_wide <- stat_catches %>% pivot_wider(names_from = Species, values_from = Catches_g_per_yr)
+saveRDS(stat_catches_wide, file = "Ess_data/new_NAFO_4VW_Catches.RDS") # with the skate split
+#saveRDS(stat_grouped,"NAFO_4VW_Catches.RDS")
+
+stat_catches %>%
+  ggplot(aes(x = Year, y = Catches_g_per_yr / 1e6)) +
+  geom_line(color = "steelblue") +
+  geom_point(size = 0.8, color = "steelblue") +
+  facet_wrap(~ Species, scales = "free_y") +
+  labs( x = "Year", y = "Catches (thousand tonnes)") +
+  theme_bw() +
+  theme(
+    strip.text = element_text(size = 7),
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 6),
+    axis.text.y = element_text(size = 6) )
+# saveRDS(stat_grouped, file = "Ess_data/New_NAFO_4VW_Catches.RDS")
+```
+
 ####### Effort Data: Explore STATLANT 21B Database
 
 ```{r}
@@ -174,14 +248,12 @@ nafo_21B <- subset(nafo_21B, SpeciesEffort %in% c(2))
 nafo_21B <- subset(nafo_21B, AreaCode %in% c(45, 46)) 
 
 # Need to check 48 isn't double counting effort data in 4VS & 4VN - remove 48 to avoid double counting
-
 # total effort
 nafo_21B$TotalEffort <- rowSums(nafo_21B[, c("Jan","Feb","Mar","Apr","May","Jun",
                                              "Jul","Aug","Sep","Oct","Nov","Dec")])
 
 nafo_21B <- nafo_21B[, c("Year","Country","Gear","Tonnage","MainSpecies",
                          "AreaCode","SpeciesEffort","Effort","TotalEffort")]
-
 
 # 2. CALCULATE FISHING POWER (Standardizing by Tonnage)
 # Using the power curve: Power (kW) = 11.26 * (GT^0.71)
@@ -266,6 +338,12 @@ rownames(effort_final) <- mizer_effort_matrix$Year
 # 6. NORMALIZE (Highly recommended: scales effort 0 to 1)
 # This makes tuning Q for your 18 species much more intuitive
 effort_final <- sweep(effort_final, 2, apply(effort_final, 2, max, na.rm = TRUE), "/")
+row_2021 <- (effort_final["2020", ] + effort_final["2022", ]) / 2   # fix empty 2021
+rownames(row_2021) <- "2021"
+effort_final <- rbind( effort_final[rownames(effort_final) <= "2020", ],
+  row_2021,effort_final[rownames(effort_final) >= "2022", ])
+ 
+write.csv(effort_final,"Ess_data/effort_by_gear.csv",row.names = TRUE)
 
 # 7. PREPARE FOR PLOTTING
 plot_data <- as.data.frame(effort_final) %>%
@@ -453,20 +531,15 @@ ggplot(plot_data_total, aes(x = Year, y = Effort_Raw, fill = Gear)) +
 # Create the gear_params table
 gear_params <- data.frame(
   species = c(
-    "Haddock", "Redfish unseparated", "Cod(atlantic)", "Herring(atlantic)",
-    "Silver hake", "American plaice", "Yellowtail flounder", "Thorny skate",
-    "Pollock", "Monkfish,goosefish,angler", "White hake", "Longhorn sculpin",
-    "Spiny dogfish", "Witch flounder", "Northern sand lance", "Squirrel or red hake",
-    "Halibut(atlantic)", "Winter skate", "Capelin"
-  ),
+    "Haddock", "Redfish unseparated", "Cod(atlantic)", "Herring(atlantic)","Silver hake", "American plaice", 
+    "Yellowtail flounder", "Thorny skate","Pollock", "Monkfish,goosefish,angler", "White hake", "Longhorn sculpin",
+    "Spiny dogfish", "Witch flounder", "Northern sand lance", "Squirrel or red hake","Halibut(atlantic)", 
+    "Winter skate", "Capelin"),
   # Map species to your 4 functional effort streams
   gear = c(
-    "Bottom_Trawl", "Small_Mesh", "Bottom_Trawl", "Pelagic",
-    "Small_Mesh", "Bottom_Trawl", "Bottom_Trawl", "Bottom_Trawl",
-    "Bottom_Trawl", "Bottom_Trawl", "Fixed_Gear", "Bottom_Trawl",
-    "Fixed_Gear", "Bottom_Trawl", "Small_Mesh", "Small_Mesh",
-    "Fixed_Gear", "Bottom_Trawl", "Pelagic"
-  ),
+    "Bottom_Trawl", "Small_Mesh", "Bottom_Trawl", "Pelagic","Small_Mesh", "Bottom_Trawl", 
+    "Bottom_Trawl",  "Bottom_Trawl","Bottom_Trawl", "Bottom_Trawl", "Fixed_Gear", "Bottom_Trawl",
+    "Fixed_Gear", "Bottom_Trawl", "Small_Mesh", "Small_Mesh","Fixed_Gear", "Bottom_Trawl", "Pelagic"),
   sel_func = "sigmoid_length",
   # L50 and L25 based on 130mm (Bottom), 60mm (Small), and Longline selectivity
   l50 = c(
@@ -474,23 +547,20 @@ gear_params <- data.frame(
     23, 30, 28, 50, 
     45, 40, 50, 20, 
     65, 30, 10, 23, 
-    81, 60, 12
-  ),
+    81, 60, 12 ),
   l25 = c(
     37, 20, 38, 15, 
     18, 25, 23, 40, 
     38, 30, 40, 15, 
     55, 25, 8, 18, 
-    70, 50, 10
-  ),
+    70, 50, 10 ),
   # Set Q=0 for forage and lower for bycatch (Sculpin)
   catchability = c(
     0.1, 0.1, 0.1, 0.1, 
     0.1, 0.1, 0.1, 0.05, 
     0.1, 0.1, 0.1, 0.05, 
     0.05, 0.1, 0, 0.1, 
-    0.1, 0.05, 0
-  ))
+    0.1, 0.05, 0 ))
 
 # Ensure species names match exactly with your interaction matrix
 # and species_params table
@@ -525,10 +595,141 @@ halibut_update <- data.frame(
 
 # 3. Update your main gear_params table
 # (Remove old Fixed_Gear rows and bind these new ones)
-gear_params <- gear_params %>%
-  filter(gear != "Fixed_Gear") %>%
-  bind_rows(fixed_gear_update, halibut_update)
-
+gear_params <- gear_params %>% filter(gear != "Fixed_Gear") %>% bind_rows(fixed_gear_update, halibut_update)
+gear_params
 
 ```
+
+
+## Gear params 
+```{r}
+# ── GEAR SELECTIVITY AND CATCHABILITY PARAMETERS ─────────────────────────────
+# Sources:
+#   DFO 2025/064  – 4X5Y Haddock Framework Review (WHAM models, selectivity)
+#   DFO 2025/039  – Eastern Georges Bank Cod Stock Assessment 2024
+#   DFO 2024 RV survey – Numbers-at-length (NAL) distributions, 4VWX
+#   DFO 2005      – Pollock/Sand Lance report
+#   DFO 2006      – Halibut longline survey
+#   DFO 2000      – Flatfish and Monkfish reports
+#   DFO 2023      – Atlantic Herring report
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── PELAGIC GEAR ──────────────────────────────────────────────────────────────
+# Herring: purse seine dominant (81-99%); dome-shaped selectivity appropriate
+#   l50=20, l25=15: first spawn ages 3-4 (DFO 2023 herring report)
+#   right limb: releases larger spawners, consistent with MSE framework
+# Capelin: pelagic schooling, dome-shaped appropriate; low catchability
+pelagic_gear <- data.frame(
+  species      = c("Atlantic Herring", "Capelin"),
+  gear         = c("Pelagic", "Pelagic"),
+  sel_func     = c("double_sigmoid_length", "double_sigmoid_length"),
+  l50          = c(20, 14),
+  l25          = c(15, 10),
+  l50_right    = c(32, 20),
+  l25_right    = c(38, 24),
+  catchability = c(0.10, 0.02))
+
+
+# ── SMALL MESH GEAR ───────────────────────────────────────────────────────────
+# Silver Hake: small-mesh basin/slope fishery confirmed (DFO 2025)
+#   l50=23cm: consistent with <23cm Age-1 recruitment index cutoff
+# Red Hake: co-occurs with Silver Hake; NAL peak ~21-31cm (DFO 2024 RV survey)
+#   l50=23cm supported by 2024 RV survey year class peaks
+small_mesh_gear <- data.frame(
+  species      = c("Silver Hake", "Red Hake"),
+  gear         = rep("Small_Mesh", 2),
+  sel_func     = rep("sigmoid_length", 2),
+  l50          = c(23, 23),
+  l25          = c(18, 18),
+  l50_right    = rep(NA, 2),
+  l25_right    = rep(NA, 2),
+  catchability = c(0.10, 0.10))
+
+
+# ── FIXED GEAR (longline / gillnet) ───────────────────────────────────────────
+# Halibut: bottom longline confirmed primary gear (DFO 2006 longline survey)
+#   l50=81cm matches legal minimum size since 1994 exactly
+#   catchability=0.04: deep-dwelling species, confirmed low RV trawl catchability
+# White Hake: longline bycatch; maturity threshold 41cm (DFO 2024 RV survey RPA)
+#   l50=45cm slightly above 41cm maturity; defensible for directed selectivity
+# Spiny Dogfish: gillnet primary gear confirmed; 95% biomass from 4X
+#   (DFO 2024 RV survey); l50=70, l25=58 retained
+fixed_gear <- data.frame(
+  species      = c("Atlantic Halibut", "White Hake", "Spiny Dogfish"),
+  gear         = rep("Fixed_Gear", 3),
+  sel_func     = rep("sigmoid_length", 3),
+  l50          = c(81, 45, 70),
+  l25          = c(70, 38, 58),
+  l50_right    = rep(NA, 3),
+  l25_right    = rep(NA, 3),
+  catchability = c(0.04, 0.05, 0.04))
+
+
+# ── BOTTOM TRAWL ──────────────────────────────────────────────────────────────
+#
+# Atlantic Cod: bottom trawl confirmed; l50=56, l25=45
+#   Stock at historic lows across 4VWX (DFO 2024 RV survey).
+#   NOTE (DFO 2025/039 EGB Cod): for EGB specifically, the stock is in the
+#   critical zone (SSB = 42% of LRP) with older fish shifting to deeper strata
+#   (stratum 5Z9 now included in assessment). If this table is applied to EGB,
+#   catchability=0.03 should be reviewed against the new stratum inclusion.
+#   For 4VWX application, catchability=0.03 is retained as specified.
+#
+# Haddock: predominantly 4X/Browns Bank; otter trawl primary gear.
+#   sel_func = sigmoid_length (logistic, asymptotic) CONFIRMED correct.
+#   DFO 2025/064 Appendix A exhaustively tested double_sigmoid_length
+#   (dome-shaped) for all model configurations — parameters consistently hit
+#   bounds and diagnostics were poor; logistic selectivity was selected for
+#   all three final WHAM models (Models 1, 2, 3).
+#   CAUTION: DFO 2025/064 (Fig. 3) shows fishery selectivity is time-varying,
+#   with A50 and k parameters significantly linked to cohort strength
+#   (log NAA1, 1990-2022). This static sigmoid_length is a simplification.
+#   If projecting forward or running MSE, consider the selectivity-recruitment
+#   relationship: a50 and k shift when strong cohorts (e.g., 2013 class) are
+#   present. l50=38 well supported by NAL mode 30-45cm (DFO 2024 RV survey).
+#
+# Pollock: primarily otter trawl confirmed (DFO 2005 pollock report)
+# American Plaice/Yellowtail: bottom trawl confirmed; l50=30cm consistent with
+#   30cm+ fishery-size threshold (DFO 2000 flatfish report)
+# Redfish: bottom trawl confirmed
+# Longhorn Sculpin: NAL mode at 24cm (DFO 2024 RV survey)
+#   l50 UPDATED 22->24, l25 UPDATED 16->18
+# Witch Flounder: widespread 4VWX; bottom trawl confirmed (DFO 2024 RV survey)
+#   l50=32 supported by NAL distributions
+# Monkfish: otter trawl confirmed primary gear (DFO 2000 monkfish report)
+#   l50=50cm reasonable given 46cm maturity
+# Thorny Skate: bottom trawl confirmed; l50=55, l25=42 retained
+# Winter Skate: only fish >40cm in biomass indices (DFO 2024 RV survey)
+#   l50=50 reasonable given 40cm identification threshold
+# Sand Lance: incidental trawl bycatch (prey species; DFO 2005 pollock report)
+#   low catchability=0.02
+bottom_trawl <- data.frame(
+  species      = c(
+    "Atlantic Cod", "Haddock", "Pollock","American Plaice", "Yellowtail Flounder",
+    "Redfish Unseparated", "Longhorn Sculpin", "Witch Flounder", "Monkfish",
+    "Thorny Skate", "Winter Skate","Sand Lance"),
+  gear         = rep("Bottom_Trawl", 12),
+  sel_func     = rep("sigmoid_length", 12),
+  l50          = c(56, 38, 45, 30, 30, 22, 24, 32, 50, 55, 50, 15),
+  l25          = c(45, 28, 38, 25, 24, 16, 18, 24, 38, 42, 40, 11),
+  l50_right    = rep(NA, 12),
+  l25_right    = rep(NA, 12),
+  catchability = c(0.03, 0.10, 0.08, 0.10, 0.10,
+                   0.05, 0.03, 0.05, 0.05,
+                   0.04, 0.04, 0.02))
+
+
+# ── COMBINE ALL ───────────────────────────────────────────────────────────────
+gear_params <- rbind(pelagic_gear, small_mesh_gear, fixed_gear, bottom_trawl)
+gear_params
+
+write.csv(gear_params, "Ess_data/new.gear_params.csv", row.names = FALSE)
+
+```
+
+```{r}
+
+```
+
 

@@ -4,45 +4,34 @@ library(tidyverse)
 
 # ── Species list ───────────────────────────────────────────────────────────────
 scinames_fb <- c(
-  "Gadus morhua",                  # Atlantic Cod
-  "Melanogrammus aeglefinus",      # Haddock
-  "Urophycis tenuis",              # White Hake
-  "Merluccius bilinearis",         # Silver Hake
-  "Pollachius virens",             # Pollock
-  "Sebastes fasciatus",            # Redfishes Unseparated
-  "Hippoglossoides platessoides",  # American Plaice
-  "Myzopsetta ferruginea",         # Yellowtail Flounder
-  "Clupea harengus",               # Atlantic Herring
-  "Mallotus villosus",             # Capelin
-  "Scomber scombrus",              # Atlantic Mackerel
-  "Argentina silus",               # Atlantic Argentine
-  "Amblyraja radiata",             # Thorny Skate
-  "Ammodytes dubius",              # Sand Lance
-  "Hippoglossus hippoglossus"      # Atlantic Halibut
+  "Gadus morhua",                        # Atlantic Cod
+  "Melanogrammus aeglefinus",            # Haddock
+  "Urophycis tenuis",                    # White Hake
+  "Urophycis chuss",                     # Red Hake
+  "Merluccius bilinearis",               # Silver Hake
+  "Pollachius virens",                   # Pollock
+  "Sebastes fasciatus",                  # Redfish Unseparated
+  "Hippoglossoides platessoides",        # American Plaice
+  "Myzopsetta ferruginea",                  # Yellowtail Flounder  ← was Myzopsetta ferruginea
+  "Glyptocephalus cynoglossus",          # Witch Flounder
+  "Clupea harengus",                     # Atlantic Herring
+  "Mallotus villosus",                   # Capelin
+  "Amblyraja radiata",                   # Thorny Skate
+  "Leucoraja ocellata",                  # Winter Skate
+  "Squalus acanthias",                   # Spiny Dogfish
+  "Lophius americanus",                  # Monkfish
+  "Ammodytes dubius",                    # Sand Lance
+  "Myoxocephalus octodecemspinosus",     # Longhorn Sculpin
+  "Hippoglossus hippoglossus"            # Atlantic Halibut
 )
 
 # ── Lookup: FishBase name → survey SCINAME ─────────────────────────────────────
 sciname_lookup <- tibble(
   Species = scinames_fb,
   SCINAME = c(
-    "GADUS MORHUA",
-    "MELANOGRAMMUS AEGLEFINUS",
-    "UROPHYCIS TENUIS",
-    "MERLUCCIUS BILINEARIS",
-    "POLLACHIUS VIRENS",
-    "SEBASTES FASCIATUS",
-    "HIPPOGLOSSOIDES PLATESSOIDES",
-    "LIMANDA FERRUGINEA",           # survey uses old name
-    "CLUPEA HARENGUS",
-    "MALLOTUS VILLOSUS",
-    "SCOMBER SCOMBRUS",
-    "ARGENTINA SILUS",
-    "AMBLYRAJA RADIATA",
-    "AMMODYTES DUBIUS",
-    "HIPPOGLOSSUS HIPPOGLOSSUS"
-  )
-)
-
+    "GADUS MORHUA", "MELANOGRAMMUS AEGLEFINUS","UROPHYCIS TENUIS","UROPHYCIS CHUSS","MERLUCCIUS BILINEARIS", "POLLACHIUS VIRENS","SEBASTES FASCIATUS", "HIPPOGLOSSOIDES PLATESSOIDES",
+    "LIMANDA FERRUGINEA", "GLYPTOCEPHALUS CYNOGLOSSUS","CLUPEA HARENGUS","MALLOTUS VILLOSUS","AMBLYRAJA RADIATA","LEUCORAJA OCELLATA","SQUALUS ACANTHIAS", "LOPHIUS AMERICANUS",
+    "AMMODYTES DUBIUS","MYOXOCEPHALUS OCTODECEMSPINOSUS","HIPPOGLOSSUS HIPPOGLOSSUS"))
 # ── Max length → max weight ────────────────────────────────────────────────────
 length_weight <- rfishbase::estimate(scinames_fb) |>
   select(Species, a, b)
@@ -102,8 +91,7 @@ ppmr <- ppmr |>
   mutate(
     prey_wght = 0.01 * PYLEN ^ 3,
     pred_wght = a * PDLEN ^ b,
-    ppmr      = pred_wght / prey_wght
-  ) |>
+    ppmr      = pred_wght / prey_wght) |>
   filter(PDLEN < 900) |>
   filter(PYNAM != "EMPTY") |>
   filter(!is.na(ppmr))
@@ -138,13 +126,9 @@ betasig <- ppmr |>
     beta     = median(ppmr, na.rm = TRUE),
     sigma    = sd(log10(ppmr), na.rm = TRUE),
     min_ppmr = min(ppmr, na.rm = TRUE),
-    max_ppmr = max(ppmr, na.rm = TRUE)
-  ) |>
+    max_ppmr = max(ppmr, na.rm = TRUE) ) |>
   ungroup() |>
-  mutate(
-    beta_adj     = beta / 2,
-    min_ppmr_adj = min_ppmr / 2
-  )
+  mutate( beta_adj     = beta / 2, min_ppmr_adj = min_ppmr / 2)
 
 # add capelin proxy using herring values
 # Mallotus villosus has no stomach data in NOAA food habits database
@@ -170,6 +154,22 @@ sp
 # verify
 cat("Final nrow(sp):", nrow(sp), "\n")  # should be 15
 sp[, c("Species", "SCINAME", "beta", "sigma", "w_min")]
+
+
+## l_matn age_mat and w_mat for angler and longhorn sclpins filler manually
+lophius_row <- which(sp$Species == "Lophius americanus")
+sp[lophius_row, "l_mat"]   <- median(c(49, 37, 44, 40), na.rm = TRUE)  # 42.5 cm from FishBase
+sp[lophius_row, "age_mat"] <- 3
+sp[lophius_row, "w_mat"]   <- sp[lophius_row, "a"] * sp[lophius_row, "l_mat"] ^ sp[lophius_row, "b"]
+
+
+sculpin_row <- which(sp$Species == "Myoxocephalus octodecemspinosus")
+sp[sculpin_row, "l_mat"]   <- 23    # ~50% of max length (46 cm); cottid rule of thumb
+sp[sculpin_row, "age_mat"] <- 2     # age 2-3 typical for cottids; conservative estimate
+sp[sculpin_row, "w_mat"]   <- sp[sculpin_row, "a"] * sp[sculpin_row, "l_mat"] ^ sp[sculpin_row, "b"]
+
+
+
 
 # I think min_ppmr_adj or min_ppmr probably best reflection of "preferred" ppmr; else could use a box predation kernel
 write.csv(sp, "Ess_data/ESS_species_params.csv")

@@ -34,15 +34,12 @@ biomass_wide <- stat %>%
          suppressWarnings(as.numeric(STRAT)) <= 466) %>%
   filter(SPEC < 1000) %>%
   group_by(YEAR, COMMON_NAME) %>%
-  summarise(
-    Biomass_Strata_KG = sum(Biomass_Strata_KG, na.rm = TRUE),
-    .groups = "drop") %>%
+  summarise( Biomass_Strata_KG = sum(Biomass_Strata_KG, na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(
     names_from  = COMMON_NAME,
     values_from = Biomass_Strata_KG,
     values_fill = 0) %>% arrange(YEAR)
 write.csv(biomass_wide, "Ess_data/DFO_Biomas_all_species", row.names = FALSE)
-
 
 ```
 
@@ -100,20 +97,14 @@ pal <- setNames(                                                  # FIX #3: use 
 # ─────────────────────────────────────────────
 make_phase_plot <- function(ph, df = phase_pct) {
   col <- pal[[ph]]
-  df_ph <- df %>%
-    filter(Phase == ph) %>%
+  df_ph <- df %>%  filter(Phase == ph) %>%
     mutate(Species = factor(Species, levels = rev(unique(Species))))
-  
   # 95% cumulative cut-off
-  cut_rank <- df_ph %>%
-    filter(CumPct >= 0.95) %>%                                   # FIX #5: align threshold with label
-    slice(1) %>%
+  cut_rank <- df_ph %>% filter(CumPct >= 0.95) %>%  slice(1) %>%
     pull(Rank)
-  
   if (length(cut_rank) == 0 || !is.finite(cut_rank)) cut_rank <- nrow(df_ph)
   
-  df_ph <- df_ph %>%
-    mutate(Above95 = Rank <= cut_rank)
+  df_ph <- df_ph %>% mutate(Above95 = Rank <= cut_rank)
   
   # FIX #6: derive ypos from factor levels to get correct visual position
   cut_species <- as.character(df_ph$Species[df_ph$Rank == cut_rank][1])
@@ -129,22 +120,19 @@ make_phase_plot <- function(ph, df = phase_pct) {
     geom_hline(yintercept = ypos, colour = col, linetype = "dashed", linewidth = 0.7) +
     annotate("label",
              x = Inf, y = ypos,
-             label   = "\u2190 95% cumulative biomass",
-             colour  = col, fill = "white",
-             label.padding = unit(0.18, "lines"),
-             hjust = 1.05, vjust = -0.3,
+             label   = "\u2190 95% cumulative biomass",colour  = col, fill = "white",
+             label.padding = unit(0.18, "lines"), hjust = 1.05, vjust = -0.3,
              size = 2.6, fontface = "bold") +
     scale_x_continuous(
       labels = percent_format(accuracy = 1),
-      expand = expansion(mult = c(0, 0.30))
-    ) +
+      expand = expansion(mult = c(0, 0.30))) +
     labs(title = ph, x = "% of total biomass", y = NULL) +
     theme_classic(base_size = 10, base_family = "serif") +
     theme(
       panel.border       = element_rect(colour = col, fill = NA, linewidth = 1.1),
       plot.background    = element_rect(fill = "white", colour = col, linewidth = 0.4),
       plot.title         = element_text(face = "bold", size = 10, colour = col,
-                                        margin = margin(b = 6)),
+                           margin = margin(b = 6)),
       axis.text.y        = element_text(size = 7.5, colour = "grey15"),
       axis.text.x        = element_text(size = 7.0, colour = "grey40"),
       axis.title.x       = element_text(size = 7.5, colour = "grey40", margin = margin(t = 4)),
@@ -167,13 +155,11 @@ p <- make_phase_plot(PHASE_REF) +
   plot_annotation(
     title    = "Scotian Shelf Groundfish Community Biomass Composition",
     #subtitle = "Strata 440–466 · DFO Summer Bottom Trawl Survey",
-    theme = theme(
-      plot.title      = element_text(face = "bold", size = 13, family = "serif",
-                                     hjust = 0.5, margin = margin(b = 4)),
+    theme = theme(plot.title      = element_text(face = "bold", size = 13, family = "serif",
+                  hjust = 0.5, margin = margin(b = 4)),
       plot.subtitle   = element_text(colour = "grey45", size = 9, family = "serif",
-                                     hjust = 0.5, margin = margin(b = 12)),
-      plot.background = element_rect(fill = "white", colour = NA)
-    ) )
+                        hjust = 0.5, margin = margin(b = 12)),
+      plot.background = element_rect(fill = "white", colour = NA)))
 
 p
 
@@ -206,34 +192,44 @@ biomass_clean <- biomass_wide %>%
     `Thorny Skate`        = `THORNY SKATE`,
     `Winter Skate`        = `WINTER SKATE`,
     `Longhorn Sculpin`    = `LONGHORN SCULPIN`,
-    `Capelin`             = CAPELIN
+    `Capelin`             = `CAPELIN`
     # --- aggregated groups (commented out — use individual skate/sculpin above) ---
     # `Sculpin Unseparated` = rowSums(across(matches("SCULPIN")), na.rm = TRUE),
     # `Skate Unseparated`   = rowSums(across(matches("SKATE")),   na.rm = TRUE)
   ) %>%
-  select(
-    YEAR,
-    `Atlantic Cod`,
-    `Haddock`,
-    `White Hake`,
-    `Silver Hake`,
-    `Pollock`,
-    `Redfish Unseparated`,
-    `American Plaice`,
-    `Yellowtail Flounder`,
-    `Spiny Dogfish`,
-    `Sand Lance`,
-    `Atlantic Halibut`,
-    `Red Hake`,
-    `Witch Flounder`,
-    `Monkfish`,
-    `Capelin`,
-    `Longhorn Sculpin`,
-    `Thorny Skate`,
-    `Winter Skate`,
-    `Atlantic Herring` )
+  select( YEAR,
+    `Atlantic Cod`,`Haddock`,`White Hake`,`Silver Hake`,`Pollock`,`Redfish Unseparated`,`American Plaice`,      `Yellowtail Flounder`,`Spiny Dogfish`,`Sand Lance`,`Atlantic Halibut`, `Red Hake`, `Witch Flounder`,
+    `Monkfish`,`Capelin`, `Longhorn Sculpin`, `Thorny Skate`,`Winter Skate`,`Atlantic Herring` )
 
 write.csv(biomass_clean, "Ess_data/DFO_Biomass_selected_species.csv", row.names = FALSE)
+
+```
+
+# SKATE COMMUNITY ANALYSIS
+```{r}
+# ─────────────────────────────────────────────
+# SKATE COMMUNITY ANALYSIS
+# ─────────────────────────────────────────────
+skate_long <- long_df_phase %>%
+  filter(Species %in% c("SMOOTH SKATE", "BARNDOOR SKATE", "LITTLE SKATE", "WINTER SKATE", "THORNY SKATE")) %>%
+  group_by(YEAR, Species) %>% summarise(BIOMASS = sum(BIOMASS), .groups = "drop") %>%
+  mutate(Species = str_to_sentence(Species))
+
+# ─────────────────────────────────────────────
+# YEARLY RATIO TABLE (wide)
+# ─────────────────────────────────────────────
+skate_ratio_wide <- skate_long %>%
+  group_by(YEAR) %>%
+  mutate(
+    Total_Skate  = sum(BIOMASS),
+    Pct_of_Skate = round(BIOMASS / Total_Skate, 3)) %>%
+  ungroup() %>% select(YEAR, Species, Pct_of_Skate) %>%
+  pivot_wider(names_from = Species, values_from = Pct_of_Skate, values_fill = 0) %>%
+  arrange(YEAR)
+
+print(skate_ratio_wide, n = Inf)
+
+write.csv(skate_ratio_wide, "Ess_data/skate_ratios_biomass.csv", row.names = FALSE)
 
 ```
 
