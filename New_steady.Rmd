@@ -177,7 +177,7 @@ external_species_info<-select(external_species_info,c("species","w_max","w_mat",
 # - interaction = NULL: use default interaction matrix (intra = 1, inter = 0.2)
 # - kappa = 1e8: sets background resource carrying capacity
 # - gear_params: provides fishing gear selectivity and catchability
-params <- newMultispeciesParams(external_species_info,interaction = NULL, kappa = 1e8, gear_params = gear_params)
+params <- newMultispeciesParams(external_species_info,interaction = NULL, kappa = 1e12, gear_params = gear_params)
 
 ```
 
@@ -292,46 +292,77 @@ no predation on Alt. Halibut
 guild feeding
 
 ```{r}
-params_spp_interactions<-params
+# ── INTERACTION MATRIX ────────────────────────────────────────────────────────
+# Guild structure from Schoener's D depth-stratum dendrogram (h = 0.5 cut)
+# Ecological rules from Cook & Bundy 2010 (Table 4.1.1)
+# ─────────────────────────────────────────────────────────────────────────────
 
-inter<-interaction_matrix(params_spp_interactions)
-inter[]<-0.5
-diag(inter)<-0.2
+params_spp_interactions <- params
+inter <- interaction_matrix(params_spp_interactions)
 
-#inter["Atlantic Cod",cAtlantic Herring", "Sand Lances")]<-1.0
+# ── BASELINE ──────────────────────────────────────────────────────────────────
+inter[] <- 0.5
+diag(inter) <- 0.2
 
-#  # Define guilds 
+# ── GUILDS (from dendrogram) ──────────────────────────────────────────────────
+# Guild 1: pelagic/slope — high overlap, compete for same prey
+pelagics    <- c("Atlantic Herring", "Capelin", "Silver Hake", "Red Hake","Monkfish", "Sand Lance")
 
-# Loosely based  DFO report Cook & Bndy 2010 (Table 4.1.1):
-# Cod prefer both sandlances & herring + other fish
-# White hake prefers herring
-# Flatfish no herring, but prefer sandlances, heavy reliance on resource
+# Guild 2: mid-water/mixed demersal
+mid_water   <- c("White Hake", "Pollock", "Redfish Unseparated")
 
-     piscivores = c("Atlantic Cod", "Spiny Dogfish", "White Hake", "Atlantic Halibut","Greenland Halibut")
-     benthivores = c("Haddock", "American Plaice", "Yellowtail Flounder", "Witch Flounder")
-     pelagics =  c("Atlantic Herring", "Sand Lances","Silver Hake","Atlantic Redfishes")
-     
-#    Set species interaction strengths
-     inter[piscivores, pelagics] <- 0.8  # Strong preference for pelagics
-     inter[piscivores, benthivores] <- 0.6 # Moderate preference for benthivores
-     inter[piscivores, piscivores] <- 0.6  # Moderate preference for piscivores
+# Guild 3: shelf demersal — high benthic overlap
+benthivores <- c("Haddock", "American Plaice", "Yellowtail Flounder", "Witch Flounder", "Longhorn Sculpin")
 
-#    Benthivores interact more within guild
-     inter[benthivores, pelagics] <- 0.1  # Weak preference for pelagics
-     inter[benthivores, benthivores] <- 0.8 # Strong preference for other benthivores
-     inter[benthivores,  piscivores] <- 0.1  # Weak preference for piscivores
+# Guild 4: large demersal predators
+piscivores  <- c("Atlantic Cod", "Spiny Dogfish", "White Hake")
 
-# Species-specific rules, less predation on herring for some piscivores
-     inter["White Hake", "Sand Lances"] <- 0.2 # less benthic than other piscivores
-     inter[c("Greenland Halibut","Atlantic Halibut"), "Atlantic Herring"] <- 0.2  # less pelagic than other piscivores
-     inter["Haddock ", c(piscivores,benthivores) ] <- 0.5 # more gadoid predation than other benthivores
-     inter[, "Greenland Halibut"] <- 0  # only a few predators on large halibuts, due to handling diffculties
-     inter[c("Atlantic Cod", "Spiny Dogfish", "White Hake", "Atlantic Halibut","Greenland Halibut"), "Greenland Halibut"] <- 0.5  # only a few predators on large halibuts, due to handling diffculties
-     inter[, "Atlantic Halibut"] <- 0.0  # only a few predators on large halibuts
-     inter[c("Atlantic Cod", "Spiny Dogfish", "White Hake", "Atlantic Halibut","Greenland Halibut"), "Atlantic Halibut"] <- 0.5  # only a few predators on large halibuts
- 
-#input interaction matrics to params
-params<-setInteraction(params,inter)
+# Guild 5: large skates/halibut — limited predators due to size/handling
+large_elasmo <- c("Thorny Skate", "Winter Skate", "Atlantic Halibut")
+
+# ── GUILD-LEVEL RULES (Cook & Bundy 2010) ────────────────────────────────────
+# Piscivores: strong preference for pelagics, moderate on benthi/piscivores
+inter[piscivores, pelagics]     <- 0.8
+inter[piscivores, benthivores]  <- 0.6
+inter[piscivores, piscivores]   <- 0.6
+inter[piscivores, mid_water]    <- 0.5
+
+# Benthivores: strong within-guild, weak on pelagics/piscivores
+inter[benthivores, benthivores] <- 0.8
+inter[benthivores, pelagics]    <- 0.1
+inter[benthivores, piscivores]  <- 0.1
+inter[benthivores, mid_water]   <- 0.4
+
+# Mid-water: moderate on pelagics, low on strict benthos
+inter[mid_water, pelagics]      <- 0.6
+inter[mid_water, benthivores]   <- 0.3
+inter[mid_water, piscivores]    <- 0.4
+
+# ── SPECIES-SPECIFIC OVERRIDES ────────────────────────────────────────────────
+# White Hake: less benthic than other piscivores (Cook & Bundy 2010)
+inter["White Hake", "Sand Lance"]        <- 0.2
+
+# Halibut: less pelagic than other large predators
+inter["Atlantic Halibut", "Atlantic Herring"] <- 0.2
+
+# Haddock: more gadoid predation than other benthivores
+inter["Haddock", c(piscivores, benthivores)] <- 0.5
+
+# Large skates/halibut: few predators due to size and handling difficulty
+inter[, large_elasmo]                        <- 0.0
+inter[piscivores,    large_elasmo]           <- 0.5
+inter["Spiny Dogfish", large_elasmo]         <- 0.3  # dogfish less likely on large flatfish
+
+# Thorny/Winter Skate: different depth strata (from dendrogram — Thorny deeper)
+# Cross-skate predation low; within-guild overlap retained from dendrogram
+inter["Thorny Skate", "Winter Skate"]    <- 0.2
+inter["Winter Skate",  "Thorny Skate"]   <- 0.2
+
+# Diagonal: self-interaction (resource competition within species)
+diag(inter) <- 0.2
+
+# ── #input interaction matrics to params ───────────────────────────────────────────────────────────
+params <- setInteraction(params, inter)
 
 ```
 
@@ -416,12 +447,13 @@ Rescale Species Spectra, Rince and repeat (till convergence is achieved in 1.5 y
 ```{r}
 # Iteratively improve the calibration by adjusting model parameters
 # to better match observed biomasses, and then re-solving for steady state
-for (i in 1:20) {
+for (i in 1:200) {
   params <- params |> 
     matchBiomasses() |>  # Adjust species parameters to better match observed biomasses
     steady()             # Recalculate the steady-state solution
 }
 ```
+
 
 could use to the below plot instead to check ratio is within +/- 1.2 model biomass/observed biomass for all species (I stopped when Total Relative Error was 0.385)
 ```{r}
