@@ -145,60 +145,64 @@ ggplot(stat_grouped, aes(x = Year, y = Catches_g_per_yr / 1e6)) +
 ## Lets Split the Skates catches based on biomass ratios of each
 
 ```{r}
-skate_ratio_wide <- read.csv("Ess_data/skate_ratios_biomass.csv") ## Skate ratios
+skate_ratio_wide <- read.csv("Ess_data/skate_ratios_biomass.csv")
 
-# ─────────────────────────────────────────────
-# 1. EXTRACT "SKATES UNSEPARATED"
-# ─────────────────────────────────────────────
-skates_unsep <- stat_grouped %>% filter(Species == "Skates Unseparated") %>%
+# 1. Extract BEFORE any filtering of stat_grouped
+skates_unsep <- stat_grouped %>%
+  filter(Species == "Skates Unseparated") %>%
   transmute(Year, Total_Skate = Catches_g_per_yr)
-# ─────────────────────────────────────────────
-# 2. PREPARE RATIO TABLE
-# ─────────────────────────────────────────────
+
+# 2. Prepare ratio table — restore spaces after read.csv
 skate_ratio_long <- skate_ratio_wide %>%
-  rename(Year = YEAR) %>% pivot_longer(cols = -Year, names_to = "Species", values_to = "Ratio" ) %>%
+  rename(Year = YEAR) %>%
+  pivot_longer(cols = -Year, names_to = "Species", values_to = "Ratio") %>%
+  mutate(Species = gsub("\\.", " ", Species)) %>%  # "Thorny.skate" -> "Thorny skate"
   filter(!is.na(Species), Species != "", !is.na(Ratio))
-# ─────────────────────────────────────────────
-# 3. COMPLETE ALL YEARS
-# ─────────────────────────────────────────────
-skate_ratio_filled <- skate_ratio_long %>% complete(Year = 1970:2024, Species) %>%
-  arrange(Species, Year) %>%  group_by(Species) %>% fill(Ratio, .direction = "downup") %>% ungroup()
 
-# ─────────────────────────────────────────────
-# 4. SPLIT AGGREGATED SKATE CATCHES
-# ─────────────────────────────────────────────
-skates_split <- skates_unsep %>% left_join(skate_ratio_filled, by = "Year") %>%
-  mutate( Catches_g_per_yr = Total_Skate * Ratio ) %>%
-  select( Year,Species,Catches_g_per_yr)
+# 3. Complete all years
+skate_ratio_filled <- skate_ratio_long %>%
+  complete(Year = 1960:2025, Species) %>%
+  arrange(Species, Year) %>%
+  group_by(Species) %>%
+  fill(Ratio, .direction = "downup") %>%
+  ungroup()
 
-# ─────────────────────────────────────────────
-# 5. REPLACE "SKATES UNSEPARATED"
-# ─────────────────────────────────────────────
-stat_grouped_split <- stat_grouped %>% filter(Species != "Skates Unseparated") %>%
-  bind_rows(skates_split) %>% arrange(Year, Species)
+# 4. Split catches by ratio
+skates_split <- skates_unsep %>%
+  left_join(skate_ratio_filled, by = "Year") %>%
+  mutate(Catches_g_per_yr = Total_Skate * Ratio) %>%
+  select(Year, Species, Catches_g_per_yr)
 
-# ─────────────────────────────────────────────
-# 6. CHECK SKATE SPLIT
-# ─────────────────────────────────────────────
-stat_grouped_split %>% filter(grepl("skate", Species, ignore.case = TRUE)) %>%
+# 5. Wide format
+skates_split_wide <- skates_split %>%
+  filter(Year >= 1970, Year <= 2025) %>%
+  pivot_wider(names_from = Species, values_from = Catches_g_per_yr, values_fill = 0) %>%
+  arrange(Year)
+
+# 6. Extract Thorny & Winter skate — no hardcoded column names
+skates_long <- skates_split_wide %>%
+  pivot_longer(cols = -Year, names_to = "Species", values_to = "Catches_g_per_yr") %>%
+  filter(Species %in% c("Thorny skate", "Winter skate")) %>%
+  mutate(Species = recode(Species,
+    "Thorny skate" = "Thorny Skate",
+    "Winter skate" = "Winter Skate"))
+
+# 7. Remove "Skates Unseparated" from stat_grouped (NOW safe)
+stat_grouped <- stat_grouped %>%
+  filter(Species != "Skates Unseparated") %>%
+  filter(Year >= 1970 & Year <= 2025)
+
+# 8. Check
+stat_grouped %>%
+  bind_rows(skates_long) %>% filter(grepl("skate", Species, ignore.case = TRUE)) %>%
   print(n = Inf)
 
-skates_split_wide <- skates_split %>%
-  filter(Year >= 1970, Year <= 2024) %>%
-  pivot_wider(names_from = Species,values_from = Catches_g_per_yr,values_fill = 0 ) %>%
-  arrange(Year)
-# remove Skates Unseparated" from catches 
-stat_grouped <- stat_grouped %>% filter(Species != "Skates Unseparated")%>%
-  filter(Year >= 1970 & Year <= 2024)
+# 9. Combine & widen
+stat_catches <- bind_rows(stat_grouped, skates_long) %>%arrange(Year, Species)
 
-skates_long <- skates_split_wide %>%
-  select(Year, Thorny.skate, Winter.skate) %>%
-  pivot_longer(cols = c(Thorny.skate, Winter.skate),
-    names_to = "Species", values_to = "Catches_g_per_yr" ) %>%
-  mutate(Species = recode(Species,"Thorny.skate" = "Thorny Skate","Winter.skate" = "Winter Skate" ))
+stat_catches_wide <- stat_catches %>%
+  pivot_wider(names_from = Species, values_from = Catches_g_per_yr)
 
-stat_catches <- bind_rows(stat_grouped, skates_long) # with Thorny Skate and Winter Skate now present
-stat_catches_wide <- stat_catches %>% pivot_wider(names_from = Species, values_from = Catches_g_per_yr)
 saveRDS(stat_catches_wide, file = "Ess_data/new_NAFO_4VW_Catches.RDS") # with the skate split
 #saveRDS(stat_grouped,"NAFO_4VW_Catches.RDS")
 
@@ -352,8 +356,8 @@ rownames(row_2021) <- "2021"
 effort_final <- rbind(effort_final[rownames(effort_final) <= "2020", , drop = FALSE],
   row_2021,effort_final[rownames(effort_final) >= "2022", , drop = FALSE])
  
-write.csv(effort_final,"Ess_data/effort_by_gear.csv",row.names = TRUE)
-
+write.csv(effort_final,"Ess_data/effort_by_gear.csv",row.names = TRUE) # also save as scaled mizer
+saveRDS(effort_final, "Ess_data/effort_by_gear.rds")
 # 7. PREPARE FOR PLOTTING
 plot_data <- as.data.frame(effort_final) %>%
   mutate(Year = as.numeric(rownames(effort_final))) %>%
