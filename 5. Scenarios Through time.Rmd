@@ -9,7 +9,7 @@ Set up directories
 ```{r setup, include=FALSE}
 library("here")
 dir <- setwd(here())
-knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/Eastern Scotian Shelf Model/")
+knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/ESS_restructured//")
 
 # Define the save directory
 save_dir <- paste0(here(), "/Ess_Output/")
@@ -23,7 +23,7 @@ randomize_interaction_matrix <- function(params, sdev = 0.1) {
   # Get current interaction matrix
   old_inter <- params@interaction
   # Get current interactions for seal predation 
-  old_seal <- gear_params(params)$catchability[14:26]
+  old_seal <- gear_params(params)$catchability
   
   # Create noise matrix with same dimensions
   n <- nrow(old_inter)
@@ -84,10 +84,10 @@ Set up packages:
 # Load required library
 library(mizer)
 library(mizerExperimental)
-library(Metrics)
+#library(Metrics)
 library(tidyverse)
-library(interp)
-library(hydroGOF)
+#library(interp)
+#library(hydroGOF)
 library(patchwork)
 library(ggpubr)
 ```
@@ -97,12 +97,13 @@ Read in params object
 # Read in params object 
 params_with_seal <- readRDS("Ess_data/params_with_seal_interaction.RDS")
 # Read in effort object
-effort_with_seal <- readRDS("Ess_data/effort_with_seal_matrix.RDS")
+effort_with_seal <- readRDS("Ess_data/effort_gear_with_seals.RDS")
+effort_with_seal <- subset(effort_with_seal, Year >= 1978 & Year <= 2024)
+rownames(effort_with_seal) <- effort_with_seal$Year
+effort_with_seal <- as.matrix(ews[, -1])   # drop Year column
 effort<-effort_with_seal
 # set up zero effort for sim without seals
 effort[,"Seals"]<-0
-#fix zero effort values for American Plaice
-#effort["2004","AMERICAN PLAICE"]<-sum(effort[c("2003","2005"),"AMERICAN PLAICE"])/2
 params = params_with_seal
 #Orignal run
 sim0 <- project(params,effort = effort)
@@ -111,15 +112,12 @@ plotlyBiomass(sim0)
 # Run single simulation with randomized matrix as a test
 rand_params <- randomize_interaction_matrix(params)
 sim1 <- project(rand_params,effort = effort)
-plot(sim1,time_range=c(1970:1980))
+plot(sim1,time_range=c(1978:1990))
 plotBiomassRelative(sim1,sim0)
 
-# use sam eparams object but set Seal "effort" to 0 for without additonal mort runs
-effort<-effort_with_seal
-effort[,"Seals"] <- 0
 # Run multiple simulations
-#sims_scen1 <- run_random_sims(params_with_seal, n_sims = 1000,effort_scen=effort,sd=0.2)
-# sims_scen2 <- run_random_sims(params_with_seal, n_sims = 1000,effort_scen=effort_with_seal,sd=0.2)
+sims_scen1 <- run_random_sims(params_with_seal, n_sims = 1,effort_scen=effort,sd=0.2)
+sims_scen2 <- run_random_sims(params_with_seal, n_sims = 1,effort_scen=effort_with_seal,sd=0.2)
 # 
 # # Save sim outputs
 # saveRDS(sims_scen1,"Ess_output/sims_scen1.RDS")
