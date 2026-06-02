@@ -125,9 +125,9 @@ mean_catch_nafo <- subset(yield_ts, Year <= max(years_to_use)) %>%
   ungroup() %>% arrange(factor(Species, levels = species_order))
 
 # set sandlance and capelin catches to NA; assume not fished (only sporadic catches)
-mean_catch_nafo$yield_observed[17] <- 0 # Sand Lance
-mean_catch_nafo$yield_observed[12] <- 0  # Capelin
-mean_catch_nafo$yield_observed[18] <- 0  # Longthorn scuplin
+mean_catch_nafo$yield_observed[12] <- NA  # Capelin
+mean_catch_nafo$yield_observed[17] <- NA # Sand Lance
+mean_catch_nafo$yield_observed[18] <- NA  # Longthorn scuplin
 ```
 
 
@@ -192,7 +192,7 @@ external_species_info<-select(external_species_info,c("species","w_max","w_mat",
 # - interaction = NULL: use default interaction matrix (intra = 1, inter = 0.2)
 # - kappa = 1e8: sets background resource carrying capacity
 # - gear_params: provides fishing gear selectivity and catchability
-params <- newMultispeciesParams(external_species_info,interaction = NULL, kappa = 1e12, gear_params = gear_params)
+params <- newMultispeciesParams(external_species_info,interaction = NULL, kappa = 1e8, gear_params = gear_params)
 
 ```
 
@@ -204,6 +204,7 @@ set up initial catchability using this mean relative effort and catchability of 
 ## gear_params(params)$catchability <- fishing_type$catchability
 
 gear_params(params)$catchability <- rep(1.0,19)
+
 gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
 
 ```
@@ -276,6 +277,7 @@ external_species_info<-select(external_species_info,c("species","w_max","w_mat",
 # #reasign for spp 8 (sandlance)
 external_species_info[17,"w_max"]<-154
 external_species_info[17,"w_mat"]<-15
+external_species_info[15,"w_mat"]<-0.2*external_species_info[17,"w_max"]
 
 params <- newMultispeciesParams(external_species_info,interaction = NULL, resource_dynamics = "resource_semichemostat",kappa = 1e8,gear_params = gear_params)
 resource_params(params)$w_pp_cutoff <- 100
@@ -286,6 +288,7 @@ Set up fishing gear parameters
 ```{r}
 #fishing_type = read.csv("Ess_data/Mat_knife_edge_gear_params2.csv")
 fishing_type$knife_edge_size <- external_species_info$w_mat
+fishing_type$catchability <- 1 
 names(fishing_type)[1] = "species"
 gear_params <- fishing_type
 gear_names <- gear_params$gear
@@ -488,23 +491,12 @@ Check how model responses to fishing - resilience to fishing is influenced by th
 
 # gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
 # # # get ratio of obs vs modelled yields, note sandlances are omitted so need to add in the vector with a 1 for sandlance
-ratio <- c(
-  plotYieldObservedVsModel(params, return_data = TRUE)$ratio[1:11],
-  1,
-  plotYieldObservedVsModel(params, return_data = TRUE)$ratio[12:16],
-  1,
-  plotYieldObservedVsModel(params, return_data = TRUE)$ratio[17:19])
+r <- plotYieldObservedVsModel(params, return_data = TRUE)$ratio
+ratio <- c(r[1:11],1, r[12:15], 1,1,r[16])
+
+ratio 
 # rerun match biomass, growth, & steady, but this time also estimating catchabilities, using matchYield, needed to produce the species reported yields
 # repeat below until minimising years to converge
-
-for ( i in 1:19){
-params<- params|>  matchYields()|> steady()
-}
- 
-
-plotYieldObservedVsModel(params, ratio = T)
-plotBiomassObservedVsModel(params, ratio = T)
-
 #check approx fishing mort not unrealistically large or small
 # 
 catchability = c(
@@ -529,6 +521,16 @@ catchability = c(
   0.03   # Atlantic Halibut      – very large, rare prey
 )
 gear_params(params)$catchability <-catchability
+
+gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
+for ( i in 1:19){
+params <- params|>  matchYield()|> steady()
+}
+ 
+plotYieldObservedVsModel(params, ratio = T)
+plotBiomassObservedVsModel(params, ratio = T)
+
+
 # ### adjust catcahbility for silver hake
 # gear_params(params)$catchability[9]<- 0.05
 # # adjust catcahbility for dogfish
@@ -547,14 +549,6 @@ gear_params(params)$catchability <-catchability
 # # adjust knife edge size for yellowtail
 # gear_params(params)$knife_edge_size[13]<-1.2*species_params(params)$w_mat[13]
 
-# check converges in 1.5 years
-
-for(i in 1:19){
-# try to match to catch instead of biomass for problem species
-params<-matchYields(params, species=c(1:19))
-#params<-matchBiomasses(params,species=c())
-params<-steady(params)
-}
 
 # # check calibration plots again
 plotYieldObservedVsModel(params, ratio = T,labels = F)
