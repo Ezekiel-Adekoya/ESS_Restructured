@@ -465,6 +465,7 @@ plotlyFeedingLevel(params)
 
 View Spectra
 ```{r}
+
 # Plot the model spectra (biomass across size classes for all species and resource)
 # - power = 2: scales the abundance spectrum to biomass (N(w) * w^2)
 # Useful to assess size structure and whether any species dominate unrealistically
