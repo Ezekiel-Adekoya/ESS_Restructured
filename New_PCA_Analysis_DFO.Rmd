@@ -208,31 +208,47 @@ write.csv(biomass_clean, "Ess_data/DFO_Biomass_selected_species.csv", row.names 
 # SKATE COMMUNITY ANALYSIS
 ```{r}
 # ─────────────────────────────────────────────
-# SKATE COMMUNITY ANALYSIS
+# SKATE COMMUNITY ANALYSIS — BUILD RATIO TABLE
 # ─────────────────────────────────────────────
 skate_long <- long_df_phase %>%
   filter(Species %in% c("SMOOTH SKATE", "BARNDOOR SKATE", "LITTLE SKATE", "WINTER SKATE", "THORNY SKATE")) %>%
-  group_by(YEAR, Species) %>% summarise(BIOMASS = sum(BIOMASS), .groups = "drop") %>%
+  group_by(YEAR, Species) %>%
+  summarise(BIOMASS = sum(BIOMASS), .groups = "drop") %>%
   mutate(Species = str_to_sentence(Species))
 
-# ─────────────────────────────────────────────
-# YEARLY RATIO TABLE (wide)
-# ─────────────────────────────────────────────
 skate_ratio_wide <- skate_long %>%
   group_by(YEAR) %>%
   mutate(
     Total_Skate  = sum(BIOMASS),
-    Pct_of_Skate = round(BIOMASS / Total_Skate, 3)) %>%
+    Pct_of_Skate = round(BIOMASS / Total_Skate, 3) ) %>%
   ungroup() %>% select(YEAR, Species, Pct_of_Skate) %>%
   pivot_wider(names_from = Species, values_from = Pct_of_Skate, values_fill = 0) %>%
   arrange(YEAR)
-
-print(skate_ratio_wide, n = Inf)
-
 write.csv(skate_ratio_wide, "Ess_data/skate_ratios_biomass.csv", row.names = FALSE)
 
 ```
 
+## SCULPIN  COMMUNITY ANALYSIS
+```{r}
+sculpin_long <- long_df_phase %>%
+  filter(Species %in% c("LONGHORN SCULPIN", "MAILED SCULPIN", "POLAR SCULPIN", 
+                         "SNOWFLAKE HOOKEAR SCULPIN", "SEA RAVEN")) %>%
+  group_by(YEAR, Species) %>%
+  summarise(BIOMASS = sum(BIOMASS), .groups = "drop") %>%
+  mutate(Species = str_to_sentence(Species))
+
+sculpin_ratio_wide <- sculpin_long %>%
+  group_by(YEAR) %>%
+  mutate(
+    Total_Sculpin  = sum(BIOMASS),
+    Pct_of_Sculpin = round(BIOMASS / Total_Sculpin, 3)) %>%
+  ungroup() %>%
+  select(YEAR, Species, Pct_of_Sculpin) %>%
+  pivot_wider(names_from = Species, values_from = Pct_of_Sculpin, values_fill = 0) %>%
+  arrange(YEAR)
+
+write.csv(sculpin_ratio_wide, "Ess_data/sculpin_ratios_biomass.csv", row.names = FALSE)
+```
 
 ## CLUSTER PLOT
 ```{r}

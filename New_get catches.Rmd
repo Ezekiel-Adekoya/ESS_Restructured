@@ -71,8 +71,7 @@ nafo_names <- c(
   "WITCH FLOUNDER - WIT",
   "SCULPINS (NS) - SCU",
   "CAPELIN - CAP",
-  "SKATES (NS) - SKA"             # FIX: removed trailing comma
-)
+  "SKATES (NS) - SKA")
 
 stat <- subset(stat, Species.Name %in% nafo_names)
 
@@ -197,11 +196,80 @@ stat_grouped %>%
   bind_rows(skates_long) %>% filter(grepl("skate", Species, ignore.case = TRUE)) %>%
   print(n = Inf)
 
-# 9. Combine & widen
-stat_catches <- bind_rows(stat_grouped, skates_long) %>%arrange(Year, Species)
+```
 
+
+
+```{r}
+sculpin_ratio_wide <- read.csv("Ess_data/sculpin_ratios_biomass.csv")
+
+# 1. Extract BEFORE any filtering of stat_grouped
+sculpins_unsep <- stat_grouped %>%
+  filter(Species == "Sculpins (NS)") %>%
+  transmute(Year, Total_Sculpin = Catches_g_per_yr)
+
+# 2. Prepare ratio table
+sculpin_ratio_long <- sculpin_ratio_wide %>%
+  rename(Year = YEAR) %>%
+  pivot_longer(cols = -Year, names_to = "Species", values_to = "Ratio") %>%
+  mutate(Species = gsub("\\.", " ", Species)) %>%
+  filter(!is.na(Species), Species != "", !is.na(Ratio))
+
+# 3. Complete all years
+sculpin_ratio_filled <- sculpin_ratio_long %>%
+  complete(Year = 1960:2025, Species) %>%
+  arrange(Species, Year) %>%
+  group_by(Species) %>%
+  fill(Ratio, .direction = "downup") %>%
+  ungroup()
+
+# 4. Split catches by ratio
+sculpins_split <- sculpins_unsep %>%
+  left_join(sculpin_ratio_filled, by = "Year") %>%
+  mutate(Catches_g_per_yr = Total_Sculpin * Ratio) %>%
+  select(Year, Species, Catches_g_per_yr)
+
+# 5. Wide format
+sculpins_split_wide <- sculpins_split %>%
+  filter(Year >= 1970, Year <= 2025) %>%
+  pivot_wider(names_from = Species, values_from = Catches_g_per_yr, values_fill = 0) %>%
+  arrange(Year)
+
+# 6. Extract Longhorn Sculpin only
+sculpins_long <- sculpins_split_wide %>%
+  pivot_longer(cols = -Year, names_to = "Species", values_to = "Catches_g_per_yr") %>%
+  filter(Species == "Longhorn sculpin") %>%
+  mutate(Species = recode(Species,
+    "Longhorn sculpin" = "Longhorn Sculpin"))
+
+# 7. Remove "Sculpins (NS)" from stat_grouped (NOW safe)
+stat_grouped <- stat_grouped %>% filter(Species != "Sculpins (NS)")
+
+# 8. Check
+stat_grouped %>%
+  bind_rows(sculpins_long) %>%
+  filter(grepl("sculpin", Species, ignore.case = TRUE)) %>%
+  print(n = Inf)
+
+# 9. Combine — build stat_catches fresh from stat_grouped + skates + sculpins
+stat_catches <- bind_rows(stat_grouped, skates_long, sculpins_long) %>%
+  arrange(Year, Species)
+```
+
+
+```{r}
 stat_catches_wide <- stat_catches %>%
+  group_by(Year, Species) %>%
+  summarise(Catches_g_per_yr = sum(Catches_g_per_yr, na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(names_from = Species, values_from = Catches_g_per_yr)
+species_order <- c(
+  "Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake",
+  "Pollock", "Redfish Unseparated", "American Plaice",
+  "Yellowtail Flounder", "Witch Flounder", "Atlantic Herring",
+  "Capelin", "Thorny Skate", "Winter Skate", "Spiny Dogfish",
+  "Monkfish", "Sand Lance", "Longhorn Sculpin", "Atlantic Halibut")
+
+stat_catches_wide <- stat_catches_wide %>% select(Year, all_of(species_order))
 
 saveRDS(stat_catches_wide, file = "Ess_data/new_NAFO_4VW_Catches.RDS") # with the skate split
 #saveRDS(stat_grouped,"NAFO_4VW_Catches.RDS")
@@ -217,7 +285,7 @@ stat_catches %>%
     strip.text = element_text(size = 7),
     axis.text.x = element_text(angle = 90, hjust = 1, size = 6),
     axis.text.y = element_text(size = 6) )
-# saveRDS(stat_grouped, file = "Ess_data/New_NAFO_4VW_Catches.RDS")
+
 ```
 
 ####### Effort Data: Explore STATLANT 21B Database
@@ -600,6 +668,22 @@ bottom_trawl <- data.frame(
 # ── COMBINE ALL ───────────────────────────────────────────────────────────────
 gear_params <- rbind(pelagic_gear, small_mesh_gear, fixed_gear, bottom_trawl)
 gear_params
+
+# Desired species order
+species_order <- c(
+  "Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake",
+  "Pollock", "Redfish Unseparated", "American Plaice", "Yellowtail Flounder",
+  "Witch Flounder", "Atlantic Herring", "Capelin", "Thorny Skate",
+  "Winter Skate", "Spiny Dogfish", "Monkfish", "Sand Lance",
+  "Longhorn Sculpin", "Atlantic Halibut"
+)
+
+# Reorder rows
+gear_params$species <- factor(gear_params$species, levels = species_order)
+
+gear_params <- gear_params[order(gear_params$species), ]
+rownames(gear_params) <- NULL
+
 
 write.csv(gear_params, "Ess_data/new.gear_params.csv", row.names = FALSE)
 

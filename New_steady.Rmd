@@ -25,6 +25,7 @@ library(patchwork)
 library(dplyr)
 library(tidyr)
 library(tibble)
+library(zoo)
 ```
 
 
@@ -48,7 +49,7 @@ species_lookup <- c(
   "Pollachius virens"              = "Pollock",
   "Sebastes fasciatus"             = "Redfish Unseparated",
   "Hippoglossoides platessoides"   = "American Plaice",
-  "Myzopsetta ferruginea"             = "Yellowtail Flounder",  ## Limanda ferruginea
+  "Myzopsetta ferruginea"          = "Yellowtail Flounder",  ## Limanda ferruginea
   "Glyptocephalus cynoglossus"     = "Witch Flounder", 
   "Clupea harengus"                = "Atlantic Herring",
   "Mallotus villosus"              = "Capelin",
@@ -60,10 +61,11 @@ species_lookup <- c(
   "Myoxocephalus octodecemspinosus" = "Longhorn Sculpin",
   "Hippoglossus hippoglossus"      = "Atlantic Halibut")
 
-species_order <- c( "Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake","Pollock", 
-                    "Redfish Unseparated","American Plaice", "Yellowtail Flounder","Witch Flounder", 
-                    "Atlantic Herring","Capelin", "Thorny Skate", "Winter Skate", "Spiny Dogfish", 
-                    "Monkfish", "Sand Lance", "Longhorn Sculpin", "Atlantic Halibut")
+species_order <- c( "Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake",
+                    "Pollock", "Redfish Unseparated","American Plaice", "Yellowtail Flounder",
+                    "Witch Flounder", "Atlantic Herring","Capelin", "Thorny Skate", 
+                    "Winter Skate", "Spiny Dogfish", "Monkfish", "Sand Lance",
+                    "Longhorn Sculpin",  "Atlantic Halibut")
 
 external_species_info <- read.csv("Ess_data/ESS_species_params.csv") |>
  #Hartvig et al. 2011 ; preferred (roughly) should be realised ppmr divided by 2
@@ -76,25 +78,28 @@ external_species_info <- read.csv("Ess_data/ESS_species_params.csv") |>
   filter(!is.na(Species)) |> arrange(Species) |> mutate(Species = as.character(Species)) |>
   rename(species = Species)
 
-years_to_use<-as.character(1978:1992) #Assign years for the reference period
+years_to_use<-as.character(1978:1985) #Assign years for the reference period
 
 # #The initial Rmax was estimated from an empirical equation as in (Blanchard et al., 2014)
-external_species_info <- external_species_info |> mutate(R_max = 10^11 * w_max^-1.5) 
+external_species_info <- external_species_info |> mutate(R_max = 10^13 * w_max^-1.5) 
 external_species_info
 ```
 
 Read in catch data/Subset and average the catch data 
 
 ```{r}
+
 catches <- readRDS("Ess_data/new_NAFO_4VW_Catches.RDS")
 catches <- as.data.frame(catches)
+catches[is.na(catches)] <- 0
 
-yield_ts <- catches %>%
-    filter(Year %in% 1978:2024) %>% rename(`Longhorn Sculpin` = `Sculpins (NS)`) %>%
+catches$Capelin <- 0 # No capelin fished just as sandlance
+yield_ts <- catches %>% filter(Year %in% 1978:2024) %>%
     pivot_longer( cols = -Year, names_to = "Species",values_to = "Yield") %>%
     mutate( Yield = replace_na(Yield, 0))
 
 ## Check plot 
+yield_ts$Species <- factor( yield_ts$Species,levels = unique(yield_ts$Species))
 ggplot(yield_ts, aes(x = Year, y = Yield)) + geom_line(linewidth = 0.4) +
   facet_wrap(~ Species, scales = "free_y", ncol = 4) +
   theme_minimal(base_size = 8) +
@@ -109,15 +114,20 @@ ggplot(yield_ts, aes(x = Year, y = Yield)) + geom_line(linewidth = 0.4) +
 
 Aggregate to mean observed yield between 1970 and 1985 
 ```{r}
-#Aggregate to mean observed catch 
+## Aggregate to mean observed catch 
+## Aritmetric mean
+# mean_catch_nafo <- subset(yield_ts, Year<=max(years_to_use))%>%
+#   group_by(Species)%>%
+#   summarise(yield_observed =mean(Yield,  na.rm = T))
+## Geom mean
 mean_catch_nafo <- subset(yield_ts, Year <= max(years_to_use)) %>%
-  group_by(Species) %>%
-  summarise(yield_observed = mean(Yield, na.rm = TRUE)) %>%
+  group_by(Species) %>% summarise(yield_observed = exp(mean(log(Yield[Yield > 0]), na.rm = TRUE))) %>%
   ungroup() %>% arrange(factor(Species, levels = species_order))
-# set sandlance catches to NA; assume not fished (only sporadic catches)
+
+# set sandlance and capelin catches to NA; assume not fished (only sporadic catches)
 mean_catch_nafo$yield_observed[17] <- 0 # Sand Lance
 mean_catch_nafo$yield_observed[12] <- 0  # Capelin
-
+mean_catch_nafo$yield_observed[18] <- 0  # Longthorn scuplin
 ```
 
 
@@ -142,9 +152,12 @@ library(reshape2)
 biomass_obs_sub <- subset(biomass_obs, Year >= 1978 & Year <= 2024)
 biomass_ts <- reshape2::melt(biomass_obs_sub, id.vars = 1)
 names(biomass_ts)<-c("Year","Species","Biomass")
-
-mean_biomass_obs <- subset(biomass_ts, Year<=max(years_to_use))%>%
-  group_by(Species)%>% summarise(biomass_observed =mean(Biomass,  na.rm = T))
+## Arithmetic mean
+# mean_biomass_obs <- subset(biomass_ts, Year<=max(years_to_use))%>%
+#   group_by(Species)%>% summarise(biomass_observed =mean(Biomass,  na.rm = T))
+## Geom mean
+mean_biomass_obs <- subset(biomass_ts, Year <= max(years_to_use)) %>%
+  group_by(Species) %>% summarise( biomass_observed = exp(mean(log(Biomass[Biomass > 0]), na.rm = TRUE)))
 
 mean_biomass_obs$biomass_observed<- ifelse(is.nan( mean_biomass_obs$biomass_observed),NA,  mean_biomass_obs$biomass_observed)
 
@@ -153,6 +166,7 @@ mean_biomass_obs$biomass_observed<- ifelse(is.nan( mean_biomass_obs$biomass_obse
 Introduce catch and ssb into data
 minimum size in survey - assume 10 but check the DFO spreadsheet
 ```{r}
+
 #Assign obeserved biomas and catches to species
 external_species_info$biomass_observed <- mean_biomass_obs$biomass_observed
 external_species_info$yield_observed <- mean_catch_nafo$yield_observed
@@ -183,13 +197,13 @@ params <- newMultispeciesParams(external_species_info,interaction = NULL, kappa 
 ```
 
 
-
-
 set up initial catchability using this mean relative effort and catchability of 1 as initial value only - BUT WILL ESTIMARE LATER
 ```{r}
 #assume catchability of 1, will be estimated further down
 
-gear_params(params)$catchability <- fishing_type$catchability
+## gear_params(params)$catchability <- fishing_type$catchability
+
+gear_params(params)$catchability <- rep(1.0,19)
 gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
 
 ```
@@ -285,7 +299,7 @@ set intial effort as mean_effort
 # Load time-varying fishing effort data (relative effort by gear or species)
 effort_final <- read.csv("Ess_data/effort_by_gear.csv",row.names = 1)
 fishing_history <- effort_final
-years_to_use <- as.character(1978:1992)
+years_to_use <- as.character(1978:1985)
 mean_effort <- colMeans(fishing_history[years_to_use, ]) # MEan effort by gear
 
 # Set initial fishing effort in the model to the average over the reference period
@@ -301,225 +315,76 @@ guild feeding
 
 ```{r}
 
-# ─────────────────────────────────────────────────────────────
-# SPECIES INTERACTION MATRIX
-# Ecologically softened version for stable mizer dynamics
-# Based on:
-# - Schoener overlap guilds
-# - Cook & Bundy (2010) diet composition
-# - Reduced interaction intensity for numerical stability
-# ─────────────────────────────────────────────────────────────
-# -------------------------------------------------------------
-# BASELINE
-# -------------------------------------------------------------
-# Weak default interaction among species
-inter <- matrix(0.2,
-                nrow = nrow(species_params(params)),
-                ncol = nrow(species_params(params)),
-                dimnames = list(species_params(params)$species,
-                                species_params(params)$species))
-
-# modest self-regulation
-diag(inter) <- 0.2
-
-# Pelagic / forage-associated species
-pelagics <- c("Atlantic Herring","Capelin","Silver Hake","Red Hake","Sand Lance")
-
-# Mid-water demersal species
-mid_water <- c("White Hake","Pollock","Redfish Unseparated")
-
-# Benthic feeders
-benthivores <- c( "Haddock","American Plaice","Yellowtail Flounder","Witch Flounder","Longhorn Sculpin")
-
-# Large piscivores
-piscivores <- c("Atlantic Cod","Spiny Dogfish","White Hake","Monkfish")
-
-# Large skates / halibut
-large_elasmo <- c("Thorny Skate","Winter Skate","Atlantic Halibut")
-
-# -------------------------------------------------------------
-# WITHIN-GUILD OVERLAP
-# -------------------------------------------------------------
-
-# Moderate overlap among pelagic species
-inter[pelagics, pelagics] <- 0.35
-
-# Moderate overlap among benthic species
-inter[benthivores, benthivores] <- 0.30
-
-# Moderate overlap among piscivores
-inter[piscivores, piscivores] <- 0.30
-
-# Mid-water overlap
-inter[mid_water, mid_water] <- 0.25
-
-# -------------------------------------------------------------
-# PREDATOR → PREY PREFERENCES
-# rows = predator
-# cols = prey
-# -------------------------------------------------------------
-# Piscivores strongly consume pelagic prey
-inter[piscivores, pelagics] <- 0.50
-
-# Moderate predation on mid-water fishes
-inter[piscivores, mid_water] <- 0.35
-
-# Weak-moderate predation on benthic species
-inter[piscivores, benthivores] <- 0.25
-
-# Benthivores weakly consume pelagic prey
-inter[benthivores, pelagics] <- 0.10
-
-# Mid-water predators moderately consume pelagics
-inter[mid_water, pelagics] <- 0.35
-
-# Mid-water predators weakly consume benthic prey
-inter[mid_water, benthivores] <- 0.20
-
-# -------------------------------------------------------------
-# LARGE ELASMOBRANCH / HALIBUT VULNERABILITY
-# -------------------------------------------------------------
-
-# Reduced but non-zero vulnerability
-inter[, large_elasmo] <- 0.15
-
-# Large predators occasionally consume them
-inter[piscivores, large_elasmo] <- 0.25
-
-# Dogfish less effective on large skates/halibut
-inter["Spiny Dogfish", large_elasmo] <- 0.10
-
-# -------------------------------------------------------------
-# SPECIES-SPECIFIC ADJUSTMENTS
-# -------------------------------------------------------------
-
-# White hake more piscivorous
-inter["White Hake", benthivores] <- 0.15
-inter["White Hake", "Sand Lance"] <- 0.60
-
-# Haddock primarily benthic feeder
-inter["Haddock", pelagics] <- 0.15
-inter["Haddock", piscivores] <- 0.05
-
-# Atlantic Halibut mainly demersal ambush predator
-inter["Atlantic Halibut", pelagics] <- 0.15
-inter["Atlantic Halibut", benthivores] <- 0.50
-
-# Thorny skate deeper offshore than winter skate
-inter["Thorny Skate", "Winter Skate"] <- 0.10
-inter["Winter Skate", "Thorny Skate"] <- 0.10
-
-# -------------------------------------------------------------
-# STABILITY ADJUSTMENTS
-# -------------------------------------------------------------
-
-# Reduce vulnerability of slow-growing species
-inter[, "Spiny Dogfish"] <- 0.02
-inter[, "American Plaice"] <- inter[, "American Plaice"] * 0.60
-inter[, "Redfish Unseparated"] <- inter[, "Redfish Unseparated"] * 0.50
-
-# Weak cannibalism for dogfish
-inter["Spiny Dogfish", "Spiny Dogfish"] <- 0.05
-
-# Reduce predation pressure on redfish
-inter["Atlantic Cod", "Redfish Unseparated"] <- 0.10
-inter["White Hake", "Redfish Unseparated"] <- 0.10
-inter["Monkfish", "Redfish Unseparated"] <- 0.10
-
-
-# -------------------------------------------------------------
-# FINAL ASSIGNMENT
-# ------------------------------------------------------------
-
-params <- setInteraction(params, inter)
-
-```
-
-##  Predator–prey interaction matrix
-```{r}
-
-library(RColorBrewer)
-
-# Species names
-species <- c(
-  "Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake","Pollock", 
-  "Redfish Unseparated", "American Plaice", "Yellowtail Flounder",
-  "Witch Flounder", "Atlantic Herring", "Capelin", "Thorny Skate","Winter Skate", 
-  "Spiny Dogfish", "Monkfish", "Sand Lance","Longhorn Sculpin", "Atlantic Halibut")
-
-n <- length(species)
-
-# Initialize matrix
-inter <- matrix(0.2, nrow = n, ncol = n,
-                dimnames = list(species, species))
-diag(inter) <- 0.2
-
-# Guild definitions
 pelagics     <- c("Atlantic Herring", "Capelin", "Silver Hake", "Red Hake", "Sand Lance")
 mid_water    <- c("White Hake", "Pollock", "Redfish Unseparated")
 benthivores  <- c("Haddock", "American Plaice", "Yellowtail Flounder", "Witch Flounder", "Longhorn Sculpin")
 piscivores   <- c("Atlantic Cod", "Spiny Dogfish", "White Hake", "Monkfish")
 large_elasmo <- c("Thorny Skate", "Winter Skate", "Atlantic Halibut")
 
+inter <- matrix(
+  0.2,
+  nrow     = nrow(species_params(params)),
+  ncol     = nrow(species_params(params)),
+  dimnames = list(species_params(params)$species, species_params(params)$species)
+)
+diag(inter) <- 0.2
+
 # Within-guild overlap
-inter[pelagics, pelagics]       <- 0.35
+inter[pelagics,    pelagics]    <- 0.35
 inter[benthivores, benthivores] <- 0.30
-inter[piscivores, piscivores]   <- 0.30
-inter[mid_water, mid_water]     <- 0.25
+inter[piscivores,  piscivores]  <- 0.30
+inter[mid_water,   mid_water]   <- 0.25
 
-# Predator-prey
-inter[piscivores, pelagics]    <- 0.50
-inter[piscivores, mid_water]   <- 0.35
-inter[piscivores, benthivores] <- 0.25
-inter[benthivores, pelagics]   <- 0.10
-inter[mid_water, pelagics]     <- 0.35
-inter[mid_water, benthivores]  <- 0.20
+# Predator–prey
+inter[piscivores,  pelagics]    <- 0.50
+inter[piscivores,  mid_water]   <- 0.35
+inter[piscivores,  benthivores] <- 0.25
+inter[benthivores, pelagics]    <- 0.10
+inter[mid_water,   pelagics]    <- 0.35
+inter[mid_water,   benthivores] <- 0.20
 
-# Large elasmobranchs
+# Large elasmobranchs / halibut
 inter[, large_elasmo]                <- 0.15
-inter[piscivores, large_elasmo]      <- 0.25
+inter[piscivores,  large_elasmo]     <- 0.25
 inter["Spiny Dogfish", large_elasmo] <- 0.10
 
 # Species-specific
-inter["White Hake", benthivores]       <- 0.15
-inter["White Hake", "Sand Lance"]      <- 0.60
-inter["Haddock", pelagics]             <- 0.15
-inter["Haddock", piscivores]           <- 0.05
-inter["Atlantic Halibut", pelagics]    <- 0.15
-inter["Atlantic Halibut", benthivores] <- 0.50
-inter["Thorny Skate", "Winter Skate"]  <- 0.10
-inter["Winter Skate", "Thorny Skate"]  <- 0.10
+inter["White Hake",      benthivores]       <- 0.15
+inter["White Hake",      "Sand Lance"]      <- 0.60
+inter["Haddock",         pelagics]          <- 0.15
+inter["Haddock",         piscivores]        <- 0.05
+inter["Atlantic Halibut", pelagics]         <- 0.15
+inter["Atlantic Halibut", benthivores]      <- 0.50
+inter["Thorny Skate",    "Winter Skate"]    <- 0.10
+inter["Winter Skate",    "Thorny Skate"]    <- 0.10
 
 # Stability adjustments
 inter[, "Spiny Dogfish"]                     <- 0.02
 inter[, "American Plaice"]                   <- inter[, "American Plaice"] * 0.60
-inter[, "Redfish Unseparated"]               <- inter[, "Redfish Unseparated"] * 0.50
-inter["Spiny Dogfish", "Spiny Dogfish"]      <- 0.05
-inter["Atlantic Cod", "Redfish Unseparated"] <- 0.10
-inter["White Hake", "Redfish Unseparated"]   <- 0.10
-inter["Monkfish", "Redfish Unseparated"]     <- 0.10
+inter[, "Redfish Unseparated"]               <- inter[, "Redfish Unseparated"]  * 0.50
+inter["Spiny Dogfish",     "Spiny Dogfish"]  <- 0.05
+inter["Atlantic Cod",  "Redfish Unseparated"] <- 0.10
+inter["White Hake",    "Redfish Unseparated"] <- 0.10
+inter["Monkfish",      "Redfish Unseparated"] <- 0.10
 
-# Melt to long format
-inter_long <- reshape2::melt(inter,
-                   varnames   = c("Predator", "Prey"),
-                   value.name = "InteractionStrength")
+params <- setInteraction(params, inter)
 
-# Diverging palette, red = high, blue = low
+
+```
+
+##  Predator–prey interaction matrix
+```{r}
+
+inter_long <- melt(inter, varnames = c("Predator", "Prey"), value.name = "InteractionStrength")
 pal <- rev(brewer.pal(11, "RdBu"))
 
-# Plot
-heatmap_plot <- ggplot(inter_long,
-                       aes(x = Prey, y = Predator, fill = InteractionStrength)) +
+heatmap_plot <- ggplot(inter_long, aes(x = Prey, y = Predator, fill = InteractionStrength)) +
   geom_tile(color = "white", linewidth = 0.1) +
-  scale_fill_gradientn(
-    colors = pal,
-    limits = c(-1, 1),
-    breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  scale_fill_gradientn(colors = pal, limits = c(-1, 1), breaks = c(-1, -0.5, 0, 0.5, 1)) +
   labs(x = "Prey Species", y = "Predator Species") +
   theme_minimal(base_family = "Arial") +
   theme(
-    axis.text.x      = element_text(angle = 90, hjust = 0.5, vjust = 0.5,
-                                    size = 10, face = "bold"),
+    axis.text.x      = element_text(angle = 90, hjust = 0.5, vjust = 0.5, size = 10, face = "bold"),
     axis.text.y      = element_text(size = 10, face = "bold"),
     axis.title       = element_text(size = 10, face = "bold"),
     legend.title     = element_blank(),
@@ -529,7 +394,8 @@ heatmap_plot <- ggplot(inter_long,
     panel.background = element_blank()
   )
 
-print(heatmap_plot)
+heatmap_plot
+
 ```
 
 Run params to steady state
@@ -621,19 +487,22 @@ Check how model responses to fishing - resilience to fishing is influenced by th
 
 # gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
 # # # get ratio of obs vs modelled yields, note sandlances are omitted so need to add in the vector with a 1 for sandlance
-# d <- plotYieldObservedVsModel(params, return_data = TRUE)$ratio
-# ratio <- c(d[1:11],1,d[12:15],1,d[16:17])
-# 
-# # rerun match biomass, growth, & steady, but this time also estimating catchabilities, using matchYield, needed to produce the species reported yields
-# # repeat below until minimising years to converge
-# 
-# for ( i in 1:19){
-# params<- params|> matchBiomasses()|> matchYield()|> steady()
-# }
-# 
-# plotYieldObservedVsModel(params, ratio = T)
-# plotBiomassObservedVsModel(params, ratio = T)
-# 
+ratio <- c(
+  plotYieldObservedVsModel(params, return_data = TRUE)$ratio[1:11],
+  1,
+  plotYieldObservedVsModel(params, return_data = TRUE)$ratio[12:16],
+  1,
+  plotYieldObservedVsModel(params, return_data = TRUE)$ratio[17:19])
+# rerun match biomass, growth, & steady, but this time also estimating catchabilities, using matchYield, needed to produce the species reported yields
+# repeat below until minimising years to converge
+
+for ( i in 1:19){
+params<- params|>  matchYields()|> steady()
+}
+ 
+
+plotYieldObservedVsModel(params, ratio = T)
+plotBiomassObservedVsModel(params, ratio = T)
 
 #check approx fishing mort not unrealistically large or small
 # 
@@ -682,7 +551,7 @@ gear_params(params)$catchability <-catchability
 for(i in 1:19){
 # try to match to catch instead of biomass for problem species
 params<-matchYields(params, species=c(1:19))
-params<-matchBiomasses(params,species=c())
+#params<-matchBiomasses(params,species=c())
 params<-steady(params)
 }
 
@@ -708,7 +577,7 @@ rep_tuned
 If needed, tuned reproduction_level to produce desire Fmsy for each species (viewed per species)
 
 ```{r}
-   # rep_tuned <- rep(0.5,19)
+   rep_tuned <- rep(0.5,19)
    rep_tuned[8:12] <- 0.3 # witch flounder yellow flounder american place and capelin
    rep_tuned[17] <- 0.3 # Sandlance
    params <- setBevertonHolt(params, reproduction_level = rep_tuned)
@@ -821,34 +690,39 @@ Check diet proportions of each species in predator diets, can compare with Table
 
 ```{r}
 #Calculate proportion of each species in each species diet across pred and prey  sizes 
-#diet <- data.frame(reshape2::melt(d4))
-diet<-data.frame(melt(apply(getDiet(params)[,which(params@w>10),1:19], c(1,3),sum)/rowSums(apply(getDiet(params)[,which(params@w>10),1:19], c(1,3),sum)[,])))
+diet <- data.frame(
+  melt( apply(getDiet(params)[, which(params@w > 10), 1:19], c(1, 3), sum) /
+      rowSums(apply(getDiet(params)[, which(params@w > 10), 1:19], c(1, 3), sum)[, ])))
 
-predator<-levels(diet $predator)<- c("Atlantic Cod","Haddock", "White Hake", "Red Hake", "Silver Hake", "Pollock","Redfish Unseparated","American Plaice", "Yellowtail Flounder","Witch Flounder","Atlantic Herring","Capelin","Thorny Skate","Winter Skate","Spiny Dogfish", "Monkfish","Sand Lance", "Longhorn Sculpin","Atlantic Halibut")
-diet <- diet %>%
-  rename(Prey= prey, Predator= predator, Ratio = value )
-diet_interaction <- ggplot(diet, aes(fill = Prey, x = Predator, y = Ratio)) + 
-  geom_bar(position = "stack", stat = "identity") + 
+levels(diet$predator) <- c(
+  "Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake", "Pollock",
+  "Redfish Unseparated", "American Plaice", "Yellowtail Flounder", "Witch Flounder",
+  "Atlantic Herring", "Capelin", "Thorny Skate", "Winter Skate", "Spiny Dogfish",
+  "Monkfish", "Sand Lance", "Longhorn Sculpin", "Atlantic Halibut")
+
+diet <- diet |> rename(Prey = prey, Predator = predator, Ratio = value)
+diet_interaction <- ggplot(diet, aes(fill = Prey, x = Predator, y = Ratio)) +
+  geom_bar(position = "stack", stat = "identity") +
   coord_flip() +
   theme(
-    panel.background = element_blank(),  # Remove background behind the plot
-    plot.background = element_blank(),   # Remove background for the entire plot
-    axis.title.x = element_text(face = "bold", size = 11),  # Bolden x-axis title
-    axis.title.y = element_text(face = "bold", size = 11),
-    axis.text.x = element_text(face = "bold", size = 9),
-    axis.text.y = element_text(face = "bold", size = 9),
-    legend.text = element_text(face = "bold", size =9), # Bolden y-axis title
-    legend.title = element_text(face = "bold", size = 11) #
-  ) +
-  labs(x = "Predator", y = "Ratio")  # Ensure axis labels are explicitly set
-ggsave(filename = paste0(save_dir, "diet_interaction.jpeg"), plot = diet_interaction,
-       width = 11, height = 8.5, units = "in",dpi = 400)
-diet_interaction
-# with resource
-diet <- data.frame(melt(apply(getDiet(params)[,which(params@w>10),], c(1,3),sum)/rowSums(apply(getDiet(params)[,which(params@w>10),], c(1,3),sum)[,])))
+    panel.background = element_blank(),
+    plot.background  = element_blank(),
+    axis.title       = element_text(face = "bold", size = 11),
+    axis.text        = element_text(face = "bold", size = 9),
+    legend.text      = element_text(face = "bold", size = 9),
+    legend.title     = element_text(face = "bold", size = 11)
+  ) + labs(x = "Predator", y = "Ratio")
 
-ggplot(diet,aes(fill = prey, x = predator, y = value)) + 
-    geom_bar(position = "stack", stat = "identity") + coord_flip()
+diet_interaction
+ggsave(filename = paste0(save_dir, "diet_interaction.jpeg"), plot = diet_interaction,
+       width = 11, height = 8.5, units = "in", dpi = 400)
+
+# Diet including resource
+diet_full <- data.frame(melt(apply(getDiet(params)[, which(params@w > 10), ], c(1, 3), sum) / rowSums(apply(getDiet(params)[, which(params@w > 10), ], c(1, 3), sum)[, ])))
+
+ggplot(diet_full, aes(fill = prey, x = predator, y = value)) +
+  geom_bar(position = "stack", stat = "identity") +
+  coord_flip()
 
 ```
 
@@ -1146,7 +1020,6 @@ ggplot(filter(yield_sim_base,Species!="Sand Lances"),aes(x = Year, y = Yield, gr
     scale_colour_manual(values=params@linecolour)
 
 ```
-
 
 Test with Additional predation mortality on all spp
 Introduction of New gears (named: seal)
