@@ -108,9 +108,11 @@ write.csv(scotian_extrap, "scotian_shelf_logistic_1960_2025.csv", row.names = FA
 # produced by New_get catches.R. Scale each gear 0-1 relative to its own max,
 # then append seal abundance scaled to its full-series max (1960-2025).
 
-effort_gear <- readRDS("Ess_data/effort_by_gear.rds")
-effort_gear$Year <- as.integer(rownames(effort_gear))
-rownames(effort_gear) <- NULL
+fishing_history <- read.csv("Ess_data/effort_by_gear.csv")
+# Drop index column X, subset to model years
+effort_gear <- fishing_history[fishing_history$Year %in% 1970:2024,
+                               c("Year", "Bottom_Trawl", "Fixed_Gear", "Pelagic", "Small_Mesh")]
+rownames(effort_gear) <- effort_gear$Year
 
 gear_cols <- setdiff(colnames(effort_gear), "Year")
 effort_gear_scaled <- effort_gear

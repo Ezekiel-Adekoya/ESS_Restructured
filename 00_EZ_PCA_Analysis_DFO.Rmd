@@ -30,7 +30,7 @@ stat <- read.csv("Ess_data/LF_Biomass_Abund.csv")
 # ─────────────────────────────────────────────
 biomass_wide <- stat %>%
   filter(!is.na(STRAT), STRAT != "") %>%
-  filter(suppressWarnings(as.numeric(STRAT)) >= 440,
+  filter(suppressWarnings(as.numeric(STRAT)) >= 443,
          suppressWarnings(as.numeric(STRAT)) <= 466) %>%
   filter(SPEC < 1000) %>%
   group_by(YEAR, COMMON_NAME) %>%

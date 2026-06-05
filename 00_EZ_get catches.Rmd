@@ -40,7 +40,7 @@ head(stat)
 # 45,4VS
 # 46,4W
 
-stat <- subset(stat, Division %in% c("4VS","4VN", "4W"))
+stat <- subset(stat, Division %in% c("4VS", "4W"))
 # take a look 
 #head(stat)
 ```
@@ -395,7 +395,7 @@ mizer_effort_matrix <- nafo_mizer %>%
   pivot_wider(names_from = Mizer_Gear, values_from = Yearly_kW_Days, values_fill = NA) %>%
   arrange(Year) %>%
   # Fill the gaps: Replace NAs with interpolated values
-  mutate(across(c(Bottom_Trawl, Fixed_Gear, Pelagic, Small_Mesh), 
+  mutate(across(c(Bottom_Trawl, Fixed_Gear, Small_Mesh, Pelagic), 
    ~na.approx(., na.rm = FALSE))) %>%
   # Handle the edges (years before/after data exists for specific gears)
   fill(everything(), .direction = "updown") %>%
@@ -423,6 +423,7 @@ rownames(row_2021) <- "2021"
 # Insert 2021 into matrix
 effort_final <- rbind(effort_final[rownames(effort_final) <= "2020", , drop = FALSE],
   row_2021,effort_final[rownames(effort_final) >= "2022", , drop = FALSE])
+ effort_final <- data.frame(Year = as.numeric(rownames(effort_final)),effort_final,row.names = NULL)
  
 write.csv(effort_final,"Ess_data/effort_by_gear.csv",row.names = TRUE) # also save as scaled mizer
 saveRDS(effort_final, "Ess_data/effort_by_gear.rds")
@@ -535,8 +536,7 @@ halibut_update <- data.frame(
   l25 = 70,
   l50_right = NA,                      # Not needed for sigmoid
   l25_right = NA,
-  catchability = 0.1
-)
+  catchability = 0.1)
 
 # 3. Update your main gear_params table
 # (Remove old Fixed_Gear rows and bind these new ones)
