@@ -25,6 +25,7 @@ library(ggplot2)
 ```
 
 ```{r}
+
 stat <- read.csv("Ess_data/reviewed.STATLANT 21A 4VX.csv") ## Updated
 
 # take a look 
@@ -43,6 +44,7 @@ head(stat)
 stat <- subset(stat, Division %in% c("4VS", "4W"))
 # take a look 
 #head(stat)
+
 ```
 
 # Select species pof Interest

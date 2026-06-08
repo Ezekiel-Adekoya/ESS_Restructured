@@ -358,10 +358,16 @@ catches <- as.data.frame(catches)
 catches[is.na(catches)] <- 0
 
 catches$Capelin <- 0 # No capelin fished just as sandlance
-yield_ts <- catches %>% filter(Year %in% 1978:2024) %>%
-    pivot_longer( cols = -Year, names_to = "Species",values_to = "Yield") %>%
-    mutate( Yield = replace_na(Yield, 0))
-saveRDS(yield_ts, "Ess_data/yield_ts.RDS") 
+yield_ts <- catches |>
+  filter(Year %in% 1978:2024) |>
+  pivot_longer(cols = -Year, names_to = "Species", values_to = "Yield") |>
+  mutate(Yield = replace_na(Yield, 0))
+
+saveRDS(yield_ts, "Ess_data/yield_ts.RDS")
+
+# Check plot
+yield_ts$Species <- factor(yield_ts$Species, levels = unique(yield_ts$Species))
+ 
 ## Check plot 
 yield_ts$Species <- factor(yield_ts$Species,levels = unique(yield_ts$Species))
 ggplot(yield_ts, aes(x = Year, y = Yield)) + geom_line(linewidth = 0.4) +
@@ -759,8 +765,6 @@ plotlyFMort(params_my)
  plotYieldObservedVsModel(params_steady,ratio=T)
  plotBiomassObservedVsModel(params_steady,ratio=T)
  plotlyFMort(params_steady)
- 
-
 
 ```
 
@@ -866,8 +870,7 @@ ggsave(filename = paste0(save_dir, "diet_interaction.jpeg"), plot = diet_interac
 diet_full <- data.frame(melt(apply(getDiet(params)[, which(params@w > 10), ], c(1, 3), sum) / rowSums(apply(getDiet(params)[, which(params@w > 10), ], c(1, 3), sum)[, ])))
 
 ggplot(diet_full, aes(fill = prey, x = predator, y = value)) +
-  geom_bar(position = "stack", stat = "identity") +
-  coord_flip()
+  geom_bar(position = "stack", stat = "identity") + coord_flip()
 
 ```
 
@@ -875,10 +878,8 @@ Create size spectrum plots by species with size distribution data from DFO RV Tr
 
 ```{r}
 stat <- read.csv("Ess_data/LF_Biomass_Abund.csv")
-
 # ------------------------------------------------------------
 # 1. Load and reshape biomass-at-length to long format
-# ------------------------------------------------------------
 bio_size <- stat |> filter(YEAR >= 1978, YEAR <= 1985) |>
   select(Year = YEAR,species_name_raw = COMMON_NAME,
     length_cm = FLEN, Biomass = Biomass_Strata_KG) |>
@@ -886,7 +887,6 @@ bio_size <- stat |> filter(YEAR >= 1978, YEAR <= 1985) |>
     length_cm = ifelse(species_name_raw == "HERRING(ATLANTIC)" & length_cm > 50,length_cm / 10,length_cm),
     Species = species_code_lookup[species_name_raw]) |>
   filter(!is.na(Species)) |> select(Year, Species, length_cm, Biomass)
-write.csv(bio_size, "Ess_data/bio_size.csv", row.names = FALSE)
 # ------------------------------------------------------------
 # 2. Check observed length range per species
 # ------------------------------------------------------------
@@ -918,6 +918,7 @@ bio_size <- bio_size |> mutate(bin_id = as.integer(cut(w, breaks = breaks, inclu
     weightclass = mid[bin_id],norm_biomass = Biomass / widths[bin_id]) |>
   filter( !is.na(weightclass),!is.na(norm_biomass),is.finite(norm_biomass))
 
+write.csv(bio_size, "Ess_data/bio_size.csv", row.names = FALSE)
 # ------------------------------------------------------------
 # 5. Summarise: normalised biomass per weight class x year x species
 # ------------------------------------------------------------
@@ -1087,8 +1088,7 @@ Calibration_plot_Y <- ggplot(
 # ------------------------------------------------------------
 # 2. Biomass plot
 # ------------------------------------------------------------
-Calibration_pb_biomass <- plotBiomassObservedVsModel(
-  params, ratio = FALSE, labels = FALSE, return_data = TRUE)
+Calibration_pb_biomass <- plotBiomassObservedVsModel(params, ratio = FALSE, labels = FALSE, return_data = TRUE)
 
 pb_biomass <- mean(1 - Calibration_pb_biomass$ratio, na.rm = TRUE)
 
@@ -1102,8 +1102,7 @@ Calibration_plot_B <- ggplot(
     x     = length(unique(Calibration_pb_biomass$species)) + 0.5,
     y     = max(1 - Calibration_pb_biomass$ratio, na.rm = TRUE),
     label = expression(bold("(d)")),
-    parse = TRUE, size = 3, hjust = 20.5, vjust = 1.1
-  ) +
+    parse = TRUE, size = 3, hjust = 20.5, vjust = 1.1) +
   labs(x = "Species", y = "1 - Modelled/Observed") +
   calibration_theme
 
@@ -1113,10 +1112,7 @@ Calibration_plot_B <- ggplot(
 Calibration_plot <- combined_plot / (Calibration_plot_Y + Calibration_plot_B)
 Calibration_plot
 ggsave(filename = paste0(save_dir, "Calibration_plot.jpeg"), plot = Calibration_plot,
-       width = 11,
-       height = 8.5,
-       units = "in",
-       dpi = 400)
+       width = 11,height = 8.5, units = "in",dpi = 400)
 
 Calibration_plot
 ```
@@ -1136,7 +1132,7 @@ rownames(effort) <- fishing_history$Year[fishing_history$Year %in% 1978:2024]
 storage.mode(effort) <- "numeric"
 
 # Spin up and project
-params_spin <- projectToSteady(params, effort = initial_effort(params), t_max = 100)
+params_spin <- projectToSteady(params_steady, effort = initial_effort(params), t_max = 100)
 sim <- project(params_spin, effort = effort)
 plot(sim)
 
@@ -1155,11 +1151,11 @@ names(biomass_sim_base)<-c("Year", "Species","Biomass")
 
 
 # filter() with no condition does nothing — specify the year range for both
-ggplot(filter(biomass_sim_base, Year <= 1985),
+ggplot(filter(biomass_sim_base, Year <= 2024),
        aes(x = Year, y = Biomass, group = Species)) +
   geom_line(aes(colour = Species)) +
   facet_wrap(~ Species, scales = "free_y") +
-  geom_point(data = filter(biomass_ts, Year <= 1985),
+  geom_point(data = filter(biomass_ts, Year <= 2024),
              aes(x = Year, y = Biomass, colour = Species), size = 0.5) +
   theme(legend.title = element_text(size = 3),
         legend.text  = element_text(size = 3)) +
@@ -1177,10 +1173,10 @@ yield_sim_base<- plotYieldGear(sim, return_data = T)
  # yield_sim_base<-melt(yield_sim_base,id.vars=1)
  # names(yield_sim_base)<-c("Year", "Species","Yield")
 
-ggplot(filter(yield_sim_base,Species!="Sand Lances", Species!="Capelin"),aes(x = Year, y = Yield, group = Species))+
+ggplot(filter(yield_sim_base,Species!="Sand Lance", Species!="Capelin", Species!="Longhorn Sculpin"),aes(x = Year, y = Yield, group = Species))+
     geom_line(data=yield_sim_base,aes(colour = Species)) +
     facet_wrap(~Species,scales="free_y") +
-  geom_point(data=filter(yield_ts,Species!="Sand Lances", Species!="Capelin"),aes(x = Year, y = (Yield), colour = Species),size=0.5)+
+  geom_point(data=filter(yield_ts,Species!="Sand Lance", Species!="Capelin", Species!="Longhorn Sculpin"),aes(x = Year, y = (Yield), colour = Species),size=0.5)+
     #geom_point(data= yield_ts,Year<1986,aes(colour = Species), size=1) +
     theme(legend.title = element_text( size=3), legend.text=element_text(size=3))+
     scale_colour_manual(values=params@linecolour)
@@ -1203,14 +1199,13 @@ gaussian_sizeweight <- function(w, species_params, w_opt, sigma, ...) {
 }
 
 seal_gear_params <- readRDS("Ess_data/seal_gear_params.RDS")
-params_with_seal <- params
-orig_gears <- gear_params(params)
+params_with_seal <- params_steady
+orig_gears <- gear_params(params_steady)
 
 orig_gears$w_opt <- NA
 orig_gears$sigma <- NA
 
-seal_gears <- seal_gear_params[, c("species", "gear", "sel_func", 
-                                    "catchability", "w_opt", "sigma")]
+seal_gears <- seal_gear_params[, c("species", "gear", "sel_func","catchability", "w_opt", "sigma")]
 seal_gears$knife_edge_size <- NA
 
 missing_cols <- setdiff(names(orig_gears), names(seal_gears))
@@ -1271,5 +1266,7 @@ p
 
 Plot Seal "catches=consumption"
 ```{r}
-plotYieldGear(sim2,gears=c("Seals")) 
+
+# plotYieldGear(sim,gears=c("Seals"))
+
 ```
