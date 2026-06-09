@@ -99,3 +99,131 @@ fviz_dend(fit, h = 0.5,                 # Set threshold
           k_colors = "jco",             # Colour palette
           cex = 0.6,                    # Label size
           main = "4VsW Ecological Guilds (Depth Stratum Overlap)")
+
+
+
+
+# ── INTERACTION MATRIX ────────────────────────────────────────────────────────
+# Guild structure from Schoener's D depth-stratum dendrogram (h = 0.5 cut)
+# Ecological rules from Cook & Bundy 2010 (Table 4.1.1)
+# ─────────────────────────────────────────────────────────────────────────────
+
+params_spp_interactions <- params
+inter <- interaction_matrix(params_spp_interactions)
+
+# ── BASELINE ──────────────────────────────────────────────────────────────────
+inter[] <- 0.5
+diag(inter) <- 0.2
+
+# ── GUILDS (from dendrogram) ──────────────────────────────────────────────────
+# Guild 1: pelagic/slope — high overlap, compete for same prey
+pelagics    <- c("Atlantic Herring", "Capelin", "Silver Hake", "Red Hake",
+                 "Monkfish", "Sand Lance")
+
+# Guild 2: mid-water/mixed demersal
+mid_water   <- c("White Hake", "Pollock", "Redfish Unseparated")
+
+# Guild 3: shelf demersal — high benthic overlap
+benthivores <- c("Haddock", "American Plaice", "Yellowtail Flounder",
+                 "Witch Flounder", "Longhorn Sculpin")
+
+# Guild 4: large demersal predators
+piscivores  <- c("Atlantic Cod", "Spiny Dogfish", "White Hake")
+
+# Guild 5: large skates/halibut — limited predators due to size/handling
+large_elasmo <- c("Thorny Skate", "Winter Skate", "Atlantic Halibut")
+
+# ── GUILD-LEVEL RULES (Cook & Bundy 2010) ────────────────────────────────────
+# Piscivores: strong preference for pelagics, moderate on benthi/piscivores
+inter[piscivores, pelagics]     <- 0.8
+inter[piscivores, benthivores]  <- 0.6
+inter[piscivores, piscivores]   <- 0.6
+inter[piscivores, mid_water]    <- 0.5
+
+# Benthivores: strong within-guild, weak on pelagics/piscivores
+inter[benthivores, benthivores] <- 0.8
+inter[benthivores, pelagics]    <- 0.1
+inter[benthivores, piscivores]  <- 0.1
+inter[benthivores, mid_water]   <- 0.4
+
+# Mid-water: moderate on pelagics, low on strict benthos
+inter[mid_water, pelagics]      <- 0.6
+inter[mid_water, benthivores]   <- 0.3
+inter[mid_water, piscivores]    <- 0.4
+
+# ── SPECIES-SPECIFIC OVERRIDES ────────────────────────────────────────────────
+# White Hake: less benthic than other piscivores (Cook & Bundy 2010)
+inter["White Hake", "Sand Lance"]        <- 0.2
+
+# Halibut: less pelagic than other large predators
+inter["Atlantic Halibut", "Atlantic Herring"] <- 0.2
+
+# Haddock: more gadoid predation than other benthivores
+inter["Haddock", c(piscivores, benthivores)] <- 0.5
+
+# Large skates/halibut: few predators due to size and handling difficulty
+inter[, large_elasmo]                        <- 0.0
+inter[piscivores,    large_elasmo]           <- 0.5
+inter["Spiny Dogfish", large_elasmo]         <- 0.3  # dogfish less likely on large flatfish
+
+# Thorny/Winter Skate: different depth strata (from dendrogram — Thorny deeper)
+# Cross-skate predation low; within-guild overlap retained from dendrogram
+inter["Thorny Skate", "Winter Skate"]    <- 0.2
+inter["Winter Skate",  "Thorny Skate"]   <- 0.2
+
+# Diagonal: self-interaction (resource competition within species)
+diag(inter) <- 0.2
+
+# ── APPLY TO PARAMS ───────────────────────────────────────────────────────────
+params <- setInteraction(params, inter)
+
+# ── HEATMAP ───────────────────────────────────────────────────────────────────
+# Order species by guild for visual clarity
+guild_order <- c(
+  # Piscivores
+  "Atlantic Cod", "Spiny Dogfish",
+  # Mid-water
+  "White Hake", "Pollock", "Redfish Unseparated",
+  # Benthivores
+  "Haddock", "American Plaice", "Yellowtail Flounder", "Witch Flounder", "Longhorn Sculpin",
+  # Large elasmo/halibut
+  "Atlantic Halibut", "Thorny Skate", "Winter Skate",
+  # Pelagics
+  "Atlantic Herring", "Capelin", "Silver Hake", "Red Hake", "Monkfish", "Sand Lance"
+)
+
+# Reorder matrix and melt
+inter_ordered <- inter[guild_order, guild_order]
+inter_long <- reshape2::melt(inter_ordered,
+                             varnames = c("Predator", "Prey"),
+                             value.name = "InteractionStrength")
+inter_long$Predator <- factor(inter_long$Predator, levels = rev(guild_order))
+inter_long$Prey     <- factor(inter_long$Prey,     levels = guild_order)
+
+# Guild separator positions (after each guild block)
+vlines <- c(2.5, 5.5, 10.5, 13.5)  # vertical   (Prey axis)
+hlines <- c(2.5, 5.5, 10.5, 13.5)  # horizontal (Predator axis, reversed)
+
+heatmap_plot <- ggplot(inter_long, aes(x = Prey, y = Predator, fill = InteractionStrength)) +
+  geom_tile(color = "white", linewidth = 0.15) +
+  geom_vline(xintercept = vlines, color = "grey30", linewidth = 0.4, linetype = "dashed") +
+  geom_hline(yintercept = hlines, color = "grey30", linewidth = 0.4, linetype = "dashed") +
+  scale_fill_gradientn(
+    colors = RColorBrewer::brewer.pal(9, "Blues"),
+    limits = c(0, 1),
+    name   = "Interaction\nStrength"
+  ) +
+  labs(x = "Prey Species", y = "Predator Species") +
+  theme_minimal(base_family = "Arial") +
+  theme(
+    axis.text.x    = element_text(angle = 90, hjust = 1, size = 9,  face = "bold"),
+    axis.text.y    = element_text(size = 9,  face = "bold"),
+    axis.title     = element_text(size = 11, face = "bold"),
+    legend.title   = element_text(size = 9,  face = "bold"),
+    legend.text    = element_text(size = 8),
+    panel.grid     = element_blank(),
+    panel.border   = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    panel.background = element_blank()
+  )
+
+print(heatmap_plot)
