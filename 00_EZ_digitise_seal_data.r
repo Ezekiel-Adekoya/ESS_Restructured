@@ -1,5 +1,13 @@
 setwd("/Users/juliab6/UTAS Research Dropbox/Julia Blanchard/NEW DATA ESS/Untitled")
 
+
+
+library("here")
+dir <- setwd(here())
+knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/ESS_restructured/")
+# Define the save directory
+save_dir <- paste0(here(), "Ess_data/")
+
 # Run New_get catches.R first (generates effort_matrix_by_gear.RDS)
 
 # ── References ────────────────────────────────────────────────────────────────
@@ -302,6 +310,13 @@ target_by_species <- sort(
   round(diet_prop * target_consumption_g / 1e6), decreasing = TRUE
 )
 print(target_by_species)
+
+
+# ── Save seal abundance objects ───────────────────────────────────────────────
+saveRDS(seal_abundance,  "Ess_data/seal_abundance_digitised.RDS")
+saveRDS(scotian_extrap,  "Ess_data/seal_abundance_logistic_extrap.RDS")
+
+
 
 # To use in mizer calibration:
 # after running the model to steady state, extract biomass per species,

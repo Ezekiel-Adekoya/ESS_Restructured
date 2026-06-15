@@ -464,7 +464,7 @@ initial_effort(params) <- unlist(mean_effort)
 
 ## Next action for attention.  
 
-# Julia treat...plss
+# Julia help on this ...plss
 Include  more realistic interaction matrix: 
 no predation on Alt. Halibut
 guild feeding based on Cook & Bundy DFO report
