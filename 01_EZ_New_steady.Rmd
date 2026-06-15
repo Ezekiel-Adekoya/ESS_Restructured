@@ -83,7 +83,7 @@ years_to_use<-as.character(1978:1985)  #Assign years for the reference period, t
 
 # #The initial Rmax was estimated from an empirical equation as in (Blanchard et al., 2014)
 external_species_info <- external_species_info |> mutate(R_max = 10^13 * w_max^-1.5) 
-external_species_info
+
 ```
 
 Read in DFO Summer RV survey abundance and biomass data from DFO Maritimes region data team, subset depth strata to include only 4VsW (in line with Bundy et al. EwE spatial domain).
@@ -123,16 +123,13 @@ stat2 <- stat |>
     year = YEAR,
     species_name_raw = COMMON_NAME,
     length_cm = FLEN,
-    abundance = Abundance_Strata
-  ) |>
+    abundance = Abundance_Strata) |>
   mutate(
     length_cm = ifelse(
       species_name_raw == "HERRING(ATLANTIC)", # herring looks like measured in mm!
       length_cm / 10,
-      length_cm
-    ),
-    species_name = species_code_lookup[species_name_raw]
-  ) |>
+      length_cm),
+    species_name = species_code_lookup[species_name_raw]) |>
   filter(!is.na(species_name))
 
 # 1. Sum abundance across depth strata by species, year and length
@@ -140,8 +137,7 @@ lf_year_length <- stat2 %>%
   group_by(species_name, year, length_cm) %>%
   summarise(
     abundance = sum(abundance, na.rm = TRUE),
-    .groups = "drop"
-  )
+    .groups = "drop")
 
 
 weighted_quantile <- function(x, w, probs = 0.05) {
@@ -164,8 +160,7 @@ annual_length_quantiles <- lf_year_length %>%
     q01_length_cm = weighted_quantile(length_cm, abundance, 0.01),
     q05_length_cm = weighted_quantile(length_cm, abundance, 0.05),
     q50_length_cm = weighted_quantile(length_cm, abundance, 0.50),
-    .groups = "drop"
-  )
+    .groups = "drop")
 
 cutoff_quantile_summary <- annual_length_quantiles %>%
   group_by(species_name) %>%
@@ -173,8 +168,7 @@ cutoff_quantile_summary <- annual_length_quantiles %>%
     cutoff_q01_median = median(q01_length_cm, na.rm = TRUE),
     cutoff_q01_q75 = quantile(q01_length_cm, 0.75, na.rm = TRUE),
     cutoff_q05_median = median(q05_length_cm, na.rm = TRUE),
-    .groups = "drop"
-  )
+    .groups = "drop")
 
 cutoff_quantile_summary
 
@@ -194,8 +188,7 @@ lf_overall <- lf_year_length %>%
 length_thresholds <- cutoff_quantile_summary %>%
   transmute(
     species_name,
-    threshold_cm = cutoff_q01_q75
-  )
+    threshold_cm = cutoff_q01_q75)
 
 
 
@@ -206,16 +199,14 @@ ggplot(lf_overall, aes(x = length_bin, y = abundance)) +
     data = length_thresholds,
     aes(xintercept = threshold_cm),
     linetype = "dashed",
-    linewidth = 0.6
-  ) +
+    linewidth = 0.6 ) +
   facet_wrap(~species_name, scales = "free") +
   theme_bw() +
   labs(
     x = "Length (cm)",
     y = "Total stratified abundance",
     title = "Abundance-weighted length distributions across all years and strata",
-    subtitle = "Dashed lines show q75 of annual abundance-weighted 5th percentile length"
-  )
+    subtitle = "Dashed lines show q75 of annual abundance-weighted 5th percentile length")
 
 
 
@@ -224,22 +215,18 @@ biomass_cutoff <- cutoff_quantile_summary |>
   left_join(
     external_species_info |>
       select(species, a, b),
-    by = c("species_name" = "species")
-  ) |>
+    by = c("species_name" = "species")) |>
   mutate(
-    biomass_cutoff = round(a * cutoff_q01_q75 ^ b, 1)
-  ) |>
+    biomass_cutoff = round(a * cutoff_q01_q75 ^ b, 1)) |>
   select(
     species = species_name,
-    biomass_cutoff
-  )
+    biomass_cutoff)
 
 # ── JOIN BACK TO SPECIES INFO ─────────────────────────────────────────────────
 external_species_info <- external_species_info |>
   left_join(
     biomass_cutoff,
-    by = "species"
-  )
+    by = "species")
 
 
 # CHeck if need to adjust max_w for some species (too small max_w from RFishBase)
@@ -250,57 +237,34 @@ survey_max_lengths <- stat2 %>%
   summarise(
     survey_max_length_cm = max(length_cm, na.rm = TRUE),
     q99_length_cm = weighted_quantile(length_cm, abundance, 0.99),
-    .groups = "drop"
-  )
+    .groups = "drop")
 
 # Convert FishBase max lengths to max weights using W = aL^b
 max_weight_comparison <- survey_max_lengths %>%
   left_join(
-    external_species_info %>%
-      select(species, a, b, w_max),
-    by = c("species_name" = "species")
-  ) %>%
+    external_species_info %>% select(species, a, b, w_max),
+    by = c("species_name" = "species")) %>%
   mutate(
-    survey_max_weight_g =
-      a * survey_max_length_cm ^ b,
-
-    biomass_cutoffHigh =
-      a * q99_length_cm ^ b,
-
-    w_max_ratio =
-      survey_max_weight_g / w_max, # survey max w, proportion of model w_max, should be less than 1
-
-    q99_ratio =
-      biomass_cutoffHigh / w_max  #99th percentile of max weights, should be less than 1
+    survey_max_weight_g = a * survey_max_length_cm ^ b,
+    biomass_cutoffHigh = a * q99_length_cm ^ b,
+    w_max_ratio = survey_max_weight_g / w_max, # survey max w, proportion of model w_max, should be less than 1
+    q99_ratio =  biomass_cutoffHigh / w_max  #99th percentile of max weights, should be less than 1
   )
 
 max_weight_comparison 
-
-max_weight_comparison <- max_weight_comparison |>
-  select(species = species_name, biomass_cutoffHigh  )
+max_weight_comparison <- max_weight_comparison |> select(species = species_name, biomass_cutoffHigh  )
 
 
 # ── JOIN BACK TO SPECIES INFO ─────────────────────────────────────────────────
-external_species_info <- external_species_info |>
-  left_join(max_weight_comparison, by = "species" )
+external_species_info <- external_species_info |> left_join(max_weight_comparison, by = "species" )
 
-# ratio <-biomass_cutoff$max_w/species_params(params)$w_max
-# corrections<-which(ratio>1)
-# # 
-# external_species_info[corrections,"w_max"]<-biomass_cutoff[which(ratio>1),"max_w"]
-# # #correct sandlance maturation size too
-# external_species_info[17,"w_mat"]<-external_species_info[17,"w_max"]*0.10
 
 ```
 
 Copy species life history parameters into the species parameters for the model
 ```{r}
-external_species_info<-select(external_species_info,c("species","w_max","w_mat", "w_min","beta" ,"sigma" ,"a","b","age_mat",  "biomass_cutoff", "biomass_cutoffHigh"))
-# #reasign for spp 8 (sandlance)
+external_species_info <-select(external_species_info,c("species","w_max","w_mat", "w_min","beta" ,"sigma" ,"a","b","age_mat","R_max" , "biomass_cutoff", "biomass_cutoffHigh"))
 
-# Based on the 99th percentile comparison, I would not change the FihsBase derived Wmax values.
-#external_species_info[17,"w_max"]<-154
-#external_species_info[17,"w_mat"]<-15
 
 ``` 
 
@@ -320,8 +284,7 @@ biomass_obs[is.na(biomass_obs)] <- 0
 
 ## FORAGE FISH CATCHABILITY ASSUMPTION: scale up biomass herring X 50 , sandeel, and capelin by factor of 200 - TEST SENSITIVITY OF RUNS, based approximately on Harly et al. 2001 and Bundy et al.
 biomass_obs <- biomass_obs %>% 
-  mutate(
-    `Atlantic Herring` = `Atlantic Herring` * 50,
+  mutate(`Atlantic Herring` = `Atlantic Herring` * 50,
     `Sand Lance` = `Sand Lance` * 200,
     `Capelin` = `Capelin` * 200)
 
@@ -382,6 +345,8 @@ ggplot(yield_ts, aes(x = Year, y = Yield)) + geom_line(linewidth = 0.4) +
 
 ```
 
+
+
 Aggregate to mean observed yield between 1970 and 1985 
 ```{r}
 ## Aggregate to mean observed catch 
@@ -410,21 +375,36 @@ external_species_info$yield_observed <- mean_catch_nafo$yield_observed
 
 ```
 
+
+
 Set up fishing gear parameters
 ```{r}
 #load gear and knife_edge_gear
 fishing_type = read.csv("Ess_data/new.gear_params.csv")
-#fishing_type$knife_edge_size <- external_species_info$w_mat - delete old method
-#names(fishing_type)[1] = "species" - delete old method
-gear_params <- fishing_type
-gear_names <- gear_params$gear
+new_seal = read.csv("Ess_data/seal_gear_params.csv")
+new_seal$catchability <- new_seal$catchability / 10
+
+# calling in the gaussian_sizeweight function
+gaussian_sizeweight <- function(w, species_params, w_opt, sigma, ...) {
+  exp(-0.5 * ((log(w) - log(w_opt)) / sigma)^2)
+}
+
+# Combine two character strings 
+row_name <- paste(new_seal$species, new_seal$gear, sep = ", ")
+row_names <- paste(fishing_type$species, fishing_type$gear, sep = ", ")
+rownames(new_seal) = row_name 
+rownames(fishing_type) = row_names 
+library(dplyr) # 1. Extract existing gear parameters 
+updated_gp <- bind_rows(fishing_type, new_seal) # 3. Save back into your mizer parameters object 
+#updated_gp = fishing_type
 
 ```
 
 Copy species life history parameters into the species parameters for the model
 ```{r}
-
-external_species_info<-select(external_species_info,c("species","w_max","w_mat", "w_min","beta" ,"sigma" ,"a","b","age_mat", "biomass_cutoff", "biomass_cutoffHigh","biomass_observed", "yield_observed"))
+external_species_info <- select(external_species_info, c("species","w_max","w_mat",
+  "w_min","beta","sigma","a","b","age_mat","R_max","biomass_cutoff","biomass_cutoffHigh",
+  "biomass_observed","yield_observed"))
 
 ```
 
@@ -433,14 +413,14 @@ Set up params then
 set up initial catchability using this mean relative effort and catchability of 1 as initial value only - BUT WILL ESTIMATE LATER
 ```{r}
 
-params <- newMultispeciesParams(external_species_info,interaction = NULL, resource_dynamics = "resource_semichemostat",kappa = 1e8,gear_params = gear_params)
+params <- newMultispeciesParams(external_species_info,interaction = NULL, resource_dynamics = "resource_semichemostat",kappa = 1e11, gear_params = updated_gp)
 resource_params(params)$w_pp_cutoff <- 100
 
 #assume catchability of 0.2, will be estimated further down
 
 ## gear_params(params)$catchability <- fishing_type$catchability
 
-gear_params(params)$catchability <- rep(0.2,19)
+#gear_params(params)$catchability <- rep(0.2,19)
 gear_params(params)$yield_observed <- mean_catch_nafo$yield_observed
 
 ```
@@ -450,16 +430,17 @@ Read the fishing history data/set fishing into params from NAFO
 set intial effort as mean_effort - SEALS MISSING
 ```{r}
 # Load time-varying fishing effort data (relative effort by gear or species)
-effort_final <- read.csv("Ess_data/effort_by_gear.csv",row.names = 1)
-fishing_history <- effort_final
+effort_final <- read.csv("Ess_data/effort_gear_with_seals.csv",row.names = 1)
+effort_final$Year <- as.numeric(rownames(effort_final))
 years_to_use <- as.character(1978:1985)
 years_to_use <- 1978:1985
-mean_effort <- colMeans(fishing_history[fishing_history$Year %in% years_to_use, -1])
+
+mean_effort <- colMeans(effort_final[effort_final$Year %in% years_to_use, ])
 
 # Set initial fishing effort in the model to the average over the reference period
 # This ensures a steady-state calibration baseline
-initial_effort(params) <- unlist(mean_effort)
-
+initial_effort(params) <- unlist(mean_effort[1:5])
+#initial_effort(params) <- unlist(mean_effort[1:4])
 ```
 
 ## Next action for attention.  
@@ -475,6 +456,9 @@ guild feeding based on Cook & Bundy DFO report
 # Schoener's D spatial overlap → guild structure → mizer interaction matrix
 # Strata 444–466 | 19 species | Cook & Bundy 2010
 # ══════════════════════════════════════════════════════════════════════════════
+
+library(tidyverse)
+library(factoextra)
 
 library(tidyverse)
 library(factoextra)
@@ -502,9 +486,7 @@ stratum_matrix <- stat %>%
     pivot_wider(names_from = COMMON_NAME, values_from = biomass, values_fill = 0) %>%
     column_to_rownames("STRAT")
 
-
-
-# ── 4. NORMALIZE & SCHOENER'S D ───────────────────────────────────────────────
+# ── 3. NORMALIZE & SCHOENER'S D ───────────────────────────────────────────────
 col_sums <- colSums(stratum_matrix)
 col_sums[col_sums == 0] <- 1
 dist_norm <- sweep(stratum_matrix, 2, col_sums, "/")
@@ -512,6 +494,11 @@ dist_norm <- sweep(stratum_matrix, 2, col_sums, "/")
 # Schoener's D: 1 - (manhattan distance / 2)
 schoener_matrix <- 1 - (as.matrix(dist(t(dist_norm), method = "manhattan")) / 2)
 diag(schoener_matrix) <- 1
+
+# ── 4. OPTIONAL: SPARSE SPECIES OVERLAP REPORT ────────────────────────────────
+# Define sparse species to inspect, or leave empty to skip
+sparse <- character(0)
+# e.g. sparse <- c("CAPELIN", "NORTHERN SAND LANCE")
 
 if (length(sparse) > 0) {
     cat("\n── Overlap values for sparse species ──\n")
@@ -525,16 +512,19 @@ if (length(sparse) > 0) {
 d   <- as.dist(1 - schoener_matrix)
 fit <- hclust(d, method = "ward.D2")
 
-# Base R dendrogram
+# ── 6. BASE R DENDROGRAM ──────────────────────────────────────────────────────
 plot(fit,
      main = "4VsW Species Associations by Depth Stratum",
-     xlab = "", sub  = "Schoener's D | Strata 444–466 | Ward.D2",
-     ylab = "Ecological Distance", hang = -1)
+     xlab = "",
+     sub  = "Schoener's D | Strata 444–466 | Ward.D2",
+     ylab = "Ecological Distance",
+     hang = -1)
 abline(h = 0.5, col = "red", lty = 2)
 rect.hclust(fit, h = 0.5, border = "blue")
 
-# ggplot dendrogram
-fviz_dend(fit, h = 0.5,
+# ── 7. GGPLOT DENDROGRAM ──────────────────────────────────────────────────────
+fviz_dend(fit,
+          h         = 0.5,
           type      = "rectangle",
           rect      = TRUE,
           rect_fill = TRUE,
@@ -542,6 +532,7 @@ fviz_dend(fit, h = 0.5,
           cex       = 0.6,
           main      = "4VsW Ecological Guilds — Clean Domain (444–466)")
 
+# ── 8. GUILD ASSIGNMENTS ──────────────────────────────────────────────────────
 clusters <- cutree(fit, h = 0.5)
 cat("\n── Guild assignments (h = 0.5) ──\n")
 print(sort(clusters))
@@ -610,11 +601,12 @@ inter["Atlantic Cod",     "Redfish Unseparated"] <- 0.10
 inter["White Hake",       "Redfish Unseparated"] <- 0.10
 inter["Monkfish",         "Redfish Unseparated"] <- 0.10
 
-# Heatmap
-inter_df <- as.data.frame(as.table(inter))
+# ── Apply to params ───────────────────────────────────────────────────────────
+params <- setInteraction(params, inter)          # was: inter_matrix
+
+# inter_df only for heatmap plotting
+inter_df <- as.data.frame(as.table(inter))       # was: inter_matrix
 colnames(inter_df) <- c("Predator", "Prey", "Interaction")
-# Apply to params
-params <- setInteraction(params, inter)
 
 ```
 
@@ -672,14 +664,13 @@ Calibrate the scale
 ```{r}
 
 source("Ess_data/Useful_functions.R")
-
 # Use your custom function instead of the base one
 # since you have biomass_cutoffHigh defined
-params <- calibrateBiomassCustom(params)
+params <- calibrateBiomass(params)
 
 # run x2 to converge
 params <- steady(params)
-params <- calibrateBiomassCustom(params)
+params <- calibrateBiomass(params)
 params <- steady(params)
 
 # check
@@ -687,7 +678,7 @@ plotlySpectra(params, power = 2)
 plotlyFeedingLevel(params)
 
 # also worth checking biomass fit after calibration
-plotBiomassObservedVsModelCustom(params)
+plotBiomassObservedVsModel(params)
 
 ```
 
@@ -696,12 +687,13 @@ Rescale Species Spectra, Rince and repeat (till convergence is achieved in 1.5 y
 ```{r}
 # Iteratively improve the calibration by adjusting model parameters
 # to better match observed biomasses, and then re-solving for steady state
-for (i in 1:40) {
+for (i in 1:10) {
   params <- params |> 
     matchBiomasses() |>  # Adjust species parameters to better match observed biomasses
-  #  matchGrowth() |>
+    #matchGrowth() |>
     steady()             # Recalculate the steady-state solution
 }
+
 ```
 
 
@@ -1215,10 +1207,10 @@ Calibration_plot
 Run the model with changing fishing through time
 
 ```{r}
-fishing_history <- read.csv("Ess_data/effort_by_gear.csv")
+fishing_history <- read.csv("Ess_data/effort_gear_with_seals.csv")
 # Subset by Year column, then assign years as row names
 effort_df <- fishing_history[fishing_history$Year %in% 1978:2024,
-                              c("Bottom_Trawl", "Fixed_Gear", "Small_Mesh", "Pelagic")]
+                              c("Bottom_Trawl", "Fixed_Gear", "Small_Mesh", "Pelagic", "Seals")]
 effort <- as.matrix(effort_df)
 rownames(effort) <- fishing_history$Year[fishing_history$Year %in% 1978:2024]
 storage.mode(effort) <- "numeric"
@@ -1228,16 +1220,17 @@ params_spin <- projectToSteady(params_steady, effort = initial_effort(params), t
 sim <- project(params_spin, effort = effort)
 plot(sim)
 
+
+saveRDS(params_steady,"Ess_data/new_params_with_seal_interaction.RDS")
 ```
 
 # Exploratory Run of Projection through Time 
 
 Now, assess how the full model looks compared with time series data in the reference period only. Should calculate some statistical goodness of fit metrics here
 
-
 Get modelled biomass, excluding sizes < biomass_cutoff g to be consistent with the survey biomasses
 ```{r}
-biomass_sim_base<-getBiomass(sim,min_w=10)
+biomass_sim_base<-getBiomass(sim,min_w=100)
 biomass_sim_base<-melt(biomass_sim_base,id.vars=1)
 names(biomass_sim_base)<-c("Year", "Species","Biomass")
 
@@ -1259,19 +1252,27 @@ ggplot(filter(biomass_sim_base, Year <= 2024),
 Make plots  
 plot yields 
 ```{r}
-yield_sim_base<- plotYieldGear(sim, return_data = T) 
+yield_sim_base <- plotYieldGear(sim, return_data = T) 
 
-#already melted
- # yield_sim_base<-melt(yield_sim_base,id.vars=1)
- # names(yield_sim_base)<-c("Year", "Species","Yield")
+# Sum simulated yield across all gears per species per year
+yield_sim_total <- yield_sim_base |> group_by(Year, Species) |>
+  summarise(Yield_sim = sum(Yield, na.rm = TRUE), .groups = "drop")
 
-ggplot(filter(yield_sim_base,Species!="Sand Lance", Species!="Capelin", Species!="Longhorn Sculpin"),aes(x = Year, y = Yield, group = Species))+
-    geom_line(data=yield_sim_base,aes(colour = Species)) +
-    facet_wrap(~Species,scales="free_y") +
-  geom_point(data=filter(yield_ts,Species!="Sand Lance", Species!="Capelin", Species!="Longhorn Sculpin"),aes(x = Year, y = (Yield), colour = Species),size=0.5)+
-    #geom_point(data= yield_ts,Year<1986,aes(colour = Species), size=1) +
-    theme(legend.title = element_text( size=3), legend.text=element_text(size=3))+
-    scale_colour_manual(values=params@linecolour)
+# Sum fishing only (exclude seals) for comparison to NAFO catches
+yield_sim_fishing <- yield_sim_base |>
+  filter(Gear != "Seals") |>
+  group_by(Year, Species) |>
+  summarise(Yield_fishing = sum(Yield, na.rm = TRUE), .groups = "drop")
+
+# Plot fishing yield vs observed
+ggplot() +
+  geom_line(data = filter(yield_sim_fishing, !Species %in% c("Sand Lance", "Capelin", "Longhorn Sculpin")),aes(x = Year, y = Yield_fishing / 1e9), colour = "steelblue") +
+  geom_point(data = filter(yield_ts,!Species %in% c("Sand Lance", "Capelin", "Longhorn Sculpin")),
+             aes(x = Year, y = Yield / 1e9), size = 0.8, colour = "red") +
+  facet_wrap(~Species, scales = "free_y", ncol = 4) +
+  labs(x = "Year", y = "Yield (thousand tonnes)",
+       title = "Model fishing yield (blue) vs observed NAFO catches (red)") +
+  theme_minimal(base_size = 8)
 
 ```
 
@@ -1286,28 +1287,28 @@ and sine sf prey consumed by grey seals (Halickoerus grypus) on the Scotian Shel
 Sci. 50: 1768-1 778.
 ```{r}
 
-gaussian_sizeweight <- function(w, species_params, w_opt, sigma, ...) {
-  exp(-0.5 * ((log(w) - log(w_opt)) / sigma)^2)
-}
-
-seal_gear_params <- readRDS("Ess_data/seal_gear_params.RDS")
-params_with_seal <- params_steady
-orig_gears <- gear_params(params_steady)
-
-orig_gears$w_opt <- NA
-orig_gears$sigma <- NA
-
-seal_gears <- seal_gear_params[, c("species", "gear", "sel_func","catchability", "w_opt", "sigma")]
-seal_gears$knife_edge_size <- NA
-
-missing_cols <- setdiff(names(orig_gears), names(seal_gears))
-for(col in missing_cols) seal_gears[[col]] <- NA
-seal_gears <- seal_gears[, names(orig_gears)]
-
-all_gears <- rbind(orig_gears, seal_gears)
-gear_params(params_with_seal) <- all_gears
-#save object for later use ( params with additional predation mortality)
-saveRDS(params_with_seal,"Ess_data/params_with_seal_interaction.RDS")
+# gaussian_sizeweight <- function(w, species_params, w_opt, sigma, ...) {
+#   exp(-0.5 * ((log(w) - log(w_opt)) / sigma)^2)
+# }
+# 
+# seal_gear_params <- readRDS("Ess_data/seal_gear_params.RDS")
+# params_with_seal <- params_steady
+# orig_gears <- gear_params(params_steady)
+# 
+# orig_gears$w_opt <- NA
+# orig_gears$sigma <- NA
+# 
+# seal_gears <- seal_gear_params[, c("species", "gear", "sel_func","catchability", "w_opt", "sigma")]
+# seal_gears$knife_edge_size <- NA
+# 
+# missing_cols <- setdiff(names(orig_gears), names(seal_gears))
+# for(col in missing_cols) seal_gears[[col]] <- NA
+# seal_gears <- seal_gears[, names(orig_gears)]
+# 
+# all_gears <- rbind(orig_gears, seal_gears)
+# gear_params(params_with_seal) <- all_gears
+# #save object for later use ( params with additional predation mortality)
+# saveRDS(params_with_seal,"Ess_data/params_with_seal_interaction.RDS")
 ```
 
 

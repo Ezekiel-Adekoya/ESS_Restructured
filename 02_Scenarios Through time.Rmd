@@ -121,7 +121,7 @@ Read in params object
 ```{r}
 
 # Read in params object 
-params_with_seal <- readRDS("Ess_data/params_with_seal_interaction.RDS")
+params_with_seal <- readRDS("Ess_data/new_params_with_seal_interaction.RDS")
 # Read in effort object
 effort_with_seal <- readRDS("Ess_data/effort_gear_with_seals.rds")
 effort_with_seal <- subset(effort_with_seal, Year >= 1978 & Year <= 2024)
@@ -142,15 +142,15 @@ plot(sim1,time_range=c(1978:2024))
 plotBiomassRelative(sim1,sim0)
 
 # Run multiple simulations
-#sims_scen1 <- run_random_sims(params_with_seal, n_sims = 1000,effort_scen=effort,sd=0.2)
-#sims_scen2 <- run_random_sims(params_with_seal, n_sims = 1000,effort_scen = effort_with_seal, sd=0.2)
+sims_scen1 <- run_random_sims(params_with_seal, n_sims = 1000,effort_scen=effort,sd=0.2)
+sims_scen2 <- run_random_sims(params_with_seal, n_sims = 1000,effort_scen = effort_with_seal, sd=0.2)
 # 
 # # Save sim outputs
 #saveRDS(sims_scen1,"Ess_output/sims_scen1.RDS")  # With fishing
 #saveRDS(sims_scen2,"Ess_output/sims_scen2.RDS")  # Fishing and additional mortality
 
-sims_scen1<-readRDS("Ess_output/sims_scen1.RDS") # With fishing
-sims_scen2<-readRDS("Ess_output/sims_scen2.RDS") # Fishing and additional mortality
+#sims_scen1<-readRDS("Ess_output/sims_scen1.RDS") # With fishing
+#sims_scen2<-readRDS("Ess_output/sims_scen2.RDS") # Fishing and additional mortality
 
 # Check results from first simulation
 plot(sims_scen2[[4]],time_range=c(1978:2024))
@@ -632,7 +632,7 @@ ssdf1 <- lapply(sims_scen1, sizespec,  time_range = 1995:2020)
 ssdf2 <- lapply(sims_scen2, sizespec, time_range = 1995:2020)
 
 # Add simulation ID to each element in the list
-iter = 1000 # should be 1000 in you dataset?
+iter = 10 # should be 1000 in you dataset?
 for (i in 1:iter) {
   ssdf_ref[[i]]$sim <- i
   ssdf1[[i]]$sim <- i
@@ -718,14 +718,8 @@ spectra_plot <- ggplot( time_series_c, aes(x = w, y = sim_meanN, colour = scen, 
   scale_colour_manual(values = linecolours) +
   scale_fill_manual(values = linecolours) +
   labs(x = "Size (g)", y = "Normalized biomass density") +
-  annotate("text",
-           x = x_limits[1] * 0.8,  # slightly left of min x
-           y = y_limits[2] * 0.95, # near top
-           label = "(a)",
-           hjust = 0,
-           vjust = 1.2,
-           fontface = "bold",
-           size = 6) +
+  annotate("text", x = x_limits[1] * 0.8, y = y_limits[2] * 0.95, label = "(a)", hjust = 0, vjust = 1.2,
+           fontface = "bold",size = 6) +
   theme_bw() +
   theme(
     text = element_text(size = 12, family = "Arial"),
@@ -736,9 +730,7 @@ spectra_plot <- ggplot( time_series_c, aes(x = w, y = sim_meanN, colour = scen, 
     legend.position = "none",
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
-    panel.border = element_rect(linewidth = 1.5)
-  )
-
+    panel.border = element_rect(linewidth = 1.5))
 spectra_plot
 
 ```
@@ -820,19 +812,19 @@ Relative_trophic_plot <-  ggplot(combined_data, aes(x = w, y = rel_diff, colour 
     panel.grid.major.y = element_blank())
 
 Relative_trophic_plot
-spectra = spectra_plot/Relative_trophic_plot #bind plots
+
+spectra = spectra_plot/Relative_trophic_plot # bind plots
 
 ggsave(filename = paste0(save_dir, "spectra_plot.jpeg"), plot = spectra, width = 11, height = 7.5, units = "in", dpi =400)
 
 ```
 
-
 # Size distribution of seal "diets"
+
 ```{r}
 
-#aaa = plotYieldVsSize(sims_scen2[[1]],gear=c("Seals"), x_var = c("Length")) + theme_bw()
-#ggsave(filename = paste0(save_dir, "aaa.jpeg"), plot = aaa,
-      # width = 11, height = 7.5, units = "in",dpi = 400)
+# aaa = plotYieldVsSize(sims_scen2[[1]],gear=c("Seals"), x_var = c("Length")) + theme_bw()
+# ggsave(filename = paste0(save_dir, "aaa.jpeg"), plot = aaa, width = 11, height = 7.5, units = "in",dpi = 400)
 
 ```
 

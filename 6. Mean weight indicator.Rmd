@@ -54,12 +54,12 @@ sim_bio<-lapply(sims_scen1,getBiomass,min_w=species_params(params)$biomass_cutof
 sim_bio2<-lapply(sims_scen2,getBiomass,min_w=species_params(params)$biomass_cutoff)
 
 df_sim_bio<-do.call(rbind.data.frame, sim_bio)
-df_sim_bio$sim<-rep(1:100, each=41)
-df_sim_bio$year<-rep(1970:2010,100)
+df_sim_bio$sim<-rep(1:1000, each=47)
+df_sim_bio$year<-rep(1978:2024,100)
 
 df_sim_bio2 <-do.call(rbind.data.frame, sim_bio2)
-df_sim_bio2$sim <-rep(1:100, each=41)
-df_sim_bio2$year<-rep(1970:2010,100)
+df_sim_bio2$sim <-rep(1:1000, each=47)
+df_sim_bio2$year<-rep(1978:2024,100)
 
 ```
 
@@ -67,7 +67,7 @@ MeanWeight plot
 Data cleaning 
 ```{r}
 # Load and clean biomass per length data
-biop <- read.csv("Ess_data/biomass_at_length_DFO_model_spp.csv") %>%
+biop <- read.csv("Ess_data/Alida_Qadj_biomass_at_Length.csv") %>%
   # Convert data from wide to long format
   pivot_longer(!c(length_cm, YEAR), names_to = "SPECIES", values_to = "BIOMASS") %>%
   # Optional filter: Uncomment to remove lengths < 10 cm

@@ -155,8 +155,7 @@ for (col in all_cols) {
 par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1)
 
 saveRDS(effort_with_seals, "Ess_data/effort_gear_with_seals.RDS")
-write.csv(effort_with_seals, "Ess_data/effort_gear_with_seals.csv",
-          row.names = FALSE)
+write.csv(effort_with_seals, "Ess_data/effort_gear_with_seals.csv",row.names = FALSE)
 
 # ── Seal gear_params: Gaussian size selectivity (Bowen 1993) ─────────────────
 # Seals modelled as a gear with lognormal selectivity by prey weight.
@@ -242,7 +241,9 @@ for (i in seq_len(n_sp)) {
 par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1)
 
 saveRDS(seal_gear_params, "Ess_data/seal_gear_params.RDS")
-
+write.csv(seal_gear_params,
+          "Ess_data/seal_gear_params.csv",
+          row.names = FALSE)
 # ── Catchability calibration approach ────────────────────────────────────────
 # POST-HOC STEP: seal catchabilities should only be calibrated after the
 # fishing-gear steady state has been established (species biomasses and

@@ -673,23 +673,19 @@ gear_params
 
 # Desired species order
 species_order <- c(
-  "Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake",
-  "Pollock", "Redfish Unseparated", "American Plaice", "Yellowtail Flounder",
-  "Witch Flounder", "Atlantic Herring", "Capelin", "Thorny Skate",
-  "Winter Skate", "Spiny Dogfish", "Monkfish", "Sand Lance",
-  "Longhorn Sculpin", "Atlantic Halibut"
-)
+  "Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake","Pollock", "Redfish Unseparated", "American Plaice", 
+  "Yellowtail Flounder","Witch Flounder", "Atlantic Herring", "Capelin", "Thorny Skate","Winter Skate", "Spiny Dogfish", "Monkfish", 
+  "Sand Lance", "Longhorn Sculpin", "Atlantic Halibut")
 
 # Reorder rows
 gear_params$species <- factor(gear_params$species, levels = species_order)
-
 gear_params <- gear_params[order(gear_params$species), ]
 rownames(gear_params) <- NULL
-
 
 write.csv(gear_params, "Ess_data/new.gear_params.csv", row.names = FALSE)
 
 ```
+
 
 ```{r}
 
