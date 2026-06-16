@@ -191,8 +191,6 @@ inter[, "American Plaice"]     <- inter[, "American Plaice"]     * 0.60
 inter[, "Redfish Unseparated"] <- inter[, "Redfish Unseparated"] * 0.50
 inter["Spiny Dogfish", "Spiny Dogfish"] <- 0.05   # restore diagonal
 
-# ── Apply ─────────────────────────────────────────────────────────────────────
+# ── Save interactio ─────────────────────────────────────────────────────────────────────
+saveRDS(inter, file = "inter.rds")
 params <- setInteraction(params, interaction = inter)
-cat("Range:", range(inter), "\n")
-cat("Mean: ", round(mean(inter), 3), "\n")
-cat("\nInteraction matrix applied.\n")
