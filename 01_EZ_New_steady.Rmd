@@ -445,14 +445,32 @@ external_species_info <- select(external_species_info, c("species","w_max","w_ma
 
 ```{r fishing-effort}
 
-effort_final       <- read.csv("Ess_data/effort_gear_with_seals.csv", row.names = 1)
-effort_final$Year  <- as.numeric(rownames(effort_final))
+gear_cols <- c("Bottom_Trawl", "Fixed_Gear", "Small_Mesh", "Pelagic", "Seals")
 
-mean_effort        <- colMeans(effort_final[effort_final$Year %in% years_to_use, ])
+effort_full <- read.csv("Ess_data/effort_gear_with_seals.csv")
 
-# FIX: use initial_effort(params_steady) later for projectToSteady — here we
-# just set the five fishing gears (columns 1:5, excluding Year)
-initial_effort <- unlist(mean_effort[1:5])
+effort_sub <- subset(effort_full, Year >= 1978)
+years_vec  <- effort_sub$Year
+
+# Max computed on the SAME subset being rescaled (1978 onwards)
+max_by_gear <- apply(effort_sub[, gear_cols], 2, max, na.rm = TRUE)
+
+effort_final <- sweep(effort_sub[, gear_cols], 2, max_by_gear, FUN = "/")
+effort_final$Year <- years_vec   # real years, not rownames
+
+# Confirm relative effort is correctly bounded 0-1
+range(effort_final[, gear_cols])
+
+effort_long <- effort_final |>
+  pivot_longer(cols = -Year, names_to = "Gear", values_to = "Effort")
+
+ggplot(effort_long, aes(x = Year, y = Effort)) +
+  geom_line(linewidth = 0.6) +
+  facet_wrap(~ Gear, scales = "free_y") +
+  theme_minimal()
+
+mean_effort <- colMeans(effort_final[effort_final$Year %in% years_to_use, gear_cols])
+initial_effort <- mean_effort[gear_cols]
 ```
 
 Set up params then
@@ -737,6 +755,35 @@ plotlyFeedingLevel(params)
 
 
 ```      
+## CHECK SEAL PREY CONSUMPTION (VIA CATCHABILITY & YIELD - NEEDS TO BE DONE PRIOR)
+```{r}
+# ── SEAL CATCHABILITY CHECK ───────────────────────────────────────────────────
+# Run AFTER initial matchBiomasses loop, BEFORE matchYield
+seal_abundance   <- readRDS("Ess_data/seal_abundance_digitised.RDS")
+ref_years        <- 1978:1985
+ref_n_seals      <- mean(seal_abundance$scotian_mean[seal_abundance$year %in% ref_years]) * 1000
+seal_body_mass_g <- 170 * 1000
+total_biomass_g  <- ref_n_seals * seal_body_mass_g
+QB_seal          <- 12.98
+fish_fraction    <- 0.85
+Yield_observed_seals_g <- total_biomass_g * QB_seal * fish_fraction
+
+seal_gear_name <- "Seals"
+seal_rows <- which(gear_params(params)$gear == seal_gear_name)
+seal_gp_species <- gear_params(params)$species[seal_rows]
+seal_catchability_init <- new_seal$catchability[match(seal_gp_species, new_seal$species)]
+
+# Diagnostic check only — current model/target ratio with EXISTING catchability
+cat("Seal consumption — model/target ratio (current catchability):",
+    round(rowSums(getYieldGear(params))["Seals"] / Yield_observed_seals_g, 3), "\n")
+
+# # If scaling is actually needed (ratio far from 1), apply it:
+#  gear_params(params)$catchability[seal_rows] <- seal_catchability_init
+#  params <- steady(params)
+#  scale_factor_seal <- Yield_observed_seals_g / get_seal_yield(params)
+#  gear_params(params)$catchability[seal_rows] <- gear_params(params)$catchability[seal_rows] * scale_factor_seal
+#  params <- steady(params)
+```
 
 
 # STEP 2: Calibration Loop - Rescale Species Spectra & Catchabilities, Rince and repeat (till convergence is achieved in 1.5 years)
@@ -755,7 +802,7 @@ params_calibrate <- params
 
 for (i in 1:25) {
   params_calibrate <- params_calibrate |> 
-    matchBiomasses()  |> steady() |> matchYield(keep="biomass",gears = fishing_gears) |> steady()
+    matchBiomasses()  |> steady() |> matchYieldCustom(keep="biomass",gears = fishing_gears) |> steady()
 }
 
 # restore params
@@ -812,6 +859,7 @@ Set up how model responses to fishing - resilience to fishing is influenced by t
 # values closer to 0 → no compensation, no dome. 0.7 balances compensation
 # room with density dependence across all 19 species.
 params <- setBevertonHolt(params, reproduction_level = 0.5)
+params<-steady(params)
 # cutoffs   <- list(
 #   low  = setNames(sp$biomass_cutoff,     sp$species),
 #   high = setNames(sp$biomass_cutoffHigh, sp$species)
@@ -856,51 +904,6 @@ plots <- pbmclapply(
 # Display all 16 in a 4×4 grid (adjust if you have 19 species)
 grid.arrange(grobs = plots[1:19], nrow = 5, ncol = 5)
 ```
-# STEP 4: 
-## CHECK SEAL CATCHABILITY TUNING
-```{r}
-# ── SEAL CATCHABILITY TUNING ──────────────────────────────────────────────────
-# Run AFTER initial matchBiomasses loop, BEFORE matchYield
-seal_abundance   <- readRDS("Ess_data/seal_abundance_digitised.RDS")
-ref_years        <- 1978:1985
-ref_n_seals      <- mean(seal_abundance$scotian_mean[seal_abundance$year %in% ref_years]) * 1000
-
-seal_body_mass_g       <- 170 * 1000    # confirmed: Bundy 2004 Scotian Shelf EwE
-total_biomass_g        <- ref_n_seals * seal_body_mass_g
-QB_seal                <- 12.98         # confirmed: Bundy 2004 Table A (Q/B for grey seals)
-fish_fraction          <- 0.85          # confirmed: Bowen et al. 1993; DFO grey seal diet
-Yield_observed_seals_g <- total_biomass_g * QB_seal * fish_fraction
-
-seal_gear_name <- "Seals"
-
-get_seal_yield <- function(p) {
-  sum(sapply(species_params(p)$species, function(sp) {
-    n <- initialN(p)[sp, ]
-    f <- getFMortGear(p)[seal_gear_name, sp, ]
-    sum(f * n * p@w * p@dw)
-  }), na.rm = TRUE)
-}
-
-# Check seal catchabilities and scale to QB consumption target.
-# Done here (after calibrateBiomass, before matchBiomasses) so that steps 2 and 3
-# calibrate biomass and catchabilities with seal predation already active.
-# matchYieldCustom ignores seals (gears = fishing_gears); plotYieldExcl excludes them.
-seal_rows <- which(gear_params(params)$gear == seal_gear_name)
-seal_gp_species <- gear_params(params)$species[seal_rows]
-seal_catchability_init <- new_seal$catchability[match(seal_gp_species, new_seal$species)]
-gear_params(params)$catchability[seal_rows] <- seal_catchability_init
-params <- steady(params)
-
-current_seal_total <- get_seal_yield(params)
-scale_factor_seal  <- Yield_observed_seals_g / current_seal_total
-gear_params(params)$catchability[seal_rows] <-
-  gear_params(params)$catchability[seal_rows] * scale_factor_seal
-params <- steady(params)
-cat("Seal consumption after initial scaling — model/target ratio:",
-    round(get_seal_yield(params) / Yield_observed_seals_g, 3), "\n")
-
-
-```
 
 
 -Check ratio between modelled and obs catches, rescale catchability
@@ -922,50 +925,50 @@ cat("Seal consumption after initial scaling — model/target ratio:",
 # matchGrowth adjusts gamma (search volume) to hit von Bertalanffy growth rates.
 # Guard: if matchGrowth drives RDI to 0 for any species, skip that iteration.
 # forage_excl <- c("Sand Lance", "Atlantic Herring", "Capelin")
- params_my <- params
- species_params(params_my)$biomass_observed[
-   species_params(params_my)$species %in% forage_excl] <- NA
-
- for (i in 1:20) {
-   params<- params |> matchYield(keep="biomass") |> matchBiomasses() |> steady()
-   params_test <- tryCatch(matchGrowth(params), error = function(e) NULL)
-   if (!is.null(params_test)) {
-     rdi <- getRDI(params_test)
-     bad <- names(rdi)[rdi == 0]
-     if (length(bad) == 0) {
-       params <- params_test
-     } else {
-       warning("matchGrowth iteration ", i, ": RDI = 0 for ",
-               paste(bad, collapse = ", "), " — skipping matchGrowth this step")
-     }
-   } else {
-     warning("matchGrowth failed at iteration ", i, " — skipping")
-   }
-   params <- steady(params)
- }
-
-# Restore forage fish biomass_observed for diagnostics and step 3
-#species_params(params_my)$biomass_observed <- sp_obs_backup
-
- plotBiomassObservedVsModel(params_my, ratio = TRUE)
- plotGrowthCurves(params_my, species_panel = TRUE)
- plotYieldExcl(params_my, ratio = TRUE)
- plotFMortExcl(params_my)
-
-# # ── STEP 2b: check reproduction_level via yield-vs-F curves ──────────────────
-# # Run BEFORE matchYield: catchabilities should be set on a model with the
-# # correct stock-recruitment shape. reproduction_level = 0.7 set earlier.
-# # Yield curves should be dome-shaped peaking at realistic F (~0.2–0.5).
-# # If any species is flat (rl too low) or collapses at very low F (rl too high),
-# # adjust here then re-run steady() before proceeding.
-# plotYieldVsF(params,species="Spiny Dogfish")
+#  params_my <- params
+#  species_params(params_my)$biomass_observed[
+#    species_params(params_my)$species %in% forage_excl] <- NA
 # 
-# # Example overrides if needed (uncomment and re-run steady):
-#  rep_tuned <- getReproductionLevel(params_my)
-#  rep_tuned[] <- 0.5
-#  params <- setBevertonHolt(params, reproduction_level = rep_tuned) |> steady()
-
-params_steady <- params
+#  for (i in 1:20) {
+#    params<- params |> matchYieldCustom(keep="biomass") |> matchBiomasses() |> steady()
+#    params_test <- tryCatch(matchGrowth(params), error = function(e) NULL)
+#    if (!is.null(params_test)) {
+#      rdi <- getRDI(params_test)
+#      bad <- names(rdi)[rdi == 0]
+#      if (length(bad) == 0) {
+#        params <- params_test
+#      } else {
+#        warning("matchGrowth iteration ", i, ": RDI = 0 for ",
+#                paste(bad, collapse = ", "), " — skipping matchGrowth this step")
+#      }
+#    } else {
+#      warning("matchGrowth failed at iteration ", i, " — skipping")
+#    }
+#    params <- steady(params)
+#  }
+# 
+# # Restore forage fish biomass_observed for diagnostics and step 3
+# #species_params(params_my)$biomass_observed <- sp_obs_backup
+# 
+#  plotBiomassObservedVsModel(params_my, ratio = TRUE)
+#  plotGrowthCurves(params_my, species_panel = TRUE)
+#  plotYieldExcl(params_my, ratio = TRUE)
+#  plotFMortExcl(params_my)
+# 
+# # # ── STEP 2b: check reproduction_level via yield-vs-F curves ──────────────────
+# # # Run BEFORE matchYield: catchabilities should be set on a model with the
+# # # correct stock-recruitment shape. reproduction_level = 0.7 set earlier.
+# # # Yield curves should be dome-shaped peaking at realistic F (~0.2–0.5).
+# # # If any species is flat (rl too low) or collapses at very low F (rl too high),
+# # # adjust here then re-run steady() before proceeding.
+# # plotYieldVsF(params,species="Spiny Dogfish")
+# # 
+# # # Example overrides if needed (uncomment and re-run steady):
+# #  rep_tuned <- getReproductionLevel(params_my)
+# #  rep_tuned[] <- 0.5
+# #  params <- setBevertonHolt(params, reproduction_level = rep_tuned) |> steady()
+# 
+# params_steady <- params_my
 ```
 
 
@@ -996,9 +999,10 @@ params_steady <- params
 #     round(get_seal_yield(params_steady) / Yield_observed_seals_g, 3), "\n")
 # 
 
+
 # final matchBiomass
-for (i in 1:6) {
-params_steady <- params_steady |> matchBiomasses() |> steady()
+for (i in 1:10) {
+params_steady <- params |> matchBiomasses() |> steady()
 }
 
 plotBiomassObservedVsModel(params_steady, ratio = TRUE)
@@ -1510,13 +1514,18 @@ Calibration_plot
 Run the model with changing fishing through time
 
 ```{r}
-fishing_history <- read.csv("Ess_data/effort_gear_with_seals.csv")
-# Subset by Year column, then assign years as row names
-effort_df <- fishing_history[fishing_history$Year %in% 1978:2024,
-                              c("Bottom_Trawl", "Fixed_Gear", "Small_Mesh", "Pelagic", "Seals")]
-effort <- as.matrix(effort_df)
-rownames(effort) <- as.numeric(fishing_history$Year[fishing_history$Year %in% 1978:2024])
-#storage.mode(effort) <- "numeric"
+# fishing_history <- read.csv("Ess_data/effort_gear_with_seals.csv")
+# # Subset by Year column, then assign years as row names
+# effort_df <- fishing_history[fishing_history$Year %in% 1978:2024,
+#                               c("Bottom_Trawl", "Fixed_Gear", "Small_Mesh", "Pelagic", "Seals")]
+# effort <- as.matrix(effort_df)
+# rownames(effort) <- as.numeric(fishing_history$Year[fishing_history$Year %in% 1978:2024])
+# #storage.mode(effort) <- "numeric"
+
+# test effect of changing reproduction_level of Haibut
+# check without fishing
+params_unfished <- projectToSteady(params_steady, effort = 0, t_max = 100)
+plot(params_unfished)
 
 # Spin up and project
 params_spin <- projectToSteady(params_steady, effort = initial_effort(params), t_max = 100)
@@ -1526,6 +1535,8 @@ plot(sim)
 
 saveRDS(params_steady,"Ess_data/new_params_with_seal_interaction.RDS")
 ```
+
+
 
 # Exploratory Run of Projection through Time 
 
@@ -1575,8 +1586,22 @@ ggplot() +
   facet_wrap(~Species, scales = "free_y", ncol = 4) +
   labs(x = "Year", y = "Yield (thousand tonnes)",
        title = "Model fishing yield (blue) vs observed NAFO catches (red)") +
-  theme_minimal(base_size = 8)
+  theme_minimal(base_size = 8) +
+  scale_y_log10()
 
+#### CHECK HERRING WHY DOES IT LOOK LIKE ZERO??
+
+ggplot() +
+  geom_line(data = filter(yield_sim_fishing, Species %in% c("Atlantic Herring")),aes(x = Year, y = Yield_fishing / 1e9), colour = "steelblue") +
+  geom_point(data = filter(yield_ts,Species %in% c("Atlantic Herring")),
+             aes(x = Year, y = Yield / 1e9), size = 0.8, colour = "red") +
+  facet_wrap(~Species, scales = "free_y", ncol = 4) +
+  labs(x = "Year", y = "Yield (thousand tonnes)",
+       title = "Model fishing yield (blue) vs observed NAFO catches (red)") +
+  theme_minimal(base_size = 8) +
+  scale_y_log10()
+
+## HERRING YIELDS COLLAPSE
 ```
 
 Test with Additional predation mortality on all spp
@@ -1615,7 +1640,7 @@ Sci. 50: 1768-1 778.
 ```
 
 
-
+### THIS PLOT LOOKS A BIT ODD - WHY SCALING NOT 0-1, I think it was normalised before selecting the years?
 Creating a data frame of constant fishing (mean fishing) with extra effort (Seals)
 ```{r}
 fishing_history = read.csv("Ess_data/effort_gear_with_seals.csv",row.names = 1)
