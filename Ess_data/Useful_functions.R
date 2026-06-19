@@ -214,8 +214,61 @@ matchBiomassesCustom <- function(params, species = NULL) {
     }
     
     factor <- sp_params$biomass_observed[sp] / total
+    factor <- min(max(factor, 0.25), 4)   # damp: max 4x or 0.25x per iteration
     params@initial_n[sp, ] <- params@initial_n[sp, ] * factor
   }
   
+  # Diagnose before setBevertonHolt: identify species with zero RDI
+  rdi <- getRDI(params)
+  zero_sp <- which(rdi == 0)
+  if (length(zero_sp) > 0) {
+    sp_names <- sp_params$species[zero_sp]
+    for (sp in zero_sp) {
+      wmat <- sp_params$w_mat[sp]
+      mature_b <- sum(params@initial_n[sp, params@w >= wmat] *
+                        params@w[params@w >= wmat] *
+                        params@dw[params@w >= wmat])
+      message("getRDI = 0 for ", sp_params$species[sp],
+              " | w_mat = ", round(wmat, 2),
+              " g | mature biomass = ", signif(mature_b, 3), " g",
+              " | erepro = ", round(sp_params$erepro[sp], 4))
+    }
+    stop("Some species have no reproduction: ", paste(sp_names, collapse = ", "),
+         "\nSee messages above. Check z0, w_mat, and biomass scaling for these species.")
+  }
+
   setBevertonHolt(params)
+}
+
+
+# matchYieldCustom: wraps matchYield and clamps per-species fishing mortality
+# to biologically realistic bounds after each catchability adjustment.
+#
+# Reads optional columns from species_params:
+#   f_max  — upper F bound (e.g. 0.4 for Atlantic Halibut)
+#   f_min  — lower F bound (e.g. 0.3 for Atlantic Cod)
+# Species without a bound set (NA) are unconstrained.
+#
+# F is computed as biomass-weighted mean across sizes, consistent with how
+# plotFMortExcl summarises fishing mortality.
+matchYieldCustom <- function(params, gears = NULL, keep = "biomass") {
+
+  if (!is.null(gears)) {
+    params <- matchYield(params, keep = keep, gears = gears)
+  } else {
+    params <- matchYield(params, keep = keep)
+  }
+
+  # Cap per gear×species: if effort × catchability > 1.5 for any row, scale
+  # that row's catchability down so F = 1.5. Checked per row, not summed.
+  gp     <- gear_params(params)
+  effort <- params@initial_effort[gp$gear]
+  f_row  <- effort * gp$catchability
+  over   <- !is.na(f_row) & f_row > 1.5
+  if (any(over)) {
+    gear_params(params)$catchability[over] <-
+      gp$catchability[over] * (1.5 / f_row[over])
+  }
+
+  params
 }

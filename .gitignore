@@ -3,3 +3,4 @@ Ess_data/fhpd.csv
 Ess_Output/*.RDS
 Ess_Output/*.tiff
 Ess_data/fhpy.csv
+.Rproj.user

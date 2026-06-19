@@ -120,15 +120,18 @@ p3 <- ggplot(ppmr, aes(log10(pred_wght), log10(prey_wght))) +
   theme_minimal()
 
 # compute betasig for 14 species with real data
+# beta = biomass-weighted mean PPMR: prey_wght as weight so large fish prey
+# (which dominate energy intake) pull beta down for piscivores, avoiding the
+# need for manual overrides in the model setup script.
 betasig <- ppmr |>
   group_by(SCINAME) |>
   summarise(
-    beta     = median(ppmr, na.rm = TRUE),
+    beta     = weighted.mean(ppmr, w = prey_wght, na.rm = TRUE),
     sigma    = sd(log10(ppmr), na.rm = TRUE),
     min_ppmr = min(ppmr, na.rm = TRUE),
-    max_ppmr = max(ppmr, na.rm = TRUE) ) |>
+    max_ppmr = max(ppmr, na.rm = TRUE)) |>
   ungroup() |>
-  mutate( beta_adj     = beta / 2, min_ppmr_adj = min_ppmr / 2)
+  mutate(beta_adj = beta / 2, min_ppmr_adj = min_ppmr / 2)
 
 # add capelin proxy using herring values
 # Mallotus villosus has no stomach data in NOAA food habits database

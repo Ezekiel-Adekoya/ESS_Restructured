@@ -293,7 +293,6 @@ stat_catches %>%
 ####### Effort Data: Explore STATLANT 21B Database
 
 ```{r}
-
 ## 1. Get NAFO effort data files
 cols <- c("Year","Country","GearCode","Tonnage","MainSpecies","Divcode","Code","Effort",
           "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
@@ -372,7 +371,8 @@ nafo_mizer <- nafo_21B %>%
     
     # PELAGIC (Herring)
     Gear %in% c(30, 31, 17, 63) ~ "Pelagic",
-    Gear %in% c(13, 14, 15) & MainSpecies == 30 ~ "Pelagic",
+    #Gear %in% c(13, 14, 15) & MainSpecies == 30 ~ "Pelagic",
+    Gear %in% c(13, 14, 15)  ~ "Pelagic",
     
     # FIXED GEAR (Halibut / Pollock / White Hake)
     Gear %in% c(40, 41, 42, 49, 50, 51, 52, 53, 58, 56) ~ "Fixed_Gear",
@@ -384,15 +384,38 @@ nafo_mizer <- nafo_21B %>%
   filter(Mizer_Gear != "Exclude")
 
 
+
 library(zoo)
 library(tidyr)
 library(dplyr)
 
 # 4. FINAL AGGREGATION, INTERPOLATION & PIVOT
 mizer_effort_matrix <- nafo_mizer %>%
-  filter(Year >= 1970) %>%
+  filter(Year >= 1960) %>%
   group_by(Year, Mizer_Gear) %>%
-  summarise(Yearly_kW_Days = sum(Effort_kW_Days, na.rm = TRUE), .groups = "drop") %>%
+  summarise(Yearly_kW_Days = sum(Effort_kW_Days, na.rm = TRUE), .groups = "drop")
+
+# first check plot for full time series
+
+ggplot(mizer_effort_matrix, aes(x = Year, y = Yearly_kW_Days, color = Mizer_Gear)) +
+  geom_line() +
+  geom_point(alpha = 0.5) +
+  theme_minimal() +
+  labs(
+    title = "Fishing Effort by Functional Gear Group in 4VsW",
+    subtitle = "Effort standardized by Vessel Power (kW-Days)",
+    x = "Year",
+    y = "Effort (kW Days)",
+    color = "Gear Group"
+  ) +
+  scale_y_continuous(labels = scales::comma) +
+  facet_wrap(~Mizer_Gear, scales = "free_y") # Use free_y to see trends in smaller fisheries
+```
+
+
+```{r}
+mizer_effort_matrix <- mizer_effort_matrix %>%
+  filter(Year >= 1978) %>%
   # Use values_fill = NA to allow interpolation of missing years
   pivot_wider(names_from = Mizer_Gear, values_from = Yearly_kW_Days, values_fill = NA) %>%
   arrange(Year) %>%
@@ -425,6 +448,7 @@ rownames(row_2021) <- "2021"
 # Insert 2021 into matrix
 effort_final <- rbind(effort_final[rownames(effort_final) <= "2020", , drop = FALSE],
   row_2021,effort_final[rownames(effort_final) >= "2022", , drop = FALSE])
+
  effort_final <- data.frame(Year = as.numeric(rownames(effort_final)),effort_final,row.names = NULL)
  
 write.csv(effort_final,"Ess_data/effort_by_gear.csv",row.names = TRUE) # also save as scaled mizer
@@ -448,7 +472,12 @@ ggplot(plot_data, aes(x = Year, y = Effort, color = Gear)) +
   ) +
   scale_y_continuous(labels = scales::comma) +
   facet_wrap(~Gear, scales = "free_y") # Use free_y to see trends in smaller fisheries
+```
 
+
+# Plot total effort through time
+
+```{r}
 # 1. Prepare TOTAL (non-normalized) effort matrix
 # Use the mizer_effort_matrix from before, but SKIP the Step 6 sweep normalization
 plot_data_total <- as.data.frame(mizer_effort_matrix) %>%
@@ -473,8 +502,12 @@ ggplot(plot_data_total, aes(x = Year, y = Effort_Raw, fill = Gear)) +
   ) +
   scale_y_continuous(labels = scales::label_number(suffix = "M", scale = 1e-6)) + # In Millions
   theme(legend.position = "bottom")
+```
 
-######### GEAR_PARAMS EXAMPLE TO SHOW MAPPING BETWEEN EFFORT (GEARS) & CATCHES (SPECIES)
+# GEAR_PARAMS EXAMPLE TO SHOW MAPPING BETWEEN EFFORT (GEARS) & CATCHES (SPECIES)
+
+
+```{r}
 
 # Create the gear_params table
 gear_params <- data.frame(
@@ -683,11 +716,6 @@ gear_params <- gear_params[order(gear_params$species), ]
 rownames(gear_params) <- NULL
 
 write.csv(gear_params, "Ess_data/new.gear_params.csv", row.names = FALSE)
-
-```
-
-
-```{r}
 
 ```
 

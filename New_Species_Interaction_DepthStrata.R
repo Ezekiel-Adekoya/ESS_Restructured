@@ -49,7 +49,7 @@ plot(fit, main = "4VsW Spatial Associations: Selected 18 Species",
 
 biomass_overlap <- stat %>%
   filter(!is.na(STRAT), STRAT != "") %>%
-  filter(suppressWarnings(as.numeric(STRAT)) >= 444, # exclude 4vN
+  filter(suppressWarnings(as.numeric(STRAT)) >= 443, # 443 = 4Vs (confirmed); 440-442 = 4Vn excluded
          suppressWarnings(as.numeric(STRAT)) <= 466) %>%
   filter(SPEC < 1000) %>%
   group_by(STRAT, COMMON_NAME) %>%
