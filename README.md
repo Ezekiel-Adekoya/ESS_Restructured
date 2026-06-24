@@ -16,11 +16,11 @@ Scripts are numbered by stage: **00 = data prep, 01 = calibration, 02 = scenario
 
 | Step | Script | Produces |
 |---|---|---|
+| **00** | `00_Species_selection_DFO_RVsurvey.Rmd` | **run first** — species selection from the DFO RV survey (PCA) |
 | **00** | `00_EZ_get catches.Rmd` | NAFO catch / yield + gear effort time series |
 | **00** | `00_EZ_digitise_seal_data.r` | seal abundance (logistic fit), `seal_gear_params.csv`, effort-with-seals |
 | **00** | `00_EZ_SpeciesParams_extraction.R` | species parameters (a, b, w_max, w_mat …) |
 | **00** | `00_EZ_PPMR_extraction.R` | predator–prey mass ratios (beta) |
-| **00** | `00_Species_selection_DFO_RVsurvey.Rmd` | species selection from the DFO RV survey (PCA) |
 | **00** | `00_EZ_Workflow Diagram.Rmd` | workflow overview diagram |
 | **01** | `01_Calibration_Stage1_steady.Rmd` | **time-averaged 1978–85 steady state** → `params_stage1_steady.RDS` + steady-state diagnostics (size spectra, growth, biomass/yield fits, emergent diet vs Cook & Bundy, seal "catch" vs Bowen & Harrison) |
 | **01** | `01_Calibration_Stage2_AUTO_fastOptim.R` | **factual time-series model (recommended)** → `params_stage2_AUTO.RDS`. Objective-driven: structural decisions fixed in `apply_structural()`, ecological criteria as penalties, only nuisance parameters optimised (`optimParallel`). Reproducible. |
