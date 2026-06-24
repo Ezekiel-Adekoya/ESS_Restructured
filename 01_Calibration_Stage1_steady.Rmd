@@ -9,7 +9,7 @@ output: html_document
 
 Calibrates the 18/19-species ESS size-spectrum model to the **1978-85 reference
 period** (high groundfish, low pelagics). Output `params_stage1_steady.RDS` feeds
-**Stage 2** (`01_Calibration_Stage2_timeseries.R`), which projects through the
+**Stage 2** (`02_Calibration_Stage2_AUTO.R`), which projects through the
 historical effort and tunes the dynamic processes (collapse + non-recovery).
 
 Corrections incorporated (see ESS_calibration_status.md):
@@ -388,7 +388,7 @@ external_species_info$w_min[external_species_info$species == "Winter Skate"] <- 
 external_species_info$w_min[external_species_info$species == "Thorny Skate"] <- 5
 
 # ── PPMR (beta) corrections for piscivores ───────────────────────────────────
-# beta values are now biomass-weighted mean PPMR from 00_EZ_SpeciesParams_extraction.R
+# beta values are now biomass-weighted mean PPMR from 00b_SpeciesParams_extraction.R
 # (weighted.mean(ppmr, w = prey_wght)), so large fish prey dominate rather than
 # numerically abundant tiny prey. No manual overrides needed.
 
@@ -1013,7 +1013,7 @@ get_seal_yield <- function(p) {
 }
 
 # SEALS OFF during the steady-state calibration — Q/B scaling DEFERRED to after
-# the biomass loops (post-hoc; see 00_EZ_digitise_seal_data.r note). Running the
+# the biomass loops (post-hoc; see 00e_digitise_seal_data.r note). Running the
 # empirical (juvenile-focused) seal gear during matchBiomasses drives
 # reproduction_level -> 0 (R_max -> Inf) for the low-productivity species and
 # distorts the 1978-85 reference state (cod dynamics flip). We keep the target

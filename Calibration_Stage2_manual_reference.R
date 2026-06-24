@@ -1,5 +1,5 @@
 ## =============================================================================
-## 01_Calibration_Stage2_timeseries.R
+## Calibration_Stage2_manual_reference.R
 ## STAGE 2 of the ESS calibration: time-series tuning → the "factual" model.
 ##
 ## Input : params_stage1_steady.RDS  (time-averaged 1978-85 steady state from
@@ -135,7 +135,7 @@ gear_params(p) <- gp
 ## ── Seal catchability → realistic PEAK F (KEEP the logistic abundance shape) ──
 ## Seals are a GEAR, so F = effort·catchability·sel is LINEAR in effort. The seal
 ## effort column (effort_gear_with_seals$Seals) is the DIGITISED LOGISTIC abundance
-## (00_EZ_digitise_seal_data.r: nls K/(1+exp(-r(t-t0))) scaled 0-1; 0.017 in 1978
+## (00e_digitise_seal_data.r: nls K/(1+exp(-r(t-t0))) scaled 0-1; 0.017 in 1978
 ## -> 0.998 in 2024). Do NOT clip it flat — that froze seal pressure at the 1985
 ## level and forced cultivation to carry non-recovery. Instead scale ALL seal
 ## catchabilities by ONE factor so realized PEAK F (at the 2024 logistic top) =

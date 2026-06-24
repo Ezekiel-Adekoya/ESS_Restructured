@@ -1,5 +1,5 @@
 ## ============================================================================
-## 01_Calibration_Stage2_AUTO_fastOptim.R   (STEERED, objective-driven Stage 2)
+## 02_Calibration_Stage2_AUTO.R   (STEERED, objective-driven Stage 2)
 ##
 ## Reproducible alternative to the hand-tuned Stage 2. ALL decisions live in one
 ## of three labelled places, each traceable to a STUDY OBJECTIVE — no ad-hoc

@@ -12,23 +12,24 @@ difference in cod/groundfish recovery is **robust to food-web structural uncerta
 
 ## Workflow (run in order)
 
-Scripts are numbered by stage: **00 = data prep, 01 = calibration, 02 = scenarios, 03 = indicators.**
+Run in order. **`00a–00e` = data prep**, then **`01–04` = calibration → scenarios → indicators**.
 
 | Step | Script | Produces |
 |---|---|---|
-| **00** | `00_Species_selection_DFO_RVsurvey.Rmd` | **run first** — species selection from the DFO RV survey (PCA) |
-| **00** | `00_EZ_get catches.Rmd` | NAFO catch / yield + gear effort time series |
-| **00** | `00_EZ_digitise_seal_data.r` | seal abundance (logistic fit), `seal_gear_params.csv`, effort-with-seals |
-| **00** | `00_EZ_SpeciesParams_extraction.R` | species parameters (a, b, w_max, w_mat …) |
-| **00** | `00_EZ_PPMR_extraction.R` | predator–prey mass ratios (beta) |
-| **00** | `00_EZ_Workflow Diagram.Rmd` | workflow overview diagram |
+| **00a** | `00a_Species_selection_DFO_RVsurvey.Rmd` | species selection from the DFO RV survey (PCA) |
+| **00b** | `00b_SpeciesParams_extraction.R` | species parameters (a, b, w_max, w_mat …) |
+| **00c** | `00c_PPMR_extraction.R` | predator–prey mass ratios (beta) |
+| **00d** | `00d_get_catches.Rmd` | NAFO catch / yield + gear effort time series |
+| **00e** | `00e_digitise_seal_data.r` | seal abundance (logistic fit), `seal_gear_params.csv`, effort-with-seals |
 | **01** | `01_Calibration_Stage1_steady.Rmd` | **time-averaged 1978–85 steady state** → `params_stage1_steady.RDS` + steady-state diagnostics (size spectra, growth, biomass/yield fits, emergent diet vs Cook & Bundy, seal "catch" vs Bowen & Harrison) |
-| **01** | `01_Calibration_Stage2_AUTO_fastOptim.R` | **factual time-series model (recommended)** → `params_stage2_AUTO.RDS`. Objective-driven: structural decisions fixed in `apply_structural()`, ecological criteria as penalties, only nuisance parameters optimised (`optimParallel`). Reproducible. |
-| **01** | `01_Calibration_Stage2_timeseries.R` | hand-tuned factual model → `params_stage2_factual.RDS`. Kept as a **validation reference** for the AUTO model. |
-| **02** | `02_Scenarios Through time.Rmd` | factual vs counterfactual (seals constant) over a **paired** randomised-web ensemble; recovery-robustness analysis + figures |
-| **03** | `03_Indicators.Rmd` | community indicators (e.g. mean-weight) computed from the scenario runs |
+| **02** | `02_Calibration_Stage2_AUTO.R` | **factual time-series model** → `params_stage2_AUTO.RDS`. Objective-driven: structural decisions fixed in `apply_structural()`, ecological criteria as penalties, only nuisance parameters optimised (`optimParallel`). Reproducible. |
+| **03** | `03_Scenarios_Through_time.Rmd` | factual vs counterfactual (seals constant) over a **paired** randomised-web ensemble; recovery-robustness analysis + figures |
+| **04** | `04_Indicators.Rmd` | community indicators (e.g. mean-weight) computed from the scenario runs |
 
-Interaction-matrix prep: `Cook and Bundy.R` / `New_Species_Interaction_DepthStrata.R` (Schoener's D spatial overlap → θ_ij).
+### Supplementary files (not numbered steps)
+- `Calibration_Stage2_manual_reference.R` — the hand-tuned factual model (`params_stage2_factual.RDS`); kept as a **validation reference** for the AUTO model (step 02).
+- `Workflow_Diagram.Rmd` — workflow overview diagram.
+- `Cook and Bundy.R` / `New_Species_Interaction_DepthStrata.R` — interaction-matrix prep (Schoener's D spatial overlap → θ_ij).
 
 `Ess_data/Useful_functions.R` is the **single** project functions file (custom
 biomass calibration, seal selectivity, and the `getError*` loss functions used by the

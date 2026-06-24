@@ -8,7 +8,7 @@ knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/ESS_restructured/")
 # Define the save directory
 save_dir <- paste0(here(), "Ess_data/")
 
-# Run New_get catches.R first (generates effort_matrix_by_gear.RDS)
+# Run 00d_get_catches.Rmd first (generates effort_matrix_by_gear.RDS)
 
 # ── References ────────────────────────────────────────────────────────────────
 #
@@ -121,7 +121,7 @@ write.csv(scotian_extrap, "scotian_shelf_logistic_1960_2025.csv", row.names = FA
 
 # ── Effort matrix: gear-based effort from new_get_catches + seals ────────────
 # Load gear-based effort (Bottom_Trawl, Fixed_Gear, Pelagic, Small_Mesh)
-# produced by New_get catches.R. Scale each gear 0-1 relative to its own max,
+# produced by 00d_get_catches.Rmd. Scale each gear 0-1 relative to its own max,
 # then append seal abundance scaled to its full-series max (1960-2025).
 
 fishing_history <- read.csv("Ess_data/effort_by_gear.csv")
