@@ -110,7 +110,7 @@ run_paired_sims <- function(params, n_sims = 100, sd = 0.2,
   set.seed(seed)
   factual <- counter <- vector("list", n_sims)
   for (i in seq_len(n_sims)) {
-    rp <- tryCatch(steady(randomize_interaction_matrix(params, sdev = sd)),
+    rp <- tryCatch(setParams(randomize_interaction_matrix(params, sdev = sd)),
                    error = function(e) NULL)
     if (is.null(rp)) next                   # leave both NULL at i (pairing preserved)
     factual[[i]] <- tryCatch(project(rp, effort = effort_factual), error = function(e) NULL)
@@ -250,9 +250,9 @@ pA <- ggplot(filter(pair_df, species %in% gf),
   geom_violin(fill = "steelblue", alpha = 0.4, colour = NA) +
   geom_boxplot(width = 0.15, outlier.size = 0.4) +
   coord_flip() + theme_bw(base_size = 10) +
-  labs(x = NULL, y = "log( counterfactual / factual )  terminal biomass",
-       title = "Recovery suppressed by the seal increase, across randomised food webs",
-       subtitle = "Per-web paired difference; > 0 = species recovers more when seals do NOT increase")
+  labs(x = NULL, y = "log( counterfactual / factual )  terminal biomass")#,
+       #title = "Recovery suppressed by the seal increase, across randomised food webs",
+       #subtitle = "Per-web paired difference; > 0 = species recovers more when seals do NOT              #increase")
 ggsave(paste0(save_dir, "scenario_paired_recovery_logratio.jpeg"), pA, width = 9, height = 6, dpi = 200)
 pA
 
