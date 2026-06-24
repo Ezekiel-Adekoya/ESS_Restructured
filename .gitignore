@@ -4,3 +4,17 @@ Ess_Output/*.RDS
 Ess_Output/*.tiff
 Ess_data/fhpy.csv
 .Rproj.user
+
+# session junk / R artefacts
+.RData
+.Rhistory
+.Rapp.history
+.DS_Store
+Rplots.pdf
+
+# exploratory run logs and stray outputs
+*_output.txt
+/params_steady.RDS
+
+# local archive of dead-end / exploratory scripts (kept off the repo)
+/_archive/
