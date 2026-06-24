@@ -19,13 +19,21 @@ save_dir <- paste0(here(), "Ess_data/")
 #   Atlantic Canada. Journal of Northwest Atlantic Fishery Science, 35, 33-44.
 #   [Figure showing Scotian Shelf seal abundance 1960-2021, mean and 95% CI]
 #
-# Gaussian size selectivity:
-#   Bowen, W.D., Lawson, J.W. & Beck, B. (1993). Seasonal and geographic
-#   variation in the species composition and size of prey consumed by grey
-#   seals (Halichoerus grypus) on the Scotian Shelf. Canadian Journal of
-#   Fisheries and Aquatic Sciences, 50(8), 1768-1778.
-#   https://doi.org/10.1139/f93-198
-#   [Optimal prey mass ~1.5 kg; lognormal selectivity sigma = 0.75]
+# Gaussian (lognormal-in-weight) size selectivity:
+#   Bowen, W.D. & Harrison, G.D. (1994). Offshore diet of grey seals
+#   Halichoerus grypus near Sable Island, Canada. Marine Ecology Progress
+#   Series, 112, 1-11.  [Eastern Scotian Shelf offshore diet]
+#   Bowen, W.D., Lawson, J.W. & Beck, B. (1993). ... CJFAS 50(8), 1768-1778.
+#   https://doi.org/10.1139/f93-198  [mainland Scotian Shelf diet]
+#
+#   CORRECTED 2026-06: grey seals target fish <40 cm; PER-SPECIES optimal prey
+#   mass = the measured MEAN prey weights (Bowen & Harrison 1994, Table 1 / Fig. 3):
+#     cod 201 g, American plaice 132 g, yellowtail 89 g, silver hake 66 g,
+#     redfish 32 g, sand lance 15 g (others estimated from the <40 cm target).
+#   The earlier flat w_opt = 1500 g (~50 cm) was NOT supported — it is ~5-10x the
+#   largest measured mean prey (cod 201 g) and, applied flat across species, drove
+#   absurd catchabilities for small prey. lognormal sigma = 0.75 retained (matches
+#   the within-species prey-size spread in Bowen & Harrison Fig. 3).
 #
 # Vessel power standardisation:
 #   Anticamara, J.A. et al. (2011). Global fishing effort (1950-2010): trends,
@@ -157,86 +165,93 @@ par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1)
 saveRDS(effort_with_seals, "Ess_data/effort_gear_with_seals.RDS")
 write.csv(effort_with_seals, "Ess_data/effort_gear_with_seals.csv",row.names = FALSE)
 
-# ── Seal gear_params: Gaussian size selectivity (Bowen 1993) ─────────────────
-# Seals modelled as a gear with lognormal selectivity by prey weight.
-# w_opt = 1500 g (optimal prey mass) and sigma = 0.75 (log-scale width)
-# from Bowen et al. (1993) grey seal diet data, Scotian Shelf.
-# Catchability reflects species importance in grey seal diet
-# (higher for pelagic/schooling prey, lower for large demersal species).
-# NOTE: catchability values below are initial estimates based on diet
-# composition from Bowen et al. (1993) and must be calibrated against
-# observed seal diet data or biomass trends before use in simulations.
+# ── Seal gear_params: lognormal size selectivity (Bowen & Harrison 1994) ─────
+# Seals modelled as a gear with lognormal selectivity by prey weight, peaking at
+# a PER-SPECIES optimal prey mass w_opt = the measured mean prey weight (g), with
+# log-scale width sigma = 0.75. w_opt values: measured (Bowen & Harrison 1994
+# Table 1 / Fig. 3) for cod/plaice/yellowtail/silver hake/redfish/sand lance;
+# estimated from the <40 cm target for the rest.
+# Catchability = generalist accessibility; realized diet is EMERGENT from the
+# prey field (NOT forced to Bowen proportions — Bowen is a single high-sand-lance
+# snapshot). Near-zero for non-prey (halibut = 0; dogfish/monkfish minimal;
+# skates minor — no otoliths, only thorns in ~2% of scats). All catchabilities
+# are rescaled post-hoc to the Q/B consumption target (see below).
 
-gaussian_sizeweight <- function(l, species_params, w_opt, sigma, ...) {
-  w <- species_params$a * l ^ species_params$b
+gaussian_sizeweight <- function(w, species_params, w_opt, sigma, ...) {
   exp(-0.5 * ((log(w) - log(w_opt)) / sigma)^2)
 }
 
-
-# Species names match selected_spp in New_PCA_DFO.R (18 species)
+# Species names match selected_spp in New_PCA_DFO.R (19 species)
 seal_gear_params <- data.frame(
   species = c(
-    "Atlantic Cod",
-    "Haddock",
-    "Redfish Unseparated",
-    "American Plaice",
-    "Silver Hake",
-    "Monkfish",
-    "White Hake",
-    "Thorny Skate",
-    "Winter Skate",
-    "Pollock",
-    "Yellowtail Flounder",
-    "Witch Flounder",
-    "Longhorn Sculpin",
-    "Red Hake",
-    "Atlantic Herring",
-    "Sand Lance",
-    "Spiny Dogfish",
-    "Atlantic Halibut",
-    "Capelin"
+    "Atlantic Cod", "Haddock", "Redfish Unseparated", "American Plaice",
+    "Silver Hake", "Monkfish", "White Hake", "Thorny Skate", "Winter Skate",
+    "Pollock", "Yellowtail Flounder", "Witch Flounder", "Longhorn Sculpin",
+    "Red Hake", "Atlantic Herring", "Sand Lance", "Spiny Dogfish",
+    "Atlantic Halibut", "Capelin"
   ),
-  gear         = "Seals",
-  sel_func     = "gaussian_sizeweight",
-  w_opt        = 1500,  # g, Bowen et al. 1993
-  sigma        = 0.75,  # log-scale SD, Bowen et al. 1993
+  gear     = "Seals",
+  sel_func = "gaussian_sizeweight",
+  # per-species optimal prey mass (g): measured (Bowen & Harrison 1994) or est.
+  w_opt = c(
+    201,  # Atlantic Cod         (measured)
+    150,  # Haddock              (est, gadoid)
+     32,  # Redfish Unseparated  (measured)
+    132,  # American Plaice      (measured)
+     66,  # Silver Hake          (measured)
+    150,  # Monkfish             (est; not a seal prey)
+     66,  # White Hake           (est, Urophycis ~ silver hake)
+    150,  # Thorny Skate         (est; minor prey)
+    150,  # Winter Skate         (est; minor prey)
+    150,  # Pollock              (est, gadoid)
+     89,  # Yellowtail Flounder  (measured)
+     90,  # Witch Flounder       (est, flatfish)
+     50,  # Longhorn Sculpin     (est)
+     50,  # Red Hake             (est, Urophycis)
+     50,  # Atlantic Herring     (est, small clupeid)
+     15,  # Sand Lance           (measured)
+    200,  # Spiny Dogfish        (est; not offshore prey)
+    200,  # Atlantic Halibut     (est; not a prey)
+     15   # Capelin              (est, small forage)
+  ),
+  sigma = 0.75,  # log-scale SD (Bowen & Harrison 1994 Fig. 3)
   catchability = c(
-    0.15,  # Atlantic Cod          – important demersal prey
-    0.10,  # Haddock               – moderate demersal prey
-    0.08,  # White Hake            – moderate prey
-    0.08,  # Red Hake              – moderate prey
-    0.10,  # Silver Hake           – moderate prey
-    0.10,  # Pollock               – moderate prey
-    0.08,  # Redfish Unseparated   – moderate prey
-    0.15,  # American Plaice       – benthic, less accessible
-    0.05,  # Yellowtail Flounder   – benthic, less accessible
-    0.05,  # Witch Flounder        – benthic, less accessible
-    0.45,  # Atlantic Herring      – major pelagic prey
-    0.45,  # Capelin               – major pelagic prey
-    0.05,  # Thorny Skate          – spiny, less preferred
-    0.45,  # Winter Skate          – benthic, less preferred
-    0.05,  # Spiny Dogfish         – spines, less preferred
-    0.05,  # Monkfish              – large benthic, less accessible
-    0.30,  # Sand Lance            – abundant schooling prey
-    0.05,  # Longhorn Sculpin      – benthic, less accessible
-    0.03   # Atlantic Halibut      – very large, rare prey
+    0.10,  # Atlantic Cod
+    0.10,  # Haddock
+    0.10,  # Redfish Unseparated
+    0.10,  # American Plaice
+    0.10,  # Silver Hake
+    0.01,  # Monkfish            – not a seal prey
+    0.10,  # White Hake
+    0.02,  # Thorny Skate        – minor (thorns only)
+    0.02,  # Winter Skate        – minor
+    0.10,  # Pollock
+    0.10,  # Yellowtail Flounder
+    0.10,  # Witch Flounder
+    0.10,  # Longhorn Sculpin
+    0.10,  # Red Hake
+    0.10,  # Atlantic Herring
+    0.10,  # Sand Lance
+    0.01,  # Spiny Dogfish       – spines, not in offshore diet
+    0.00,  # Atlantic Halibut    – not a prey (1 occurrence in 393 scats)
+    0.10   # Capelin
   )
 )
 
-# ── Plot Gaussian selectivity curves ─────────────────────────────────────────
+# ── Plot per-species lognormal selectivity curves ────────────────────────────
 w_seq <- exp(seq(log(0.1), log(1e6), length.out = 500))
-sel   <- exp(-0.5 * ((log(w_seq) - log(1500)) / 0.75)^2)
-
 n_sp  <- nrow(seal_gear_params)
 n_row <- ceiling(n_sp / 4)
 
 par(mfrow = c(n_row, 4), mar = c(3, 3, 2, 1), mgp = c(2, 0.6, 0))
 for (i in seq_len(n_sp)) {
+  wo  <- seal_gear_params$w_opt[i]
+  sel <- exp(-0.5 * ((log(w_seq) - log(wo)) / seal_gear_params$sigma[i])^2)
   plot(w_seq, sel, type = "l", lwd = 1.5, col = "steelblue",
        log = "x", ylim = c(0, 1.05),
        xlab = "Prey weight (g)", ylab = "Selectivity",
        main = seal_gear_params$species[i])
-  abline(v = 1500, lty = 2, col = "grey50")
+  abline(v = wo, lty = 2, col = "grey50")
 }
 par(mfrow = c(1, 1), mar = c(5, 4, 4, 2) + 0.1)
 
@@ -262,27 +277,28 @@ write.csv(seal_gear_params,
 #   4. Run the model, extract getYield() for the Seals gear, compare to
 #      target; scale all catchabilities by the ratio until they match
 #
-# Diet proportions (Bowen et al. 1993, Scotian Shelf, approximate):
+# Diet proportions by wet weight (Bowen & Harrison 1994, Table 2, offshore ESS):
+# only a check/target for the post-hoc Q/B split — realized diet is emergent.
 diet_prop <- c(
-  0.08,  # Atlantic Cod
-  0.05,  # Haddock
-  0.03,  # White Hake
-  0.03,  # Red Hake
-  0.05,  # Silver Hake
-  0.05,  # Pollock
-  0.03,  # Redfish Unseparated
-  0.02,  # American Plaice
-  0.02,  # Yellowtail Flounder
-  0.02,  # Witch Flounder
-  0.20,  # Atlantic Herring
-  0.13,  # Capelin
-  0.01,  # Thorny Skate
-  0.01,  # Winter Skate
-  0.01,  # Spiny Dogfish
-  0.01,  # Monkfish
-  0.25,  # Sand Lance
-  0.01,  # Longhorn Sculpin
-  0.01   # Atlantic Halibut
+  0.110,  # Atlantic Cod
+  0.001,  # Haddock              (<0.1%)
+  0.002,  # White Hake           (Urophycis spp. 0.2% split)
+  0.001,  # Red Hake
+  0.026,  # Silver Hake
+  0.002,  # Pollock
+  0.013,  # Redfish Unseparated
+  0.014,  # American Plaice
+  0.011,  # Yellowtail Flounder
+  0.004,  # Witch Flounder
+  0.002,  # Atlantic Herring
+  0.004,  # Capelin
+  0.001,  # Thorny Skate
+  0.001,  # Winter Skate
+  0.000,  # Spiny Dogfish        (absent from offshore diet)
+  0.000,  # Monkfish             (absent)
+  0.809,  # Sand Lance           (dominant — 80.9%)
+  0.000,  # Longhorn Sculpin
+  0.000   # Atlantic Halibut     (1 occurrence / 393 scats)
 )
 # Grey seal parameters
 seal_body_mass_kg   <- 170    # mean adult body mass (kg)

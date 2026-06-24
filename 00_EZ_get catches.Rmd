@@ -414,6 +414,17 @@ ggplot(mizer_effort_matrix, aes(x = Year, y = Yearly_kW_Days, color = Mizer_Gear
 
 
 ```{r}
+# Save 1960-2024 effort before subsetting, for use in ramp-up calibration
+effort_1960_wide <- mizer_effort_matrix %>%
+  filter(Year >= 1960) %>%
+  pivot_wider(names_from = Mizer_Gear, values_from = Yearly_kW_Days, values_fill = NA) %>%
+  arrange(Year) %>%
+  mutate(across(c(Bottom_Trawl, Fixed_Gear, Small_Mesh, Pelagic),
+                ~zoo::na.approx(., na.rm = FALSE))) %>%
+  fill(everything(), .direction = "updown") %>%
+  mutate(across(everything(), ~replace_na(., 0)))
+saveRDS(effort_1960_wide, "Ess_data/effort_by_gear_1960.rds")
+
 mizer_effort_matrix <- mizer_effort_matrix %>%
   filter(Year >= 1978) %>%
   # Use values_fill = NA to allow interpolation of missing years

@@ -259,16 +259,356 @@ matchYieldCustom <- function(params, gears = NULL, keep = "biomass") {
     params <- matchYield(params, keep = keep)
   }
 
-  # Cap per gear×species: if effort × catchability > 1.5 for any row, scale
-  # that row's catchability down so F = 1.5. Checked per row, not summed.
+  # Cap per gear×species: if effort × catchability > 4 for any row, scale
+  # that row's catchability down so F = 4. Checked per row, not summed.
   gp     <- gear_params(params)
   effort <- params@initial_effort[gp$gear]
   f_row  <- effort * gp$catchability
-  over   <- !is.na(f_row) & f_row > 1.5
+  over   <- !is.na(f_row) & f_row > 4
   if (any(over)) {
     gear_params(params)$catchability[over] <-
-      gp$catchability[over] * (1.5 / f_row[over])
+      gp$catchability[over] * (4 / f_row[over])
   }
 
   params
+}
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# MERGED FROM functions.R (2026-06): the single project functions file.
+# Added below: the seal selectivity function and the ESS getError* loss
+# functions (steady-state + time-series, used by the calibration / fastOptim
+# optimisation). All use the `biomass_cutoff` (lower) / `biomass_cutoffHigh`
+# (upper) convention — consistent with the custom functions above and Stage 1.
+# The custom matchBiomasses/matchYield/calibrate functions above are RETAINED
+# for future use.
+# ════════════════════════════════════════════════════════════════════════════
+
+# Seal selectivity function — log-normal size preference used by the Seals gear
+# Seal selectivity function — log-normal size preference used by the Seals gear
+gaussian_sizeweight <- function(w, species_params, w_opt, sigma, ...) {
+  exp(-0.5 * ((log(w) - log(w_opt)) / sigma)^2)
+}
+
+# ── Seal-diet tuning: per-species seal catchability vs observed trajectory ────
+# Tunes seal catchability multipliers for `seal_tune_sp` to stop the ramping seal
+# effort over-cropping them, while preserving cod's collapse (cod kept in the
+# loss but its seal-q NOT tuned). Projects from the calibrated initial_n through
+# the historical effort (no re-spin — seal effort at the reference is tiny).
+# vary: log10(seal catchability multiplier) for each seal_tune_sp.
+getErrorSealDiet <- function(vary, params, dat_ts, effort_ts,
+                             seal_tune_sp, loss_sp, sp_weights = NULL,
+                             fish_tune_sp = NULL,
+                             fishing_gears = c("Bottom_Trawl","Fixed_Gear",
+                                               "Small_Mesh","Pelagic"),
+                             mult_min = 0.01, mult_max = 3,
+                             fish_mult_max = 30) {
+  n_seal <- length(seal_tune_sp)
+  n_fish <- length(fish_tune_sp)
+  seal_mult <- 10^vary[seq_len(n_seal)]
+  if (any(!is.finite(seal_mult)) || any(seal_mult < mult_min) ||
+      any(seal_mult > mult_max)) return(1e8)
+
+  gp <- gear_params(params)
+  for (i in seq_along(seal_tune_sp)) {
+    idx <- which(gp$species == seal_tune_sp[i] & gp$gear == "Seals")
+    if (length(idx)) gp$catchability[idx] <- gp$catchability[idx] * seal_mult[i]
+  }
+  # Optional fishing catchability multipliers (e.g. restore Silver Hake fishing)
+  if (n_fish > 0) {
+    fish_mult <- 10^vary[(n_seal + 1):(n_seal + n_fish)]
+    if (any(!is.finite(fish_mult)) || any(fish_mult <= 0) ||
+        any(fish_mult > fish_mult_max)) return(1e8)
+    for (i in seq_along(fish_tune_sp)) {
+      idx <- which(gp$species == fish_tune_sp[i] & gp$gear %in% fishing_gears)
+      if (length(idx)) gp$catchability[idx] <- gp$catchability[idx] * fish_mult[i]
+    }
+  }
+  gear_params(params) <- gp
+  params <- tryCatch(setParams(params), error = function(e) NULL)
+  if (is.null(params)) return(1e8)
+
+  sim <- tryCatch(
+    project(params, effort = effort_ts, t_max = nrow(effort_ts),
+            t_save = 1, progress_bar = FALSE),
+    error = function(e) NULL)
+  if (is.null(sim)) return(1e8)
+
+  cl <- params@species_params$biomass_cutoff; cl[is.na(cl)] <- 0
+  sp <- params@species_params$species
+  sim_time <- as.integer(dimnames(sim@n)[[1]])
+  common <- intersect(sim_time, unique(dat_ts$Year))
+  if (is.null(sp_weights)) sp_weights <- setNames(rep(1, length(loss_sp)), loss_sp)
+
+  loss <- 0
+  for (s in loss_sp) {
+    j <- which(sp == s); if (!length(j)) next
+    idx <- params@w >= cl[j]
+    mb <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3,
+                        params@w[idx] * params@dw[idx], "*"))
+    names(mb) <- as.character(sim_time)
+    obs_s <- dat_ts$Biomass[dat_ts$Species == s & dat_ts$Year %in% common]
+    yr_s  <- dat_ts$Year[dat_ts$Species == s & dat_ts$Year %in% common]
+    mod_s <- mb[as.character(yr_s)]
+    ok <- !is.na(obs_s) & obs_s > 0 & !is.na(mod_s) & mod_s > 0
+    if (sum(ok) == 0) next
+    wt <- if (s %in% names(sp_weights)) sp_weights[s] else 1
+    loss <- loss + wt * sum((log(mod_s[ok] / obs_s[ok]))^2)
+  }
+  loss
+}
+
+
+# ── ESS 18-species adaptation ─────────────────────────────────────────────────
+# vary layout (length = 3 * n_sp):
+#   vary[1:n_sp]              log10(R_max) for each species
+#   vary[(n_sp+1):(2*n_sp)]   erepro for each species
+#   vary[(2*n_sp+1):(3*n_sp)] interaction_resource for each species
+#
+# Interaction matrix is kept fixed (too many params for gradient-free search).
+# Uses biomass_cutoff (lower) and biomass_cutoffHigh (upper) from species_params.
+# dat: named numeric vector of observed biomass (g) — NA-safe.
+
+getErrorCustomBiomassESS <- function(vary, params, dat,
+                                     inf_sp = NULL,
+                                     tol = 0.001, timetorun = 10) {
+  n_sp <- nrow(params@species_params)
+
+  # vary = log10(R_max); if inf_sp supplied, only update those species
+  if (is.null(inf_sp)) {
+    params@species_params$R_max <- 10^vary[1:n_sp]
+  } else {
+    params@species_params$R_max[inf_sp] <- 10^vary
+  }
+
+  params <- setParams(params)
+
+  params <- tryCatch(
+    projectToSteady(params, distance_func = distanceSSLogN,
+                    tol = tol, t_max = 200, return_sim = FALSE),
+    error = function(e) NULL
+  )
+  if (is.null(params)) return(1e8)
+
+  sim <- tryCatch(
+    project(params, t_max = timetorun, progress_bar = FALSE),
+    error = function(e) NULL
+  )
+  if (is.null(sim)) return(1e8)
+
+  n_final <- sim@n[dim(sim@n)[1], , ]
+
+  cutoff_low <- params@species_params$biomass_cutoff
+  if (is.null(cutoff_low)) cutoff_low <- rep(0, n_sp)
+  cutoff_low[is.na(cutoff_low)] <- 0
+
+  cutoff_high <- params@species_params$biomass_cutoffHigh
+  if (is.null(cutoff_high)) cutoff_high <- rep(Inf, n_sp)
+  cutoff_high[is.na(cutoff_high)] <- Inf
+
+  sim_biomass <- numeric(n_sp)
+  for (j in seq_len(n_sp)) {
+    idx <- params@w >= cutoff_low[j] & params@w <= cutoff_high[j]
+    sim_biomass[j] <- sum(n_final[j, idx] * params@w[idx] * params@dw[idx])
+  }
+
+  ok   <- !is.na(dat) & dat > 0 & sim_biomass > 0
+  pred <- log(sim_biomass[ok])
+  obs  <- log(dat[ok])
+  sum((pred - obs)^2)
+}
+
+
+# Time-series version: projects with historical effort matrix and compares
+# modelled biomass to the full 1978-2024 survey time series.
+# dat_ts: data.frame with columns Year, Species, Biomass (g) — long format.
+# effort_ts: matrix / data.frame with years as rownames and gears as columns.
+# sp_weights: named numeric vector; species not listed get weight 1.
+# exclude_sp: character vector of species to drop from the loss.
+
+getErrorTSBiomassESS <- function(vary, params, dat_ts, effort_ts,
+                                  sp_weights  = NULL,
+                                  exclude_sp  = c("Atlantic Herring", "Capelin",
+                                                   "Sand Lance", "Longhorn Sculpin"),
+                                  tol         = 0.001) {
+  n_sp <- nrow(params@species_params)
+  sp   <- params@species_params$species
+
+  # vary contains only log10(R_max); erepro and interaction_resource held fixed
+  params@species_params$R_max <- 10^vary[1:n_sp]
+
+  params <- tryCatch(setParams(params), error = function(e) NULL)
+  if (is.null(params)) return(1e8)
+
+  sim <- tryCatch(
+    project(params, effort = effort_ts, t_max = nrow(effort_ts),
+            t_save = 1, progress_bar = FALSE),
+    error = function(e) NULL
+  )
+  if (is.null(sim)) return(1e8)
+
+  cutoff_low <- params@species_params$biomass_cutoff
+  if (is.null(cutoff_low)) cutoff_low <- rep(0, n_sp)
+  cutoff_low[is.na(cutoff_low)] <- 0
+
+  cutoff_high <- params@species_params$biomass_cutoffHigh
+  if (is.null(cutoff_high)) cutoff_high <- rep(Inf, n_sp)
+  cutoff_high[is.na(cutoff_high)] <- Inf
+
+  # getBiomass() only accepts a scalar min_w, so compute per-species with cutoffs
+  n_t      <- dim(sim@n)[1]
+  sim_time <- as.integer(dimnames(sim@n)[[1]])
+  model_bio <- matrix(NA_real_, nrow = n_t, ncol = n_sp,
+                      dimnames = list(as.character(sim_time), sp))
+  for (j in seq_len(n_sp)) {
+    idx <- params@w >= cutoff_low[j] & params@w <= cutoff_high[j]
+    model_bio[, j] <- rowSums(
+      sweep(sim@n[, j, idx, drop = FALSE], 3,
+            params@w[idx] * params@dw[idx], "*")
+    )
+  }
+
+  sp_fit <- setdiff(sp, exclude_sp)
+  if (is.null(sp_weights)) sp_weights <- setNames(rep(1, length(sp_fit)), sp_fit)
+
+  obs_years <- unique(dat_ts$Year)
+  common    <- intersect(sim_time, obs_years)
+  if (length(common) == 0) return(1e8)
+
+  loss <- 0
+  for (s in sp_fit) {
+    if (!s %in% colnames(model_bio)) next
+    obs_s <- dat_ts$Biomass[dat_ts$Species == s & dat_ts$Year %in% common]
+    yr_s  <- dat_ts$Year[dat_ts$Species == s & dat_ts$Year %in% common]
+    mod_s <- model_bio[as.character(yr_s), s]
+    ok    <- !is.na(obs_s) & obs_s > 0 & !is.na(mod_s) & mod_s > 0
+    if (sum(ok) == 0) next
+    w <- if (s %in% names(sp_weights)) sp_weights[s] else 1
+    loss <- loss + w * sum((log(mod_s[ok] / obs_s[ok]))^2)
+  }
+  loss
+}
+
+
+# ── Time-series refinement: catchability + reproduction_level ─────────────────
+# HIMI-style second stage. Starts from the steady-state-calibrated params and
+# tunes, for each fitted species:
+#   - a fishing catchability MULTIPLIER (drives F → the collapse)
+#   - reproduction_level (density dependence → the (non-)recovery)
+# to reproduce the observed 1978-2024 biomass TRAJECTORY (not just the reference).
+#
+# vary layout (length = 2 * n_fit):
+#   vary[1:n_fit]              log10(catchability multiplier) per fitted species
+#   vary[(n_fit+1):(2*n_fit)]  logit(reproduction_level) per fitted species
+#
+# Projects from the calibrated initial_n (the steady-state 1978-85 state) through
+# the historical effort — no re-spin, so the reference biomass match is preserved
+# as the initial condition and the trajectory diverges under the new F / recruitment.
+#
+# fit_sp:    character vector of species to tune (exclude forage fish).
+# dat_ts:    long data.frame (Year, Species, Biomass in g).
+# effort_ts: matrix, years (1978-2024) as rownames, gears as columns.
+# sp_weights: named numeric; species not listed get weight 1 (weight cod high).
+
+getErrorTSCatchRepro <- function(vary, params, dat_ts, effort_ts, fit_sp,
+                                 sp_weights    = NULL,
+                                 rmax_sp       = NULL,
+                                 seal_sp       = NULL,
+                                 seal_mult_max = 3,
+                                 fishing_gears = c("Bottom_Trawl","Fixed_Gear",
+                                                   "Small_Mesh","Pelagic"),
+                                 catch_mult_max = 20) {
+  n_fit  <- length(fit_sp)
+  n_rmax <- length(rmax_sp)
+  n_seal <- length(seal_sp)
+  catch_mult <- 10^vary[1:n_fit]
+  rl_vals    <- plogis(vary[(n_fit + 1):(2 * n_fit)])   # (0,1)
+
+  if (any(!is.finite(catch_mult)) || any(catch_mult <= 0) ||
+      any(catch_mult > catch_mult_max)) return(1e8)
+
+  # Apply catchability multipliers to each fitted species' fishing gears
+  gp <- gear_params(params)
+  for (i in seq_len(n_fit)) {
+    idx <- which(gp$species == fit_sp[i] & gp$gear %in% fishing_gears)
+    if (length(idx)) gp$catchability[idx] <- gp$catchability[idx] * catch_mult[i]
+  }
+
+  # Seal catchability multipliers (top-down control; "seals mainly" — bounded
+  # for plausibility). Position in vary: after catch, rl, and R_max blocks.
+  if (n_seal > 0) {
+    seal_mult <- 10^vary[(2 * n_fit + n_rmax + 1):(2 * n_fit + n_rmax + n_seal)]
+    if (any(!is.finite(seal_mult)) || any(seal_mult <= 0) ||
+        any(seal_mult > seal_mult_max)) return(1e8)
+    for (i in seq_len(n_seal)) {
+      idx <- which(gp$species == seal_sp[i] & gp$gear == "Seals")
+      if (length(idx)) gp$catchability[idx] <- gp$catchability[idx] * seal_mult[i]
+    }
+  }
+  gear_params(params) <- gp
+
+  # Apply reproduction_level for fitted species (keep others as calibrated)
+  rl_full <- getReproductionLevel(params)
+  rl_full[fit_sp] <- rl_vals
+  rl_full[rl_full >= 1] <- 0.999
+  rl_full[rl_full <= 0] <- 0.001
+  params <- tryCatch(setBevertonHolt(params, reproduction_level = rl_full),
+                     error = function(e) NULL)
+  if (is.null(params)) return(1e8)
+
+  # Optionally override R_max for the blow-up species (Inf-R_max competitive
+  # release, e.g. Pollock). Tuned in log10(grams); erepro re-derived by
+  # setBevertonHolt to preserve reference recruitment.
+  if (n_rmax > 0) {
+    rmax_log <- vary[(2 * n_fit + 1):(2 * n_fit + n_rmax)]
+    if (any(!is.finite(rmax_log))) return(1e8)
+    rmax_full <- setNames(params@species_params$R_max,
+                          params@species_params$species)
+    rmax_full[rmax_sp] <- 10^rmax_log
+    params <- tryCatch(setBevertonHolt(params, R_max = rmax_full),
+                       error = function(e) NULL)
+    if (is.null(params)) return(1e8)
+  }
+
+  # Project from calibrated initial_n through the historical effort
+  sim <- tryCatch(
+    project(params, effort = effort_ts, t_max = nrow(effort_ts),
+            t_save = 1, progress_bar = FALSE),
+    error = function(e) NULL
+  )
+  if (is.null(sim)) return(1e8)
+
+  n_sp <- nrow(params@species_params)
+  sp   <- params@species_params$species
+  # Lower cutoff ONLY — matches the raw survey biomass_ts (which spans all sizes
+  # above the small-fish detection limit) and the calibration target. Applying
+  # biomass_cutoffHigh here would compare a small model size-window against the
+  # full observed survey biomass (inconsistent), breaking the level.
+  cl <- params@species_params$biomass_cutoff; cl[is.na(cl)] <- 0
+
+  sim_time  <- as.integer(dimnames(sim@n)[[1]])
+  model_bio <- matrix(NA_real_, nrow = length(sim_time), ncol = n_sp,
+                      dimnames = list(as.character(sim_time), sp))
+  for (j in seq_len(n_sp)) {
+    idx <- params@w >= cl[j]
+    model_bio[, j] <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3,
+                                    params@w[idx] * params@dw[idx], "*"))
+  }
+
+  if (is.null(sp_weights)) sp_weights <- setNames(rep(1, n_fit), fit_sp)
+  common <- intersect(sim_time, unique(dat_ts$Year))
+  if (length(common) == 0) return(1e8)
+
+  loss <- 0
+  for (s in fit_sp) {
+    if (!s %in% colnames(model_bio)) next
+    obs_s <- dat_ts$Biomass[dat_ts$Species == s & dat_ts$Year %in% common]
+    yr_s  <- dat_ts$Year[dat_ts$Species == s & dat_ts$Year %in% common]
+    mod_s <- model_bio[as.character(yr_s), s]
+    ok    <- !is.na(obs_s) & obs_s > 0 & !is.na(mod_s) & mod_s > 0
+    if (sum(ok) == 0) next
+    wt <- if (s %in% names(sp_weights)) sp_weights[s] else 1
+    loss <- loss + wt * sum((log(mod_s[ok] / obs_s[ok]))^2)
+  }
+  loss
 }

@@ -101,6 +101,24 @@ run_random_sims <- function(params, n_sims = 10, years = 100, sd = 0.1,effort_sc
   return(sim_results)
 }
 
+# PAIRED ensemble: each randomised food web is run under BOTH effort scenarios, so
+# sims$factual[[i]] and sims$counter[[i]] share the SAME web — a genuinely PAIRED
+# comparison — and `seed` makes the whole ensemble reproducible. (The earlier setup
+# called run_random_sims() twice => independent webs per scenario => NOT paired.)
+run_paired_sims <- function(params, n_sims = 100, sd = 0.2,
+                            effort_factual, effort_counter, seed = 42) {
+  set.seed(seed)
+  factual <- counter <- vector("list", n_sims)
+  for (i in seq_len(n_sims)) {
+    rp <- tryCatch(steady(randomize_interaction_matrix(params, sdev = sd)),
+                   error = function(e) NULL)
+    if (is.null(rp)) next                   # leave both NULL at i (pairing preserved)
+    factual[[i]] <- tryCatch(project(rp, effort = effort_factual), error = function(e) NULL)
+    counter[[i]] <- tryCatch(project(rp, effort = effort_counter), error = function(e) NULL)
+  }
+  list(factual = factual, counter = counter)   # index i is the shared web
+}
+
 ```
 
 Set up packages:
@@ -120,42 +138,136 @@ library(ggpubr)
 Read in params object
 ```{r}
 
-# Read in params object 
-params_with_seal <- readRDS("Ess_data/new_params_with_seal_interaction.RDS")
-# Read in effort object
-effort_with_seal <- readRDS("Ess_data/effort_gear_with_seals.rds")
-effort_with_seal <- subset(effort_with_seal, Year >= 1978 & Year <= 2024)
-rownames(effort_with_seal) <- effort_with_seal$Year
-effort_with_seal <- as.matrix(effort_with_seal[, -1])
-effort<-effort_with_seal
-# set up zero effort for sim without seals
-effort[,"Seals"]<-0
-params = params_with_seal
-#Orignal run
-sim0 <- project(params,effort = effort)
+# ── Factual model (Stage 2) ──────────────────────────────────────────────────
+params <- readRDS(if (file.exists("Ess_data/params_stage2_AUTO.RDS"))
+                    "Ess_data/params_stage2_AUTO.RDS" else
+                    "Ess_data/params_stage2_factual.RDS")
+
+# ── Effort: FACTUAL = seal increase 1978->2024; COUNTERFACTUAL = seals constant ─
+eff <- read.csv("Ess_data/effort_gear_with_seals.csv")
+gear_cols <- c("Bottom_Trawl","Fixed_Gear","Small_Mesh","Pelagic","Seals")
+effort_factual <- as.matrix(eff[eff$Year %in% 1978:2024, gear_cols])
+rownames(effort_factual) <- eff$Year[eff$Year %in% 1978:2024]
+
+# The ONE counterfactual: NO seal increase — seal effort HELD CONSTANT at the 1978
+# level for all years; fishing identical to factual. (Seal catchability is baked into
+# `params`, so holding effort low keeps seal predation at its 1978 strength throughout.)
+effort_counter <- effort_factual
+effort_counter[, "Seals"] <- effort_factual[1, "Seals"]
+
+# Reference factual run (no randomisation) for relative plots
+sim0 <- project(params, effort = effort_factual)
 plotlyBiomass(sim0)
 
-# Run single simulation with randomized matrix as a test
+# Quick test: one randomised-web run
 rand_params <- randomize_interaction_matrix(params)
-sim1 <- project(rand_params,effort = effort)
-plot(sim1,time_range=c(1978:2024))
-plotBiomassRelative(sim1,sim0)
+sim1 <- project(rand_params, effort = effort_factual)
+plot(sim1, time_range = c(1978:2024))
+plotBiomassRelative(sim1, sim0)
 
-# Run multiple simulations
-sims_scen1 <- run_random_sims(params_with_seal, n_sims = 1000,effort_scen=effort,sd=0.2)
-sims_scen2 <- run_random_sims(params_with_seal, n_sims = 1000,effort_scen = effort_with_seal, sd=0.2)
-# 
+# ── ENSEMBLE: factual vs counterfactual, each over a randomised food web ───────
+# randomize_interaction_matrix() perturbs the WHOLE interaction matrix (+ seal
+# catchability) with lognormal noise (structural zeros preserved) — an honest test
+# of whether the factual/counterfactual difference (cod & groundfish (non-)recovery)
+# is robust to food-web structural uncertainty.
+n_sims <- 1000; sd_web <- 0.2
+# PAIRED & reproducible: the SAME randomised web i is run under both scenarios, so
+# factual[[i]] vs counter[[i]] isolates the seal effect on identical structure.
+paired <- run_paired_sims(params, n_sims = n_sims, sd = sd_web,
+                          effort_factual = effort_factual,
+                          effort_counter = effort_counter, seed = 42)
+sims_factual <- paired$factual
+sims_counter <- paired$counter
+
+# Keep only COMPLETE pairs (drop index i if either scenario failed) so the two lists
+# stay aligned & indexable: factual[[k]] and counter[[k]] are the SAME web.
+ok <- which(!vapply(sims_factual, is.null, logical(1)) &
+            !vapply(sims_counter, is.null, logical(1)))
+sims_factual <- sims_factual[ok]; sims_counter <- sims_counter[ok]
+cat(sprintf("Kept %d / %d complete paired ensemble members\n", length(ok), n_sims))
+
+# Aliases for the downstream figure code (scen2 = factual/with seal increase;
+# scen1 = counterfactual/no seal increase) — now PAIRED by index
+sims_scen2 <- sims_factual
+sims_scen1 <- sims_counter
+
 # # Save sim outputs
-#saveRDS(sims_scen1,"Ess_output/sims_scen1.RDS")  # With fishing
-#saveRDS(sims_scen2,"Ess_output/sims_scen2.RDS")  # Fishing and additional mortality
-
-#sims_scen1<-readRDS("Ess_output/sims_scen1.RDS") # With fishing
-#sims_scen2<-readRDS("Ess_output/sims_scen2.RDS") # Fishing and additional mortality
+#saveRDS(sims_factual, "Ess_Output/sims_factual.RDS")   # seal increase (factual)
+#saveRDS(sims_counter, "Ess_Output/sims_counter.RDS")   # seals constant (counterfactual)
+#sims_factual <- readRDS("Ess_Output/sims_factual.RDS")
+#sims_counter <- readRDS("Ess_Output/sims_counter.RDS")
 
 # Check results from first simulation
 plot(sims_scen2[[4]],time_range=c(1978:2024))
 
 plotBiomassRelative(sims_scen2[[4]],sim0)
+```
+
+## PAIRED robustness: is the seal effect on (non-)recovery robust to food-web structure?
+
+Because the ensemble is PAIRED (web `k` is run under both scenarios), we can take the
+per-web difference and ask: across the randomised food webs, does removing the seal
+increase let cod / groundfish recover MORE? This is a far stronger robustness claim
+than overlapping ribbons — it isolates the seal effect on identical structure.
+
+```{r paired-robustness}
+# Per-species terminal (2024) biomass above each species' survey cutoff (kt)
+cutoff <- species_params(params)$biomass_cutoff; cutoff[is.na(cutoff)] <- 0
+sppx   <- species_params(params)$species
+term_bio <- function(sim, yr = 2024) {
+  n <- sim@n[as.character(yr), , ]
+  sapply(seq_along(sppx), function(j)
+    sum(n[j, params@w >= cutoff[j]] * (params@w * params@dw)[params@w >= cutoff[j]])) / 1e9
+}
+
+# Build the PAIRED data frame (web k: factual vs counterfactual terminal biomass)
+pair_df <- do.call(rbind, lapply(seq_along(sims_factual), function(k) {
+  data.frame(web = k, species = sppx,
+             factual = term_bio(sims_factual[[k]]),
+             counter = term_bio(sims_counter[[k]]))
+}))
+pair_df$log_ratio <- log(pmax(pair_df$counter, 1e-9) / pmax(pair_df$factual, 1e-9))
+
+# Robustness summary: % of webs where the species recovers MORE without the seal increase
+robust <- pair_df |>
+  group_by(species) |>
+  summarise(pct_recover_more_no_seal = round(100 * mean(counter > factual), 1),
+            median_cf_over_factual   = round(median(counter / pmax(factual, 1e-9)), 2),
+            .groups = "drop") |>
+  arrange(desc(pct_recover_more_no_seal))
+print(as.data.frame(robust))
+cat(sprintf("\nCod recovery suppressed by the seal increase in %.1f%% of %d webs\n",
+            robust$pct_recover_more_no_seal[robust$species == "Atlantic Cod"],
+            length(sims_factual)))
+
+# Figure A — paired log-ratio distribution across webs (groundfish); >0 = seal increase
+# suppressed recovery. Boxplots summarise the per-web paired differences.
+gf <- c("Atlantic Cod","Haddock","Pollock","White Hake","Silver Hake",
+        "Redfish Unseparated","American Plaice","Yellowtail Flounder","Witch Flounder")
+pA <- ggplot(filter(pair_df, species %in% gf),
+             aes(x = factor(species, levels = rev(gf)), y = log_ratio)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
+  geom_violin(fill = "steelblue", alpha = 0.4, colour = NA) +
+  geom_boxplot(width = 0.15, outlier.size = 0.4) +
+  coord_flip() + theme_bw(base_size = 10) +
+  labs(x = NULL, y = "log( counterfactual / factual )  terminal biomass",
+       title = "Recovery suppressed by the seal increase, across randomised food webs",
+       subtitle = "Per-web paired difference; > 0 = species recovers more when seals do NOT increase")
+ggsave(paste0(save_dir, "scenario_paired_recovery_logratio.jpeg"), pA, width = 9, height = 6, dpi = 200)
+pA
+
+# Figure B — cod: factual vs counterfactual 2024 biomass, each point a food web
+cod <- filter(pair_df, species == "Atlantic Cod")
+pB <- ggplot(cod, aes(factual, counter)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "purple") +
+  geom_point(alpha = 0.25, colour = "firebrick") +
+  theme_bw(base_size = 10) +
+  labs(x = "Cod 2024 biomass — FACTUAL (seal increase), kt",
+       y = "Cod 2024 biomass — COUNTERFACTUAL (seals constant), kt",
+       title = "Cod recovery is consistently higher without the seal increase",
+       subtitle = "Each point = one randomised food web (above the 1:1 line = seal increase suppressed cod)")
+ggsave(paste0(save_dir, "scenario_paired_cod_scatter.jpeg"), pB, width = 6.5, height = 6, dpi = 200)
+pB
 ```
 
 Figures - make plot of obs and sims
@@ -171,12 +283,12 @@ sim_bio2 <- lapply(sims_scen2, getBiomass, min_w = species_params(params)$biomas
 
 # Combine the biomass data frames into one data frame for each scenario
 df_sim_bio <- do.call(rbind.data.frame, sim_bio)
-df_sim_bio$sim <- rep(1:1000, each = 47)        # Add simulation run index (1000 sims, 41 years each)
-df_sim_bio$year <- rep(1978:2024, 1000)         # Add corresponding year for each row
+df_sim_bio$sim  <- rep(seq_along(sim_bio), each = 47)   # ensemble index (matches scen2 by pairing)
+df_sim_bio$year <- rep(1978:2024, length(sim_bio))      # 47 years per sim
 
 df_sim_bio2 <- do.call(rbind.data.frame, sim_bio2)
-df_sim_bio2$sim <- rep(1:1000, each = 47)
-df_sim_bio2$year <- rep(1978:2024, 1000)
+df_sim_bio2$sim  <- rep(seq_along(sim_bio2), each = 47)
+df_sim_bio2$year <- rep(1978:2024, length(sim_bio2))
 
 # -- Summarize simulation results by species and year for Scenario 1 --
 
