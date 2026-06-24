@@ -18,3 +18,7 @@ Rplots.pdf
 
 # local archive of dead-end / exploratory scripts (kept off the repo)
 /_archive/
+
+# regenerable output figures (the calibration/scenario scripts remake these)
+Ess_Output/*.jpeg
+Ess_Output/*.pdf
