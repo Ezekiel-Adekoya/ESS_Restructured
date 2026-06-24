@@ -1,553 +1,147 @@
 ---
-title: "Mean weight of species for each scenario"
-author: "Ezekiel"
-date: "2025-03-27"
-output: Mean weight of species per scenario
+title: "Community indicators by scenario (mean weight & model skill)"
+author: "Ezekiel Adekoya"
+output: html_document
 ---
 
-Directory Set-up
+<!--
+Step 04 of the workflow. Computes two indicators from the PAIRED scenario ensembles
+produced by 03_Scenarios_Through_time.Rmd (saved as sims_factual / sims_counter):
+  (1) per-species MEAN INDIVIDUAL WEIGHT through time (size-structure indicator),
+      factual (seal increase) vs counterfactual (seals held at 1978);
+  (2) MODEL SKILL = Spearman correlation of modelled vs observed biomass across the
+      ensemble, factual vs counterfactual.
+Current dimensions: 1978-2024 (47 yr), all 19 species, per-species survey cutoffs.
+(Journal style: no plot titles/subtitles; notes/interpretation as comments.)
+-->
+
 ```{r setup, include=FALSE}
-library("here")
-library(ggpubr)
-library(dplyr)
+library(here)
 library(mizer)
-library("assertthat")
-library("optimParallel")
-library("here")
-library("tidyr")
-library(dplyr)
-#library("nloptr")
 library(mizerExperimental)
 library(tidyverse)
-library(mizerHowTo)
-library(pbapply)
-library(openair)
 library(patchwork)
-
-dir <- setwd(here())
-knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/Eastern Scotian Shelf Model/")
-
-# Define the save directory
-save_dir <- paste0(here(), "/Ess_Output/")
+knitr::opts_knit$set(root.dir = here::here())   # portable project root
+save_dir <- paste0(here::here(), "/Ess_Output/")
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
-Extraction of  data
-```{r}
-biomass_extract <- read.csv("Ess_data/biomass_extract.csv")
-yield_extract <- read.csv("Ess_data/yield_extract.csv")
-biomass_sim_base<- read.csv("Ess_data/biomass_sim_base.csv")
-biomass_sim_opt<- read.csv("Ess_data/biomass_sim_opt.csv")
-yield_sim_base<- read.csv("Ess_data/yield_sim_base.csv")
-yield_sim_opt<- read.csv("Ess_data/yield_sim_opt.csv")
-biomass_ts<-readRDS("Ess_data/biomass_ts.RDS")
-biomass_ts<-biomass_ts |> rename(Biomass_Obs=Biomass) 
-yield_ts<-readRDS("Ess_data/yield_ts.RDS")
-yield_ts<-yield_ts |> rename(Yield_Obs=Yield)
-#biomass_cutoff<- read.csv("Ess_data/biomass_cutoff.csv")
+## Inputs — factual model + paired scenario ensembles (from step 03)
+
+```{r inputs}
+# Factual Stage-2 model (for species set + per-species survey cutoffs)
+params <- readRDS(if (file.exists("Ess_data/params_stage2_AUTO.RDS"))
+                    "Ess_data/params_stage2_AUTO.RDS" else
+                    "Ess_data/params_stage2_factual.RDS")
+
+# Paired ensembles from 03 (same randomised web under both scenarios):
+#   sims_factual = seal effort increases 1978->2024
+#   sims_counter = seal effort held constant at the 1978 level (the counterfactual)
+sims_factual <- readRDS("Ess_Output/sims_factual.RDS")
+sims_counter <- readRDS("Ess_Output/sims_counter.RDS")
+
+# Observed survey biomass (g) for the skill comparison
+biomass_ts <- readRDS("Ess_data/biomass_ts.RDS")
+
+sp    <- species_params(params)$species
+cl    <- species_params(params)$biomass_cutoff; cl[is.na(cl)] <- 0  # per-species lower cutoff
+w     <- params@w; dw <- params@dw
+n_sims <- length(sims_factual)
+cat(sprintf("Ensemble size: %d factual, %d counterfactual paired members\n",
+            length(sims_factual), length(sims_counter)))
 ```
 
-Get biomass per Scenario
-```{r}
-sims_scen1 <- readRDS("Ess_output/sims_scen1.RDS")
-sims_scen2 <- readRDS("Ess_output/sims_scen2.RDS")
-sim_bio<-lapply(sims_scen1,getBiomass,min_w=species_params(params)$biomass_cutoff)
-sim_bio2<-lapply(sims_scen2,getBiomass,min_w=species_params(params)$biomass_cutoff)
+## Per-sim indicators (biomass, numbers, mean weight) above the survey cutoff
 
-df_sim_bio<-do.call(rbind.data.frame, sim_bio)
-df_sim_bio$sim<-rep(1:1000, each=47)
-df_sim_bio$year<-rep(1978:2024,100)
-
-df_sim_bio2 <-do.call(rbind.data.frame, sim_bio2)
-df_sim_bio2$sim <-rep(1:1000, each=47)
-df_sim_bio2$year<-rep(1978:2024,100)
-
-```
-
-MeanWeight plot
-Data cleaning 
-```{r}
-# Load and clean biomass per length data
-biop <- read.csv("Ess_data/Alida_Qadj_biomass_at_Length.csv") %>%
-  # Convert data from wide to long format
-  pivot_longer(!c(length_cm, YEAR), names_to = "SPECIES", values_to = "BIOMASS") %>%
-  # Optional filter: Uncomment to remove lengths < 10 cm
-  # filter(length_cm >= 10) %>%
-  # Aggregate total biomass by year and species
-  group_by(YEAR, SPECIES) %>%
-  summarise(BIOMASS = sum(BIOMASS, na.rm = TRUE), .groups = "drop") %>%
-  # Convert data back to wide format with species as columns
-  pivot_wider(names_from = SPECIES, values_from = BIOMASS) %>%
-  ungroup()
-
-# Rename species columns for consistency and clarity
-biop <- biop %>%
-  rename(
-    "AMERICAN PLAICE" = AMERICAN.PLAICE,
-    "ATLANTIC COD" = COD.ATLANTIC.,
-    "HERRING" = HERRING.ATLANTIC.,
-    "ATLANTIC HALIBUT" = ATLANTIC.HALIBUT,
-    "REDFISH UNSEPARATED" = REDFISH.UNSEPARATED,
-    "GREENLAND HALIBUT" = TURBOT..GREENLAND.HALIBUT,
-    "HADDOCK" = HADDOCK,
-    "SAND LANCE" = SANDLANCES,
-    "SILVER HAKE" = SILVER.HAKE,
-    "SPINY DOGFISH" = SPINY.DOGFISH,
-    "WHITE HAKE" = WHITE.HAKE,
-    "WITCH FLOUNDER" = WITCH.FLOUNDER,
-    "YELLOWTAIL FLOUNDER" = YELLOWTAIL.FLOUNDER
-  )
-
-# Replace zeros with NA and convert biomass to grams (assuming original is in kg)
-biop[, 2:14] <- ifelse(as.matrix(biop[, 2:14]) == 0, "NA", as.matrix(biop[, 2:14]) * 1000)
-# Ensure columns are numeric after transformation
-biop <- biop %>%
-  mutate(across(2:14, as.numeric))
-
-# Load and clean abundance per length data
-m <- read.csv("Ess_data/abundance_at_length_DFO_model_spp.csv") %>%
-  # Convert from wide to long format
-  pivot_longer(!c(length_cm, YEAR), names_to = "SPECIES", values_to = "ABUNDANCE") %>%
-  # Optional filter for length
-  # filter(length_cm >= 10) %>%
-  # Aggregate total abundance by year and species
-  group_by(YEAR, SPECIES) %>%
-  summarise(ABUNDANCE = sum(ABUNDANCE, na.rm = TRUE), .groups = "drop") %>%
-  # Convert to wide format with species as columns
-  pivot_wider(names_from = SPECIES, values_from = ABUNDANCE)
-
-# Rename species columns to match those in biomass data
-m <- m %>%
-  rename(
-    "AMERICAN PLAICE" = AMERICAN.PLAICE,
-    "ATLANTIC COD" = COD.ATLANTIC.,
-    "HERRING" = HERRING.ATLANTIC.,
-    "ATLANTIC HALIBUT" = ATLANTIC.HALIBUT,
-    "REDFISH UNSEPARATED" = REDFISH.UNSEPARATED,
-    "GREENLAND HALIBUT" = TURBOT..GREENLAND.HALIBUT,
-    "HADDOCK" = HADDOCK,
-    "SAND LANCE" = SANDLANCES,
-    "SILVER HAKE" = SILVER.HAKE,
-    "SPINY DOGFISH" = SPINY.DOGFISH,
-    "WHITE HAKE" = WHITE.HAKE,
-    "WITCH FLOUNDER" = WITCH.FLOUNDER,
-    "YELLOWTAIL FLOUNDER" = YELLOWTAIL.FLOUNDER
-  )
-
-# Replace zeros with NA and keep abundance units as is
-m[, 2:14] <- ifelse(as.matrix(m[, 2:14]) == 0, "NA", as.matrix(m[, 2:14]))
-# Ensure numeric columns
-m <- m %>%
-  mutate(across(2:14, as.numeric))
-
-# Store biomass data in a new object for further processing
-biomass.p <- biop 
-
-# Identify common species between biomass and abundance datasets
-common_species <- intersect(names(biomass.p), names(m))
-
-# Calculate mean weight per individual (grams/individual)
-Mean_weight <- biop
-#Mean_weight[, c(2:14)] <- biop[, c(2:14)] / m[, c(2:14)]
-Mean_weight <- inner_join(biop, m, by = "YEAR", suffix = c("_bio", "_m")) %>%
-  mutate(across(ends_with("_bio"), 
-                ~ .x / get(sub("_bio", "_m", cur_column())), 
-                .names = "{sub('_bio', '', .col)}")) %>%
-  select(YEAR, all_of(names(biop)[-1]))
- Mean_weight_by_species <- Mean_weight
-#write.csv(Mean_weight_by_species, file = "Ess_data/Mean_weight_by_species.csv", row.names = FALSE)
-```
-
-
-```{r}
-getMeanSpeciesWeight<-function(sim, species = NULL,...)
-{
-    assert_that(is(sim, "MizerSim"))
-    species <- valid_species_arg(sim, species)
-    n_species <- getN(sim, ...)
-    biomass_species <- getBiomass(sim, ...)
-   #  n_total <- apply(n_species[, species, drop = FALSE], 1, sum)
-   # biomass_total <- apply(biomass_species[, species, drop = FALSE], 
-   #      1, sum)
-    return(biomass_species/n_species)
+```{r indicator-helper}
+# For one MizerSim: per species & year, biomass and numbers ABOVE that species'
+# survey cutoff (so it is comparable to the survey), and mean individual weight =
+# biomass / numbers (g). Returns long data.frame.
+sim_indicators <- function(sim) {
+  st <- as.integer(dimnames(sim@n)[[1]])
+  do.call(rbind, lapply(seq_along(sp), function(j) {
+    idx <- w >= cl[j]
+    B <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3, (w * dw)[idx], "*"))  # g
+    N <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3,  dw[idx],      "*"))  # numbers
+    data.frame(Species = sp[j], Year = st, Biomass = B, Number = N,
+               MeanWeight = B / N)
+  }))
 }
 
-```
-
-
-```{r}
-# Apply getMeanWeight() to each simulation run for all species
-sim_mw1 <- lapply(
-  sims_scen1,
-  getMeanSpeciesWeight,
-  min_w = biomass_cutoff$min_w
-)
-
-df_sim_1<-do.call(rbind.data.frame, sim_mw1)
-df_sim_1$sim<-rep(1:1000, each=41)
-df_sim_1$year<-rep(1970:2010,100)
-```
-
-
-```{r}
-sim_mw2 <- lapply(
-  sims_scen2,
-  getMeanSpeciesWeight,
-  min_w = biomass_cutoff$min_w
-)
-
-df_sim_2<-do.call(rbind.data.frame, sim_mw2)
-df_sim_2$sim<-rep(1:1000, each=41)
-df_sim_2$year<-rep(1970:2010,100)
-```
-
-
-```{r}
-
-sim_mean1<-df_sim_1 |> pivot_longer(c(1:13)) |> mutate(Year=year,Species=as.factor(name)) |> group_by(Species,Year) |>summarise(Mean_weight=median(value))|> ungroup()
-sim_lower1<-df_sim_1 |> pivot_longer(c(1:13)) |> mutate(Year=year,Species=as.factor(name)) |> group_by(Species,Year) |>summarise(Mean_weight=min(value))|> ungroup()
-sim_upper1<-df_sim_1 |> pivot_longer(c(1:13)) |> mutate(Year=year,Species=as.factor(name)) |> group_by(Species,Year)|>summarise(Mean_weight=max(value))|> ungroup() 
-
-
-sim_mean2<-df_sim_2 |> pivot_longer(c(1:13)) |> mutate(Year=year,Species=as.factor(name)) |> group_by(Species,Year) |>summarise(Mean_weight=median(value))|> ungroup()
-sim_lower2<-df_sim_2 |> pivot_longer(c(1:13)) |> mutate(Year=year,Species=as.factor(name)) |> group_by(Species,Year) |>summarise(Mean_weight=min(value))|> ungroup()
-sim_upper2<-df_sim_2 |> pivot_longer(c(1:13)) |> mutate(Year=year,Species=as.factor(name)) |> group_by(Species,Year)|>summarise(Mean_weight=max(value))|> ungroup()
-```
-
-
-
-```{r}
-
-sim1 <-data.frame(Species=sim_mean1$Species, 
-                   Year=sim_mean1$Year,
-                   sim_mean=sim_mean1$Mean_weight,
-                   sim_lower=sim_lower1$Mean_weight,
-                   sim_upper=sim_upper1$Mean_weight,
-                   scen=rep("Scen1", length(sim_mean1$Mean_weight)))
-sim1 <- sim1 %>%
-  mutate(
-    Species = fct_recode(Species,
-      "ATLANTIC COD" = "COD(ATLANTIC)",
-      "HERRING" = "HERRING(ATLANTIC)",
-      "GREENLAND HALIBUT" = "TURBOT, GREENLAND HALIBUT",
-      "SAND LANCE" = "SANDLANCES"
-    ))
-    
-
-Mean_weight_obs <- Mean_weight_by_species %>%
-  pivot_longer(
-    cols = -YEAR,
-    names_to = "Species",
-    values_to = "Mean_weight"
-  ) %>%
-  rename(Year = YEAR) %>%
-  arrange(Species, Year)
-
-sim1 <-left_join(Mean_weight_obs,sim1)
-```
-
-```{r}
-sim2 <-data.frame(Species=sim_mean2$Species, 
-                   Year=sim_mean2$Year,
-                   sim_mean=sim_mean2$Mean_weight,
-                   sim_lower=sim_lower2$Mean_weight,
-                   sim_upper=sim_upper2$Mean_weight,
-                   scen=rep("Scen2", length(sim_mean2$Mean_weight)))
-sim2 <- sim2 %>%
-  mutate(
-    Species = fct_recode(Species,
-      "ATLANTIC COD" = "COD(ATLANTIC)",
-      "HERRING" = "HERRING(ATLANTIC)",
-      "GREENLAND HALIBUT" = "TURBOT, GREENLAND HALIBUT",
-      "SAND LANCE" = "SANDLANCES"
-    ))
-
-sim2 <-left_join(Mean_weight_obs,sim2)
-
-```
-
-```{r}
-time_mw <- rbind(sim1,sim2)
-#time_mw <- time_series |> rename(Biomass=Biomass_Obs)
-
-time_mw <- time_mw  %>%
-  mutate(scen = ifelse(Year<1986, "Calibration",scen))
-species<-levels(time_mw$Species)<- c("AMERICAN PLAICE", "ATLANTIC COD","ATLANTIC HALIBUT", "ATLANTIC HERRING","REDFISH UNSEPARATED", "GREENLAND HALIBUT", "HADDOCK","SAND LANCE", "SILVER HAKE", "SPINY DOGFISH",  "WHITE HAKE", "WITCH FLOUNDER", "YELLOWTAIL FLOUNDER")
-time_mw <- time_mw %>%
-  mutate(Species = recode(Species,
-                          "HERRING" = "ATLANTIC HERRING"))
-
-
-```
-
-
-```{r}
-time_mw <- time_mw |> arrange(Species) |> mutate(Species=factor(Species,species))
-
-time_mw <- time_mw %>%
-  rename(Scenario =  scen )
-Mean_weight_plot <- ggplot(time_mw, aes(x = Year, y = Mean_weight, colour = Scenario, fill = Scenario)) +
-  facet_wrap(~factor(Species, levels = c("AMERICAN PLAICE", "ATLANTIC COD","ATLANTIC HALIBUT", "ATLANTIC HERRING","REDFISH UNSEPARATED", "GREENLAND HALIBUT", "HADDOCK","SAND LANCE", "SILVER HAKE", "SPINY DOGFISH",  "WHITE HAKE", "WITCH FLOUNDER", "YELLOWTAIL FLOUNDER")), scales="free") +
- # geom_point(aes(y = Mean_weight), colour = "black", size = 0.5) +
-   geom_point(aes(shape = "Mean_weight"), colour = "black", size = 1.2) +
-  geom_ribbon(aes(ymin = sim_lower, ymax = sim_upper), alpha = 0.3, colour = NA) +
-  geom_line(aes(y = sim_mean)) +
-  scale_colour_manual(name = NULL,  # Removes legend title
-                      values = c("grey70", "#4575B4", "#D73027"),
-                      labels = c("Reference period", "Fishing without additional predation mortality", "Fishing with additional predation mortality")) +
-  scale_fill_manual(name = NULL,  # Removes legend title
-                    values = c("grey70", "#4575B4", "#D73027"),
-                    labels = c("Reference period", "Fishing without additional predation mortality", "Fishing with additional predation mortality")) +
-    labs(y = "Individual Mean Body Size (weight, g)", x = "Year") +
-
-  # Add vertical reference line
-  geom_vline(xintercept = 1986, linetype = "dashed", color = "black") +
-  scale_shape_manual(name =  NULL, values = c("Mean_weight" = 16),labels = c("Observed mean weight"))+
-  # Apply clean theme and style customizations
-  theme_pubr() +
-  theme(
-   legend.position = "bottom",
-    legend.text = element_text(face = "bold", size = 15),
-    axis.title.x = element_text(face = "bold", size = 15),
-    axis.title.y = element_text(face = "bold", size = 15),
-    strip.text = element_text(face = "bold", size = 12))+
-  guides(colour = guide_legend(title = NULL), fill = guide_legend(title = NULL))
-
-# Display the plot
-
-  guides(colour = guide_legend(title = NULL), fill = guide_legend(title = NULL))  # Remove legend headings
-ggsave(filename = paste0(save_dir, "Mean_weight_plot.jpeg"), plot = Mean_weight_plot,width = 16, height = 11, units = "in",dpi = 400)
-Mean_weight_plot
-```
-
-
-Calculate spearman correlation across all simulations
-
-```{r}
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(progress)
-mw_sim1 <- sim1 %>%
-  select(Year, Species, sim_mean, Mean_weight) %>%
-  rename(
-    MeanWeight = sim_mean,
-    MeanWeight_Obs = Mean_weight)
-
-mw_sim2 <- sim2 %>%
-  select(Year, Species, sim_mean, Mean_weight) %>%
-  rename(
-    MeanWeight = sim_mean,
-    MeanWeight_Obs = Mean_weight)
-
-# Prepare species name map
-species_name_map <- c(
-  "AMERICAN PLAICE" = "AMERICAN PLAICE",
-  "COD(ATLANTIC)" = "ATLANTIC COD",
-  "HERRING(ATLANTIC)" = "HERRING",
-  "ATLANTIC HALIBUT" = "ATLANTIC HALIBUT",
-  "REDFISH UNSEPARATED" = "REDFISH UNSEPARATED",
-  "TURBOT, GREENLAND HALIBUT" = "GREENLAND HALIBUT",
-  "HADDOCK" = "HADDOCK",
-  "SANDLANCES" = "SAND LANCE",
-  "SILVER HAKE" = "SILVER HAKE",
-  "SPINY DOGFISH" = "SPINY DOGFISH",
-  "WHITE HAKE" = "WHITE HAKE",
-  "WITCH FLOUNDER" = "WITCH FLOUNDER",
-  "YELLOWTAIL FLOUNDER" = "YELLOWTAIL FLOUNDER"
-)
-
-```
-
-
-```{r}
-# Initialize correlation data frames
-cor_scen1 <- expand.grid(sim = 1:1000, cor_bio = NA, cor_catch = NA, cor_mean = NA)
-cor_scen2 <- expand.grid(sim = 1:1000, cor_bio = NA, cor_catch = NA, cor_mean = NA)
-
-# Progress bar
-pb <- progress::progress_bar$new(total = 1000)
-
-for (i in 1:1000) {
-  pb$tick()
-
-  # === SCENARIO 1 ===
-  bio <- plotBiomass(sims_scen1[[i]], return_data = TRUE)
-  yield <- sims_scen1[[i]] |> plotYieldGear(return_data = TRUE) |>
-    filter(Gear != "Seals", Species != "SANDLANCES")
-  yield <- yield_ts %>% left_join(yield, by = c("Year", "Species"))
-
-  sim_model <- sims_scen1[[i]]
-  mean_weights <- lapply(unique(species_params(params)$species), function(sp) {
-    mean_w <- getMeanWeight(sim_model, species = sp,
-                            min_w = species_params(params)$biomass_cutoff[species_params(params)$species == sp],
-                            return_data = TRUE)
-    data.frame(Year = as.numeric(names(mean_w)), Species = sp, MeanWeight = as.numeric(mean_w))
-  }) |> bind_rows()
-
-  mw1 <- mean_weights %>%
-    mutate(Species = species_name_map[Species]) %>%
-    left_join(mw_sim1 %>% select(Year, Species, MeanWeight_Obs), by = c("Year", "Species")) %>%
-    filter(!is.na(MeanWeight), !is.na(MeanWeight_Obs), is.finite(MeanWeight), is.finite(MeanWeight_Obs))
-
-  cor_scen1$cor_bio[i]   <- cor(biomass_ts$Biomass, bio$Biomass, method = "spearman")
-  cor_scen1$cor_catch[i] <- cor(yield$Yield_Obs, yield$Yield, method = "spearman", use = "pairwise.complete.obs")
-  cor_scen1$cor_mean[i]  <- if (nrow(mw1) > 0) cor(mw1$MeanWeight, mw1$MeanWeight_Obs, method = "spearman", use = "pairwise.complete.obs") else NA
-
-  # === SCENARIO 2 ===
-  bio <- plotBiomass(sims_scen2[[i]], return_data = TRUE)
-  yield <- sims_scen2[[i]] |> plotYieldGear(return_data = TRUE) |>
-    filter(Gear != "Seals", Species != "SANDLANCES")
-  yield <- yield_ts %>% left_join(yield, by = c("Year", "Species"))
-
-  sim_model <- sims_scen2[[i]]
-  mean_weights <- lapply(unique(species_params(params)$species), function(sp) {
-    mean_w <- getMeanWeight(sim_model, species = sp,
-                            min_w = species_params(params)$biomass_cutoff[species_params(params)$species == sp],
-                            return_data = TRUE)
-    data.frame(Year = as.numeric(names(mean_w)), Species = sp, MeanWeight = as.numeric(mean_w))
-  }) |> bind_rows()
-
-  mw2 <- mean_weights %>%
-    mutate(Species = species_name_map[Species]) %>%
-    left_join(mw_sim2 %>% select(Year, Species, MeanWeight_Obs), by = c("Year", "Species")) %>%
-    filter(!is.na(MeanWeight), !is.na(MeanWeight_Obs), is.finite(MeanWeight), is.finite(MeanWeight_Obs))
-
-  cor_scen2$cor_bio[i]   <- cor(biomass_ts$Biomass, bio$Biomass, method = "spearman")
-  cor_scen2$cor_catch[i] <- cor(yield$Yield_Obs, yield$Yield, method = "spearman", use = "pairwise.complete.obs")
-  cor_scen2$cor_mean[i]  <- if (nrow(mw2) > 0) cor(mw2$MeanWeight, mw2$MeanWeight_Obs, method = "spearman", use = "pairwise.complete.obs") else NA
+# Apply across an ensemble, tagging the sim index and scenario.
+ensemble_indicators <- function(sims, scenario) {
+  do.call(rbind, lapply(seq_along(sims), function(k) {
+    d <- sim_indicators(sims[[k]]); d$sim <- k; d$scen <- scenario; d
+  }))
 }
 
-# Combine and reformat
-cor_scen1$scen <- "Fishing without additional predation mortality"
-cor_scen2$scen <- "Fishing with additional predation mortality"
-
-cor_results <- bind_rows(cor_scen1, cor_scen2) %>%
-  rename(Biomass = cor_bio, Catch = cor_catch, Mean_weight = cor_mean) %>%
-  mutate(cor_mean_overall = rowMeans(select(., Biomass, Catch), na.rm = TRUE))
-
-cor_results_long <- cor_results %>%
-  pivot_longer(cols = c("Biomass", "Catch", "Mean_weight"), names_to = "Variable") %>%
-  mutate(Variable = ifelse(Variable == "Mean_weight", "Individual Mean body size", Variable))
-
-# Plot
-cor_plot <- ggplot(cor_results_long, aes(x = Variable, y = value, fill = scen)) +
-  geom_violin(trim = FALSE, scale = "width") +
-  theme_bw() +
-  labs(x = NULL, y = "Spearman Correlation") +
-  scale_fill_manual(values = c(
-    "Fishing without additional predation mortality" = "blue",
-    "Fishing with additional predation mortality" = "red"
-  )) +
-  theme(
-    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 9, face = "bold"),
-    axis.text.y = element_text(size = 11, face = "bold"),
-    axis.title.y = element_text(size = 11, face = "bold"),
-    legend.title = element_blank(),
-    legend.text = element_text(size = 10),
-    legend.position = "right",
-    panel.grid.major = element_blank()
-  )
-
-cor_plot
- ggsave(filename = paste0(save_dir, "cor_plot.jpeg"), plot = cor_plot,width = 11, height = 7.5, units = "in",dpi = 400)
+df_all <- bind_rows(
+  ensemble_indicators(sims_factual, "Factual (seal increase)"),
+  ensemble_indicators(sims_counter, "Counterfactual (seals constant)")
+)
 ```
 
+## Indicator 1 — mean individual weight per species, factual vs counterfactual
 
-```{r}
-library(ggplot2)
-library(ggpubr)
-cor_plot <- ggplot(cor_results_long, aes(x = value, y = Variable, fill = scen)) +
-  geom_violin(trim = FALSE, scale = "width", alpha = 0.8, color = "white", linewidth = 0.8) +
-  stat_summary(fun = median, geom = "point", size = 2, color = "white",
-               position = position_dodge(width = 0.9)) +
-  #geom_vline(xintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.6) +
-  scale_fill_manual(values = c(
-    "Fishing without additional predation mortality" = "#2E86AB",
-    "Fishing with additional predation mortality" = "#E63946"
-  )) +
-  labs(
-    x = "Spearman Correlation",
-    y = NULL,
-    fill = NULL  # remove legend title
-  ) +
-  theme_pubr() +
-  theme(
-    axis.text.x = element_text(size = 12, face = "bold", color = "grey20"),
-    axis.text.y = element_text(size = 12, face = "bold", color = "grey20"),
-    axis.title.x = element_text(size = 12, face = "bold", color = "grey20", margin = margin(t = 10)),
-    axis.title.y = element_text(size = 12, face = "bold", color = "grey20", margin = margin(r = 10)),
-    legend.text = element_text(size = 10, face = "bold", color = "grey20"),
-    legend.position = "bottom",
-    legend.background = element_rect(fill = "white", color = NA),
-    legend.key = element_rect(fill = "white", color = NA),
-    
-    # Add a black border around the plot panel
-    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8)
-  )
-cor_plot
- ggsave(filename = paste0(save_dir, "cor_plot_option.jpeg"), plot = cor_plot,width = 11, height = 7.5, units = "in",dpi = 400)
-```
+```{r mean-weight}
+# Ensemble median + 10-90% band (the band is the ensemble spread across randomised
+# food webs, NOT a formal CI). Factual vs counterfactual overlaid per species.
+mw <- df_all |>
+  group_by(scen, Species, Year) |>
+  summarise(med = median(MeanWeight),
+            lo  = quantile(MeanWeight, 0.10),
+            hi  = quantile(MeanWeight, 0.90), .groups = "drop")
+
+p_mw <- ggplot(mw, aes(Year, med, colour = scen, fill = scen)) +
+  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.20, colour = NA) +
+  geom_line(linewidth = 0.6) +
+  facet_wrap(~ Species, scales = "free_y") +
+  scale_colour_manual(values = c("Factual (seal increase)" = "firebrick",
+                                 "Counterfactual (seals constant)" = "steelblue")) +
+  scale_fill_manual(values = c("Factual (seal increase)" = "firebrick",
+                               "Counterfactual (seals constant)" = "steelblue")) +
+  theme_bw(base_size = 9) +
+  labs(x = "Year", y = "Mean individual weight (g)") +
+  theme(legend.position = "bottom", legend.title = element_blank())
+ggsave(paste0(save_dir, "indicator_mean_weight.jpeg"), p_mw, width = 14, height = 10, dpi = 200)
+p_mw
+# INTERPRETATION (comment): where the counterfactual (blue) sits above the factual (red),
+# removing the seal increase leaves larger mean body size (less size-selective seal
+# predation + recovered large fish). Bands = 10-90% of ensemble webs.
 ```
 
+## Indicator 2 — model skill (modelled vs observed biomass) by scenario
 
+```{r model-skill}
+# Observed survey biomass (kt) per species-year.
+obs <- biomass_ts |> transmute(Species, Year, Biomass_obs = Biomass / 1e9)
 
+# Per ensemble member: Spearman rank correlation of modelled vs observed biomass
+# across all species x years (rank-based, so scale/log-free). Compares how well each
+# scenario reproduces the observed biomass pattern.
+skill <- df_all |>
+  mutate(Biomass = Biomass / 1e9) |>
+  inner_join(obs, by = c("Species", "Year")) |>
+  filter(Biomass_obs > 0, Biomass > 0) |>
+  group_by(scen, sim) |>
+  summarise(rho = cor(Biomass, Biomass_obs, method = "spearman"), .groups = "drop")
 
+p_sk <- ggplot(skill, aes(scen, rho, fill = scen)) +
+  geom_boxplot(width = 0.5, outlier.size = 0.4) +
+  scale_fill_manual(values = c("Factual (seal increase)" = "firebrick",
+                               "Counterfactual (seals constant)" = "steelblue")) +
+  theme_bw(base_size = 11) +
+  labs(x = NULL, y = "Spearman rho (modelled vs observed biomass)") +
+  theme(legend.position = "none")
+ggsave(paste0(save_dir, "indicator_model_skill.jpeg"), p_sk, width = 6, height = 5, dpi = 200)
+p_sk
 
-
-Comparison of Model Skill Metrics across Model Scenarios
-```{r}
-# Load necessary library
-library(openair)
-mw1 <- mw1 %>%
-  mutate(scen = "Scen1")
-mw1 <- mw1 %>%
-  mutate(scen = ifelse(Year<1986,
-                       "Calibration",scen))
-
-mw2 <- mw2 %>%
-  mutate(scen = "Scen2")
-mw2 <- mw2 %>%
-  mutate(scen = ifelse(Year<1986,
-                       "Calibration",scen))
-time_series_mw <- rbind(mw1, mw2)
-# Calculate log-transformed observed and simulated mean weights for better statistical comparison
-time_series_mw <- time_series_mw %>%
-  mutate(
-    logMeanWeight = log(MeanWeight_Obs),        # Natural log of observed mean weight
-    logSimMeanWeight = log(MeanWeight)          # Natural log of simulated mean weight
-  )
-
-# Compute model performance statistics grouped by scenario ("scen")
-modStats_mw <- time_series_mw %>%
-  group_modify(~modStats(
-    .x, 
-    obs = "logMeanWeight",                    # Column for observed values (log-transformed)
-    mod = "logSimMeanWeight",                 # Column for modelled/simulated values (log-transformed)
-    type = "scen",                            # Grouping by scenario
-    rank = "scen",                            # Rank by scenario
-    statistic = c("n","FAC2","MGE","RMSE","r","COE"),  # Selected performance metrics
-    method = "spearman"                       # Use Spearman correlation for "r"
-  )) %>%
-  ungroup()
-
-# Load flextable for nice formatting of summary table
-library(flextable)
-
-# Format the model stats results table
-tabl_mw <- modStats_mw %>%
-  mutate(across(where(is.numeric), ~round(., 3))) %>%  # Round numeric columns to 3 decimal places
-  select(c("scen","n","FAC2","MGE","RMSE","r","COE")) %>%  # Select relevant columns for display
-  flextable()  # Convert to flextable for styled tabular output
-
-# Display the formatted table
-tabl_mw
+# Median skill per scenario across the ensemble.
+skill |> group_by(scen) |>
+  summarise(median_rho = round(median(rho), 3),
+            q10 = round(quantile(rho, 0.10), 3),
+            q90 = round(quantile(rho, 0.90), 3), .groups = "drop")
+# INTERPRETATION (comment): higher rho = better reproduction of the observed biomass
+# pattern. If the factual (seal-increase) scenario has higher skill than the
+# counterfactual, the data favour the seal-increase mechanism.
 ```
-
-```{r}
-
-```
-
-
-
-
-

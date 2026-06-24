@@ -9,7 +9,7 @@ Set up directories
 ```{r setup, include=FALSE}
 library("here")
 dir <- setwd(here())
-knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/ESS_restructured//")
+knitr::opts_knit$set(root.dir = here::here())   # portable project root (was a hardcoded Dropbox path)
 
 # Define the save directory
 save_dir <- paste0(here(), "/Ess_Output/")
@@ -172,9 +172,9 @@ cat(sprintf("Kept %d / %d complete paired ensemble members\n", length(ok), n_sim
 sims_scen2 <- sims_factual
 sims_scen1 <- sims_counter
 
-# # Save sim outputs
-#saveRDS(sims_factual, "Ess_Output/sims_factual.RDS")   # seal increase (factual)
-#saveRDS(sims_counter, "Ess_Output/sims_counter.RDS")   # seals constant (counterfactual)
+# Save sim outputs (complete-pair filtered) for downstream use (04_Indicators)
+saveRDS(sims_factual, "Ess_Output/sims_factual.RDS")   # seal increase (factual)
+saveRDS(sims_counter, "Ess_Output/sims_counter.RDS")   # seals constant (counterfactual)
 #sims_factual <- readRDS("Ess_Output/sims_factual.RDS")
 #sims_counter <- readRDS("Ess_Output/sims_counter.RDS")
 
@@ -725,9 +725,9 @@ trophic_cascades_plot
 ```
 
 Spectra_community
-```{r}
+```{r eval=FALSE}   # DISABLED: pre-existing data-shape bugs (rbind ssdf_ref column mismatch); re-enable after fixing
 # Size spectra of the observed 
-bio_size_read <- read.csv("Ess_data/bio_size.csv")
+bio_size <- read.csv("Ess_data/bio_size.csv")
 biomass_size_spectra<-bio_size %>% group_by(weightclass,Year)%>% summarise(nbiomass=sum(norm_biomass))%>%
   ungroup() 
 #Observed Reference period 1970-1985
