@@ -261,6 +261,23 @@ ggsave(paste0(save_dir, "scenario_paired_cod_scatter.jpeg"), pB, width = 6.5, he
 pB
 ```
 
+**How to read the paired-robustness figures.** The violin/boxplot shows, per species,
+the distribution *across food webs* of `log(counterfactual / factual)` terminal biomass
+— the per-web paired effect of the seal increase. **A value > 0 means the species
+recovers more when seals do *not* increase** (i.e. the seal increase suppressed it). A
+distribution sitting clearly above the dashed zero line means the effect is **consistent
+across structural uncertainty**, not an artefact of one food-web configuration — for
+Atlantic cod it is entirely > 0 (recovery suppressed by the seal increase in ~100% of
+webs). The scatter (cod factual vs counterfactual, one point per web) shows the same:
+essentially all points lie above the 1:1 line (counterfactual cod > factual cod). Because
+each pair shares the *same* randomised web, this **isolates the seal effect** and is
+robust to food-web structural uncertainty.
+
+*(The time-series **ribbons** below show where 10–90% of ensemble webs fall — read them
+as the visual spread of trajectories, not a formal confidence interval; the formal
+robustness claim is the paired fraction above.)*
+
+
 ## Sensitivity — does the seal effect survive a larger perturbation (sd = 0.2)?
 
 Primary result uses `sd_web = 0.1` (~10% CV/link). This re-runs the paired ensemble
@@ -315,13 +332,13 @@ sim_lower <- df_sim_bio |>
   pivot_longer(cols = 1:19) |>
   mutate(Year = year, Species = factor(name, levels = names(df_sim_bio)[1:19])) |>
   group_by(Species, Year) |>
-  summarise(Biomass = min(value), .groups = "drop")
+  summarise(Biomass = quantile(value, 0.10), .groups = "drop")
 
 sim_upper <- df_sim_bio |>
   pivot_longer(cols = 1:19) |>
   mutate(Year = year, Species = factor(name, levels = names(df_sim_bio)[1:19])) |>
   group_by(Species, Year) |>
-  summarise(Biomass = max(value), .groups = "drop")
+  summarise(Biomass = quantile(value, 0.90), .groups = "drop")
 
 
 # -- Summarize simulation results by species and year for Scenario 2 (same process) --
@@ -336,13 +353,13 @@ sim_lower2 <- df_sim_bio2 |>
   pivot_longer(cols = 1:19) |>
   mutate(Year = year, Species = factor(name, levels = names(df_sim_bio2)[1:19])) |>
   group_by(Species, Year) |>
-  summarise(Biomass = min(value), .groups = "drop")
+  summarise(Biomass = quantile(value, 0.10), .groups = "drop")
 
 sim_upper2 <- df_sim_bio2 |>
   pivot_longer(cols = 1:19) |>
   mutate(Year = year, Species = factor(name, levels = names(df_sim_bio2)[1:19])) |>
   group_by(Species, Year) |>
-  summarise(Biomass = max(value), .groups = "drop")
+  summarise(Biomass = quantile(value, 0.90), .groups = "drop")
 
 
 # -- Create data frames with median, lower and upper quantiles for Scenario 1 --
@@ -532,16 +549,16 @@ df_sim_catch2 <- do.call(rbind, sim_catches2)
 # ============================================================
 
 sim_mean_c  <- df_sim_catch |> group_by(Species, Year) |> summarise(Yield = median(Yield), .groups = "drop")
-sim_lower_c <- df_sim_catch |> group_by(Species, Year) |> summarise(Yield = min(Yield), .groups = "drop")
-sim_upper_c <- df_sim_catch |> group_by(Species, Year) |> summarise(Yield = max(Yield), .groups = "drop")
+sim_lower_c <- df_sim_catch |> group_by(Species, Year) |> summarise(Yield = quantile(Yield, 0.10), .groups = "drop")
+sim_upper_c <- df_sim_catch |> group_by(Species, Year) |> summarise(Yield = quantile(Yield, 0.90), .groups = "drop")
 
 # ============================================================
 # Scenario 2 summaries
 # ============================================================
 
 sim_mean2_c  <- df_sim_catch2 |> group_by(Species, Year) |> summarise(Yield = median(Yield), .groups = "drop")
-sim_lower2_c <- df_sim_catch2 |> group_by(Species, Year) |> summarise(Yield = min(Yield), .groups = "drop")
-sim_upper2_c <- df_sim_catch2 |> group_by(Species, Year) |> summarise(Yield = max(Yield), .groups = "drop")
+sim_lower2_c <- df_sim_catch2 |> group_by(Species, Year) |> summarise(Yield = quantile(Yield, 0.10), .groups = "drop")
+sim_upper2_c <- df_sim_catch2 |> group_by(Species, Year) |> summarise(Yield = quantile(Yield, 0.90), .groups = "drop")
 
 # ============================================================
 # Create scenario data frames
