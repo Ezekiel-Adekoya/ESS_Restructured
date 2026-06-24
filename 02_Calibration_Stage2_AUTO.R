@@ -211,6 +211,24 @@ ggsave("Ess_Output/stage2_AUTOsteered_trajectories.jpeg",       mk(TRUE),  width
 ggsave("Ess_Output/stage2_AUTOsteered_trajectories_linear.jpeg",mk(FALSE), width=14, height=10, dpi=200)
 cat("\nSaved params_stage2_AUTO.RDS + steered-AUTO plots\n")
 
+## ── YIELD-vs-time check: modelled fishing yield vs observed NAFO catch ────────
+## Confirms the catch fit through time is intact. Sums over the fishing gears only
+## (excludes the Seals gear, which is predation, not catch).
+yield_ts <- readRDS("Ess_data/yield_ts.RDS")            # observed catch (g): Year, Species, Yield
+sim_y <- project(pf, effort=effort, t_max=nrow(effort), t_save=1, progress_bar=FALSE)
+yg    <- getYieldGear(sim_y)                             # [time, gear, species] (g/yr)
+fyld  <- apply(yg[, dimnames(yg)[[2]] %in% fish_gears, , drop=FALSE], c(1,3), sum)  # fishing gears only
+ylong <- as.data.frame(fyld/1e9) |> rownames_to_column("Year") |> mutate(Year=as.integer(Year)) |>
+  pivot_longer(-Year, names_to="Species", values_to="Yield")
+gy <- ggplot(ylong, aes(Year, Yield)) +
+  geom_line(colour="firebrick", linewidth=0.7) +
+  geom_point(data=filter(yield_ts, Yield>0), aes(Year, Yield/1e9), colour="black", size=0.6, inherit.aes=FALSE) +
+  facet_wrap(~Species, scales="free_y") + theme_bw(base_size=9) +
+  labs(title="Stage 2 steered-AUTO: fishing yield (red) vs observed NAFO catch (black)",
+       x="Year", y="Yield (kt)")
+ggsave("Ess_Output/stage2_AUTOsteered_yield.jpeg", gy, width=14, height=10, dpi=200)
+cat("Saved stage2_AUTOsteered_yield.jpeg\n")
+
 ## ============================================================================
 ## STANDING POST-HOC DIAGNOSTICS (run on the final factual params)
 ## ============================================================================
