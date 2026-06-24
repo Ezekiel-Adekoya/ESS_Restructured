@@ -22,3 +22,8 @@ Rplots.pdf
 # regenerable output figures (the calibration/scenario scripts remake these)
 Ess_Output/*.jpeg
 Ess_Output/*.pdf
+
+# raw / superseded data versions not used by the workflow (kept locally, off the repo)
+SUMMER_csv/
+/inter.rds
+/scotian_shelf_logistic_1960_2025.csv

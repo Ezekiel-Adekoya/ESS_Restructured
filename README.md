@@ -12,7 +12,7 @@ difference in cod/groundfish recovery is **robust to food-web structural uncerta
 
 ## Workflow (run in order)
 
-Scripts are numbered by stage: **00 = data prep, 01 = calibration, 02 = scenarios.**
+Scripts are numbered by stage: **00 = data prep, 01 = calibration, 02 = scenarios, 03 = indicators.**
 
 | Step | Script | Produces |
 |---|---|---|
@@ -20,10 +20,14 @@ Scripts are numbered by stage: **00 = data prep, 01 = calibration, 02 = scenario
 | **00** | `00_EZ_digitise_seal_data.r` | seal abundance (logistic fit), `seal_gear_params.csv`, effort-with-seals |
 | **00** | `00_EZ_SpeciesParams_extraction.R` | species parameters (a, b, w_max, w_mat …) |
 | **00** | `00_EZ_PPMR_extraction.R` | predator–prey mass ratios (beta) |
+| **00** | `00_EZ_PCA_Analysis_DFO.Rmd`, `00_EZ_Workflow Diagram.Rmd` | supplementary data-prep / overview (survey PCA, workflow diagram) |
 | **01** | `01_Calibration_Stage1_steady.Rmd` | **time-averaged 1978–85 steady state** → `params_stage1_steady.RDS` + steady-state diagnostics (size spectra, growth, biomass/yield fits, emergent diet vs Cook & Bundy, seal "catch" vs Bowen & Harrison) |
 | **01** | `01_Calibration_Stage2_AUTO_fastOptim.R` | **factual time-series model (recommended)** → `params_stage2_AUTO.RDS`. Objective-driven: structural decisions fixed in `apply_structural()`, ecological criteria as penalties, only nuisance parameters optimised (`optimParallel`). Reproducible. |
 | **01** | `01_Calibration_Stage2_timeseries.R` | hand-tuned factual model → `params_stage2_factual.RDS`. Kept as a **validation reference** for the AUTO model. |
 | **02** | `02_Scenarios Through time.Rmd` | factual vs counterfactual (seals constant) over a **paired** randomised-web ensemble; recovery-robustness analysis + figures |
+| **03** | `03_Indicators.Rmd` | community indicators (e.g. mean-weight) computed from the scenario runs |
+
+Interaction-matrix prep: `Cook and Bundy.R` / `New_Species_Interaction_DepthStrata.R` (Schoener's D spatial overlap → θ_ij).
 
 `Ess_data/Useful_functions.R` is the **single** project functions file (custom
 biomass calibration, seal selectivity, and the `getError*` loss functions used by the
