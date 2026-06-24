@@ -67,7 +67,8 @@ randomize_interaction_matrix <- function(params, sdev = 0.1) {
   
   # Clip to [0, 1]
   new_inter <- pmin(pmax(new_inter, 0), 1)
-  new_seal  <- pmin(pmax(new_seal,  0), 1)
+  new_seal  <- pmax(new_seal, 0)   # floor at 0 only: seal catchabilities are O(1-8);
+  # a [0,1] clip would crush them all to 1 and destroy seal predation + Bowen selectivity
   
   # Update parameters
   params@interaction <- new_inter
@@ -78,33 +79,11 @@ randomize_interaction_matrix <- function(params, sdev = 0.1) {
 
 ```
 
-Function to run multiple simulations with different interaction matrices
+Function to run the PAIRED randomised-web ensemble (each web under both scenarios).
 ```{r}
-# Function to run multiple simulations with different interaction matrices
-run_random_sims <- function(params, n_sims = 10, years = 100, sd = 0.1,effort_scen) {
-  # List to store simulation results
-  sim_results <- list()
-  
-  # Run simulations
-  for(i in 1:n_sims) {
-    # Create new parameters with randomized interaction matrix
-    rand_params <- randomize_interaction_matrix(params, sd = sd)
-    # Run to steady
-    rand_params<-steady(rand_params)
-    # Run simulation
-    sim <- project(rand_params, effort=effort_scen)
-    
-    # Store results
-    sim_results[[i]] <- sim
-  }
-  
-  return(sim_results)
-}
-
 # PAIRED ensemble: each randomised food web is run under BOTH effort scenarios, so
 # sims$factual[[i]] and sims$counter[[i]] share the SAME web — a genuinely PAIRED
-# comparison — and `seed` makes the whole ensemble reproducible. (The earlier setup
-# called run_random_sims() twice => independent webs per scenario => NOT paired.)
+# comparison — and `seed` makes the whole ensemble reproducible.
 run_paired_sims <- function(params, n_sims = 100, sd = 0.2,
                             effort_factual, effort_counter, seed = 42) {
   set.seed(seed)
