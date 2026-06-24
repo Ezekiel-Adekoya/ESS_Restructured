@@ -114,22 +114,6 @@ library(patchwork)
 library(ggpubr)
 ```
 
-### Robustness ensemble — methods
-
-The factual vs counterfactual comparison is repeated over an ensemble of randomised
-food webs to test robustness to **food-web structural uncertainty**.
-`randomize_interaction_matrix()` multiplies each existing interaction-matrix entry
-*and* each seal catchability by independent lognormal noise (SD = `sd_web`) — it
-scales the **strengths** of existing links while preserving topology (structural
-zeros stay zero), and perturbs seal predation (a gear) the same way. Each web is
-projected from the **calibrated 1978 state** (a transient hindcast; the model is not
-at equilibrium). The ensemble is **paired**: the same web is run under both
-scenarios, so the **per-web difference isolates the seal effect and cancels** the
-drift each perturbation induces off the calibrated balance — conclusions therefore
-rest on the *paired difference / fraction of webs*, not the absolute spread.
-`sd_web = 0.1` is the primary result (~10% CV per link = realistic strength
-uncertainty); `sd_web = 0.2` is run as a stronger structural stress test.
-
 Read in params object
 ```{r}
 
@@ -160,9 +144,15 @@ sim1 <- project(rand_params, effort = effort_factual)
 plot(sim1, time_range = c(1978:2024))
 plotBiomassRelative(sim1, sim0)
 
-# ── ENSEMBLE: factual vs counterfactual over randomised food webs (see note above) ─
-# PRIMARY result uses sd_web = 0.1 (~10% CV/link, realistic strength uncertainty);
-# re-run / use the sensitivity chunk below with 0.2 for a stronger structural stress test.
+# ── ENSEMBLE: factual vs counterfactual over randomised food webs ─────────────
+# Structural-uncertainty robustness test: randomize_interaction_matrix() multiplies each
+# existing interaction-matrix entry AND each seal catchability by lognormal noise (SD =
+# sd_web) - scaling existing link STRENGTHS (topology preserved, zeros stay zero) and
+# perturbing seal predation the same way. Projected from the calibrated 1978 state (a
+# transient hindcast, not equilibrium). PAIRED: same web under both scenarios, so the
+# per-web difference isolates the seal effect and cancels the perturbation drift =>
+# base conclusions on the paired difference / fraction of webs, not the ribbon spread.
+# sd_web = 0.1 = primary (~10% CV/link, realistic); 0.2 = stronger stress test (below).
 n_sims <- 1000; sd_web <- 0.1
 paired <- run_paired_sims(params, n_sims = n_sims, sd = sd_web,
                           effort_factual = effort_factual,
@@ -194,7 +184,7 @@ plot(sims_scen2[[4]],time_range=c(1978:2024))
 plotBiomassRelative(sims_scen2[[4]],sim0)
 ```
 
-## PAIRED robustness: is the seal effect on (non-)recovery robust to food-web structure?
+## Paired robustness across the randomised-web ensemble
 
 Because the ensemble is PAIRED (web `k` is run under both scenarios), we can take the
 per-web difference and ask: across the randomised food webs, does removing the seal
@@ -241,9 +231,7 @@ pA <- ggplot(filter(pair_df, species %in% gf),
   geom_violin(fill = "steelblue", alpha = 0.4, colour = NA) +
   geom_boxplot(width = 0.15, outlier.size = 0.4) +
   coord_flip() + theme_bw(base_size = 10) +
-  labs(x = NULL, y = "log( counterfactual / factual )  terminal biomass")#,
-       #title = "Recovery suppressed by the seal increase, across randomised food webs",
-       #subtitle = "Per-web paired difference; > 0 = species recovers more when seals do NOT              #increase")
+  labs(x = NULL, y = "log( counterfactual / factual )  terminal biomass")
 ggsave(paste0(save_dir, "scenario_paired_recovery_logratio.jpeg"), pA, width = 9, height = 6, dpi = 200)
 pA
 
@@ -254,31 +242,21 @@ pB <- ggplot(cod, aes(factual, counter)) +
   geom_point(alpha = 0.25, colour = "firebrick") +
   theme_bw(base_size = 10) +
   labs(x = "Cod 2024 biomass — FACTUAL (seal increase), kt",
-       y = "Cod 2024 biomass — COUNTERFACTUAL (seals constant), kt",
-       title = "Cod recovery is consistently higher without the seal increase",
-       subtitle = "Each point = one randomised food web (above the 1:1 line = seal increase suppressed cod)")
+       y = "Cod 2024 biomass — COUNTERFACTUAL (seals constant), kt")
 ggsave(paste0(save_dir, "scenario_paired_cod_scatter.jpeg"), pB, width = 6.5, height = 6, dpi = 200)
 pB
+
+# INTERPRETATION (kept as comments; no plot titles/captions per journal style):
+# pA: per-species distribution across webs of log(counterfactual/factual) 2024 biomass;
+#     > 0 = recovers MORE without the seal increase. Wholly-positive (e.g. Atlantic Cod)
+#     = seal increase suppresses recovery in ~all webs.
+# pB: cod factual vs counterfactual per web; points above the 1:1 line = counterfactual
+#     cod > factual. Paired (same web both scenarios) => isolates the seal effect, robust
+#     to food-web structural uncertainty. Time-series ribbons = 10-90% ensemble spread
+#     (visual range, NOT a CI); formal claim = the paired fraction-of-webs.
 ```
 
-**How to read the paired-robustness figures.** The violin/boxplot shows, per species,
-the distribution *across food webs* of `log(counterfactual / factual)` terminal biomass
-— the per-web paired effect of the seal increase. **A value > 0 means the species
-recovers more when seals do *not* increase** (i.e. the seal increase suppressed it). A
-distribution sitting clearly above the dashed zero line means the effect is **consistent
-across structural uncertainty**, not an artefact of one food-web configuration — for
-Atlantic cod it is entirely > 0 (recovery suppressed by the seal increase in ~100% of
-webs). The scatter (cod factual vs counterfactual, one point per web) shows the same:
-essentially all points lie above the 1:1 line (counterfactual cod > factual cod). Because
-each pair shares the *same* randomised web, this **isolates the seal effect** and is
-robust to food-web structural uncertainty.
-
-*(The time-series **ribbons** below show where 10–90% of ensemble webs fall — read them
-as the visual spread of trajectories, not a formal confidence interval; the formal
-robustness claim is the paired fraction above.)*
-
-
-## Sensitivity — does the seal effect survive a larger perturbation (sd = 0.2)?
+## Sensitivity to perturbation magnitude (sd)
 
 Primary result uses `sd_web = 0.1` (~10% CV/link). This re-runs the paired ensemble
 at sd = 0.1 and 0.2 and reports the fraction of webs where cod recovers more *without*
@@ -496,7 +474,7 @@ ggplot(time_series_first4, aes(x = Biomass_observed, y = Biomass)) +
            method = "pearson", label.x.npc = "left", label.y.npc = 0.95) +
   facet_wrap(~ Species, scales = "free") +
   theme_bw() +
-  labs( x = "Observed Biomass", y = "Model Biomass", title = "Observed vs Modeled Biomass by Species")
+  labs( x = "Observed Biomass", y = "Model Biomass")
 
 ```
 
