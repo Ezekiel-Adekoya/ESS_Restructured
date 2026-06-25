@@ -19,13 +19,14 @@ Rplots.pdf
 # local archive of dead-end / exploratory scripts (kept off the repo)
 /_archive/
 
-# regenerable output figures (the calibration/scenario scripts remake these)
+# regenerable output figures + summaries (the calibration/scenario scripts remake these)
 Ess_Output/*.jpeg
 Ess_Output/*.pdf
+Ess_Output/*.csv
 
-# knitted notebooks + knit logs (regenerable from the .Rmd files)
+# knitted notebooks + run logs (regenerable from the .Rmd / .R files)
 0?_*.html
-_knit*.log
+_*.log
 
 # raw / superseded data versions not used by the workflow (kept locally, off the repo)
 SUMMER_csv/

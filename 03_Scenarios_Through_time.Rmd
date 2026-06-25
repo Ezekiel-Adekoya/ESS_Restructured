@@ -328,8 +328,8 @@ time_series <- rbind(sim1, sim2)
 # Rename observed biomass column to 'Biomass' for easier plotting
 time_series <- time_series |> rename(Biomass = Biomass_Obs)
 
-# -- Add a 'Calibration' label for years before 1986, keep scenario label after --
-time_series <- time_series %>% mutate(scen = ifelse(Year < 1986, "Calibration", scen))
+# Whole time series, no calibration/scenario split: both scenarios (with their ensemble
+# envelopes) run across 1978-2024; they coincide early and diverge as seals increase.
 
 # -- Define species names and set factor levels accordingly --
 species <- levels(time_series$Species) <- c("Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake",
@@ -362,15 +362,14 @@ biomass_plot <- ggplot(time_series, aes(x = Year, y = Biomass, colour = Scenario
   geom_ribbon(aes(ymin = sim_lower, ymax = sim_upper), alpha = 0.3, colour = NA) +
   geom_line(aes(y = sim_mean)) +
   scale_colour_manual(name = NULL,
-                      values = c("grey70", "#4575B4", "#D73027"),
-                      labels = c("Reference period", "Fishing without additional predation mortality", 
+                      values = c("#4575B4", "#D73027"),
+                      labels = c("Fishing without additional predation mortality",
                                  "Fishing with additional predation mortality")) +
   scale_fill_manual(name = NULL,
-                    values = c("grey70", "#4575B4", "#D73027"),
-                    labels = c("Reference period", "Fishing without additional predation mortality", 
+                    values = c("#4575B4", "#D73027"),
+                    labels = c("Fishing without additional predation mortality",
                                "Fishing with additional predation mortality")) +
-  labs(y = "Biomass", x = "Year") +   
-  geom_vline(xintercept = 1986, linetype = "dashed", color = "black") +   
+  labs(y = "Biomass", x = "Year") +
   theme_pubr() +   
   theme(
     legend.position = "bottom",
@@ -518,7 +517,7 @@ sim2_c <- right_join(yield_ts, sim2_c, by = c("Species", "Year"))
 # ============================================================
 # Combine scenarios
 time_series_c <- rbind(sim1_c, sim2_c)
-time_series_c <- time_series_c |> mutate(scen = ifelse(Year < 1986, "Calibration", scen)) |> rename(Yield = Yield_Obs)
+time_series_c <- time_series_c |> rename(Yield = Yield_Obs)
 
 ```
 
@@ -545,18 +544,15 @@ yield_plot = ggplot(time_series_c, aes(x=Year, y=Yield, colour=scen, fill=scen))
   geom_point(aes(y=Yield), colour="black", size=0.3) +   
   geom_ribbon(data = time_series_c, aes(ymin=sim_lower, ymax=sim_upper), alpha=0.3, colour=NA) +   
   geom_line(data = time_series_c, aes(y=sim_mean, colour=scen)) +   
-  scale_colour_manual(name = NULL,  
-                      values = c("grey70", "#4575B4", "#D73027"),
-                      labels = c("Reference period", 
-                                 "Fishing without additional predation mortality", 
-                                 "Fishing with additional predation mortality")) +   
-  scale_fill_manual(name = NULL,  
-                    values = c("grey70", "#4575B4", "#D73027"),
-                    labels = c("Reference period", 
-                               "Fishing without additional predation mortality", 
-                               "Fishing with additional predation mortality")) +   
-  labs(y = "Catches", x = "Year") +   
-  geom_vline(xintercept = 1986, linetype="dashed", color = "black") +   
+  scale_colour_manual(name = NULL,
+                      values = c("#4575B4", "#D73027"),
+                      labels = c("Fishing without additional predation mortality",
+                                 "Fishing with additional predation mortality")) +
+  scale_fill_manual(name = NULL,
+                    values = c("#4575B4", "#D73027"),
+                    labels = c("Fishing without additional predation mortality",
+                               "Fishing with additional predation mortality")) +
+  labs(y = "Catches", x = "Year") +
   theme_pubr() +   
   theme(
     legend.position = "bottom",
@@ -580,16 +576,18 @@ library(openair)
 time_series_c <- time_series_c |> mutate(logYield = log(Yield),logMeanSimYield=log(sim_mean))
 
 first_group <- time_series_c %>%
+  filter(Year >= 1986, Year <= 2024) %>%   # evaluate fit on post-spin-in period only
   dplyr::group_split() %>%
   .[[1]]
 
  modStats_c = modStats(first_group, obs = "logYield", mod = "logMeanSimYield", type = "scen",rank = "scen",
   statistic = c("n", "FAC2", "MGE", "RMSE", "r", "COE"),method = "spearman")
-# Compute performance statistics for each 'scen' group (Scenarios and Calibration period)
+# Compute performance statistics per scenario on the post-spin-in period (>= 1986)
 time_series <- time_series %>% rename( scen = Scenario )
 time_series <- time_series |> mutate(logBiomass = log(Biomass),logMeanSimBiomass=log(sim_mean))
 
 modStats <- time_series %>%
+  filter(Year >= 1986, Year <= 2024) %>%   # evaluate fit on post-spin-in period only
   group_modify(~modStats(.x, obs = "logBiomass", mod = "logMeanSimBiomass", type = "scen", rank = "Scenario",statistic=c("n","FAC2","MGE","RMSE","r","COE"),method="spearman")) %>%
   ungroup()
 
