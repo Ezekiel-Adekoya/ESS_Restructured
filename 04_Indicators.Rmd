@@ -102,7 +102,20 @@ p_mw <- ggplot(mw, aes(Year, med, colour = scen, fill = scen)) +
                                "Counterfactual (seals constant)" = "steelblue")) +
   theme_bw(base_size = 9) +
   labs(x = "Year", y = "Mean individual weight (g)") +
-  theme(legend.position = "bottom", legend.title = element_blank())
+  theme(legend.position = "bottom", legend.title = element_blank())+
+  theme_bw() +
+  theme(
+    text = element_text(size = 12, face = "bold"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    axis.text.x = element_markdown(size = 10),  # <- bold x-axis labels
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10, face = "bold"),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(linewidth = 1),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank())
 ggsave(paste0(save_dir, "indicator_mean_weight.jpeg"), p_mw, width = 14, height = 10, dpi = 200)
 p_mw
 # INTERPRETATION (comment): where the counterfactual (blue) sits above the factual (red),
@@ -110,38 +123,99 @@ p_mw
 # predation + recovered large fish). Bands = 10-90% of ensemble webs.
 ```
 
+
 ## Indicator 2 — model skill (modelled vs observed biomass) by scenario
 
 ```{r model-skill}
-# Observed survey biomass (kt) per species-year.
+# Observed survey biomass and catches per species-year
 obs <- biomass_ts |> transmute(Species, Year, Biomass_obs = Biomass / 1e9)
+obs_catch <- readRDS("Ess_data/yield_ts.RDS") |>
+  filter(!Species %in% c("Sand Lance", "Capelin", "Longhorn Sculpin")) |>
+  transmute(Species, Year, Yield_obs = Yield / 1e9)
 
-# Per ensemble member: Spearman rank correlation of modelled vs observed biomass
-# across all species x years (rank-based, so scale/log-free). Compares how well each
-# scenario reproduces the observed biomass pattern.
-skill <- df_all |>
+# Per ensemble member: Spearman rho for biomass
+skill_biomass <- df_all |>
   mutate(Biomass = Biomass / 1e9) |>
   inner_join(obs, by = c("Species", "Year")) |>
   filter(Biomass_obs > 0, Biomass > 0) |>
   group_by(scen, sim) |>
-  summarise(rho = cor(Biomass, Biomass_obs, method = "spearman"), .groups = "drop")
+  summarise(rho_biomass = cor(Biomass, Biomass_obs, method = "spearman"), .groups = "drop")
+
+# Per ensemble member: Spearman rho for catches
+skill_catch <- df_catches |>
+  mutate(Yield = Yield / 1e9) |>
+  inner_join(obs_catch, by = c("Species", "Year")) |>
+  filter(Yield_obs > 0, Yield > 0) |>
+  group_by(scen, sim) |>
+  summarise(rho_catch = cor(Yield, Yield_obs, method = "spearman"), .groups = "drop")
+
+# Per ensemble member: Spearman rho for mean individual weight
+# (no observed counterpart — cross-scenario comparison only: factual vs counterfactual)
+skill_mw <- df_all |>
+  filter(!is.na(MeanWeight), MeanWeight > 0) |>
+  group_by(scen, sim) |>
+  summarise(rho_mw = cor(MeanWeight, Year, method = "spearman"), .groups = "drop")
+# Note: rho_mw here is the trend correlation (weight ~ year) per scenario/sim.
+# A positive rho = mean weight increasing over time; negative = declining.
+# The difference between scenarios isolates the seal effect on body size.
+
+# Combine all three skill metrics
+skill <- left_join(skill_biomass, skill_catch, by = c("scen", "sim")) |>
+  left_join(skill_mw, by = c("scen", "sim")) |>
+  pivot_longer(cols = c(rho_biomass, rho_catch, rho_mw),
+               names_to = "indicator", values_to = "rho") |>
+  mutate(indicator = recode(indicator,
+    "rho_biomass" = "Biomass",
+    "rho_catch"   = "Catch",
+    "rho_mw"      = "Mean individual weight"))
 
 p_sk <- ggplot(skill, aes(scen, rho, fill = scen)) +
-  geom_boxplot(width = 0.5, outlier.size = 0.4) +
-  scale_fill_manual(values = c("Factual (seal increase)" = "firebrick",
-                               "Counterfactual (seals constant)" = "steelblue")) +
+  geom_boxplot(width = 0.6, outlier.size = 0.3) +
+  facet_wrap(~ indicator) +
+  scale_fill_manual(values = c("Factual (seal increase)"         = "red",
+                               "Counterfactual (seals constant)" = "blue")) +
   theme_bw(base_size = 11) +
-  labs(x = NULL, y = "Spearman rho (modelled vs observed biomass)") +
-  theme(legend.position = "none")
-ggsave(paste0(save_dir, "indicator_model_skill.jpeg"), p_sk, width = 6, height = 5, dpi = 200)
+  labs(x = NULL, y = "Spearman rho (modelled vs observed)") +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"))+
+  theme_bw() +
+  theme(
+    text = element_text(size = 12, face = "bold"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.y = element_text(size = 10, face = "bold"),
+    axis.text.x = element_markdown(size = 10),  # <- bold x-axis labels
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10, face = "bold"),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(linewidth = 1),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank())
+ggsave("plot.png", p_sk, width = 10, height = 5, dpi = 300)
+ggsave(paste0(save_dir, "indicator_model_skill.jpeg"), p_sk, width = 14, height = 5, dpi = 200)
 p_sk
 
-# Median skill per scenario across the ensemble.
-skill |> group_by(scen) |>
+# Median skill per scenario and indicator across the ensemble
+skill |> group_by(scen, indicator) |>
   summarise(median_rho = round(median(rho), 3),
             q10 = round(quantile(rho, 0.10), 3),
             q90 = round(quantile(rho, 0.90), 3), .groups = "drop")
+# INTERPRETATION (comment): three-panel skill plot — biomass, catch, mean weight.
+# Biomass and catch rho = Spearman correlation of modelled vs observed pattern.
+# Mean weight rho = temporal trend (weight ~ year) per scenario; difference between
+# scenarios isolates the seal effect on community body size structure.
+# Higher biomass/catch rho = better fit to data; mean weight panel shows direction
+# and consistency of the size-structure response to the seal increase.
+
 # INTERPRETATION (comment): higher rho = better reproduction of the observed biomass
 # pattern. If the factual (seal-increase) scenario has higher skill than the
 # counterfactual, the data favour the seal-increase mechanism.
+
 ```
+
+
+
+```{r}
+
+```
+
