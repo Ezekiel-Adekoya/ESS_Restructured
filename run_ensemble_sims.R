@@ -20,7 +20,15 @@ suppressPackageStartupMessages({
 setwd(here::here())
 source("Ess_data/Useful_functions.R")   # randomize_interaction_matrix + run_paired_sims
 
-n_sims <- 1000; sd_web <- 0.1
+# sd of the food-web perturbation: default 0.1 (primary); override on the command line,
+# e.g. `Rscript run_ensemble_sims.R 0.2` for the stress-test ensemble. Non-default sd
+# writes suffixed RDS so it never overwrites the primary cache.
+.args     <- commandArgs(trailingOnly = TRUE)
+sd_web    <- if (length(.args) >= 1) as.numeric(.args[1]) else 0.1
+n_sims    <- 1000
+sd_suffix <- if (isTRUE(all.equal(sd_web, 0.1))) "" else sprintf("_sd%g", sd_web)
+cache_f   <- sprintf("Ess_Output/sims_factual%s.RDS", sd_suffix)
+cache_c   <- sprintf("Ess_Output/sims_counter%s.RDS", sd_suffix)
 
 ## ── Factual model (Stage 2) ──────────────────────────────────────────────────
 params <- readRDS(if (file.exists("Ess_data/params_stage2_AUTO.RDS"))
@@ -53,6 +61,6 @@ sims_factual <- sims_factual[ok]; sims_counter <- sims_counter[ok]
 cat(sprintf("Kept %d / %d complete paired ensemble members\n", length(ok), n_sims))
 
 ## ── Save (read by 03's cache guard and by 04_Indicators) ─────────────────────
-saveRDS(sims_factual, "Ess_Output/sims_factual.RDS")   # seal increase (factual)
-saveRDS(sims_counter, "Ess_Output/sims_counter.RDS")   # seals constant (counterfactual)
-cat("Saved Ess_Output/sims_factual.RDS + sims_counter.RDS\n")
+saveRDS(sims_factual, cache_f)   # seal increase (factual)
+saveRDS(sims_counter, cache_c)   # seals constant (counterfactual)
+cat(sprintf("Saved %s + %s\n", cache_f, cache_c))
