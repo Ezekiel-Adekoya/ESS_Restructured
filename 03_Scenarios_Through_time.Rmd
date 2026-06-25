@@ -37,6 +37,9 @@ library(tidyr)
 library(tibble)
 library(zoo)
 library(RColorBrewer)
+library(patchwork)
+library(ggpubr)
+
 # calling in the gaussian_sizeweight function
 gaussian_sizeweight <- function(w, species_params, w_opt, sigma, ...) {
   exp(-0.5 * ((log(w) - log(w_opt)) / sigma)^2)
@@ -100,19 +103,6 @@ run_paired_sims <- function(params, n_sims = 100, sd = 0.2,
 
 ```
 
-Set up packages:
-```{r}
-# Set up packages:
-# Load required library
-library(mizer)
-library(mizerExperimental)
-#library(Metrics)
-library(tidyverse)
-#library(interp)
-#library(hydroGOF)
-library(patchwork)
-library(ggpubr)
-```
 
 Read in params object
 ```{r}
