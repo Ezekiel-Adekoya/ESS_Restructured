@@ -612,3 +612,57 @@ getErrorTSCatchRepro <- function(vary, params, dat_ts, effort_ts, fit_sp,
   }
   loss
 }
+
+
+# ── PAIRED RANDOMISED-WEB ENSEMBLE (Stage 2 scenarios, 03_Scenarios) ──────────
+# Shared by 03_Scenarios_Through_time.Rmd and run_ensemble_sims.R so the two stay
+# in lock-step (single source of truth). Keep these definitions here only.
+
+# Randomise the interaction matrix while preserving topology (zeros stay zero) and
+# perturb the seal catchabilities the same way — a structural-uncertainty draw.
+randomize_interaction_matrix <- function(params, sdev = 0.1) {
+
+  # Get current interaction matrix
+  old_inter <- params@interaction
+
+  # Get seal catchability only (not all gears)
+  seal_idx  <- which(gear_params(params)$gear == "Seals")
+  old_seal  <- gear_params(params)$catchability[seal_idx]
+
+  # Create noise matrix with same dimensions as interaction matrix
+  n          <- nrow(old_inter)
+  noise      <- matrix(rnorm(n * n, mean = 0, sd = sdev), nrow = n)
+  noise_seal <- rnorm(length(seal_idx), mean = 0, sd = sdev)
+
+  # Add lognormal noise
+  new_inter <- old_inter * exp(noise)
+  new_seal  <- old_seal  * exp(noise_seal)
+
+  # Clip to [0, 1]
+  new_inter <- pmin(pmax(new_inter, 0), 1)
+  new_seal  <- pmax(new_seal, 0)   # floor at 0 only: seal catchabilities are O(1-8);
+  # a [0,1] clip would crush them all to 1 and destroy seal predation + Bowen selectivity
+
+  # Update parameters
+  params@interaction <- new_inter
+  gear_params(params)$catchability[seal_idx] <- new_seal
+
+  return(params)
+}
+
+# PAIRED ensemble: each randomised food web is run under BOTH effort scenarios, so
+# sims$factual[[i]] and sims$counter[[i]] share the SAME web — a genuinely PAIRED
+# comparison — and `seed` makes the whole ensemble reproducible.
+run_paired_sims <- function(params, n_sims = 100, sd = 0.2,
+                            effort_factual, effort_counter, seed = 42) {
+  set.seed(seed)
+  factual <- counter <- vector("list", n_sims)
+  for (i in seq_len(n_sims)) {
+    rp <- tryCatch(setParams(randomize_interaction_matrix(params, sdev = sd)),
+                   error = function(e) NULL)
+    if (is.null(rp)) next                   # leave both NULL at i (pairing preserved)
+    factual[[i]] <- tryCatch(project(rp, effort = effort_factual), error = function(e) NULL)
+    counter[[i]] <- tryCatch(project(rp, effort = effort_counter), error = function(e) NULL)
+  }
+  list(factual = factual, counter = counter)   # index i is the shared web
+}

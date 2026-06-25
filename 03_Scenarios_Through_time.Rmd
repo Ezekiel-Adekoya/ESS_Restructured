@@ -47,60 +47,11 @@ gaussian_sizeweight <- function(w, species_params, w_opt, sigma, ...) {
 
 ```
 
-Function to randomize interaction matrix while preserving basic ecological constraints
-```{r}
-# Function to randomize interaction matrix while preserving basic ecological constraints
-randomize_interaction_matrix <- function(params, sdev = 0.1) {
-  
-  # Get current interaction matrix
-  old_inter <- params@interaction
-  
-  # Get seal catchability only (not all gears)
-  seal_idx  <- which(gear_params(params)$gear == "Seals")
-  old_seal  <- gear_params(params)$catchability[seal_idx]
-  
-  # Create noise matrix with same dimensions as interaction matrix
-  n          <- nrow(old_inter)
-  noise      <- matrix(rnorm(n * n, mean = 0, sd = sdev), nrow = n)
-  noise_seal <- rnorm(length(seal_idx), mean = 0, sd = sdev)
-  
-  # Add lognormal noise
-  new_inter <- old_inter * exp(noise)
-  new_seal  <- old_seal  * exp(noise_seal)
-  
-  # Clip to [0, 1]
-  new_inter <- pmin(pmax(new_inter, 0), 1)
-  new_seal  <- pmax(new_seal, 0)   # floor at 0 only: seal catchabilities are O(1-8);
-  # a [0,1] clip would crush them all to 1 and destroy seal predation + Bowen selectivity
-  
-  # Update parameters
-  params@interaction <- new_inter
-  gear_params(params)$catchability[seal_idx] <- new_seal
-  
-  return(params)
-}
-
-```
-
-Function to run the PAIRED randomised-web ensemble (each web under both scenarios).
-```{r}
-# PAIRED ensemble: each randomised food web is run under BOTH effort scenarios, so
-# sims$factual[[i]] and sims$counter[[i]] share the SAME web — a genuinely PAIRED
-# comparison — and `seed` makes the whole ensemble reproducible.
-run_paired_sims <- function(params, n_sims = 100, sd = 0.2,
-                            effort_factual, effort_counter, seed = 42) {
-  set.seed(seed)
-  factual <- counter <- vector("list", n_sims)
-  for (i in seq_len(n_sims)) {
-    rp <- tryCatch(setParams(randomize_interaction_matrix(params, sdev = sd)),
-                   error = function(e) NULL)
-    if (is.null(rp)) next                   # leave both NULL at i (pairing preserved)
-    factual[[i]] <- tryCatch(project(rp, effort = effort_factual), error = function(e) NULL)
-    counter[[i]] <- tryCatch(project(rp, effort = effort_counter), error = function(e) NULL)
-  }
-  list(factual = factual, counter = counter)   # index i is the shared web
-}
-
+Shared ensemble functions (`randomize_interaction_matrix`, `run_paired_sims`) now live
+in `Ess_data/Useful_functions.R` — single source of truth, also used by the standalone
+`run_ensemble_sims.R` generator. Load them here.
+```{r load-shared-functions}
+source("Ess_data/Useful_functions.R")
 ```
 
 
@@ -144,29 +95,40 @@ plotBiomassRelative(sim1, sim0)
 # base conclusions on the paired difference / fraction of webs, not the ribbon spread.
 # sd_web = 0.1 = primary (~10% CV/link, realistic); 0.2 = stronger stress test (below).
 n_sims <- 1000; sd_web <- 0.1
-paired <- run_paired_sims(params, n_sims = n_sims, sd = sd_web,
-                          effort_factual = effort_factual,
-                          effort_counter = effort_counter, seed = 42)
-sims_factual <- paired$factual
-sims_counter <- paired$counter
 
-# Keep only COMPLETE pairs (drop index i if either scenario failed) so the two lists
-# stay aligned & indexable: factual[[k]] and counter[[k]] are the SAME web.
-ok <- which(!vapply(sims_factual, is.null, logical(1)) &
-            !vapply(sims_counter, is.null, logical(1)))
-sims_factual <- sims_factual[ok]; sims_counter <- sims_counter[ok]
-cat(sprintf("Kept %d / %d complete paired ensemble members\n", length(ok), n_sims))
+# CACHE GUARD: the n=1000 paired ensemble is the expensive step (~15 min). Run it
+# ONCE; every later knit reads the saved RDS in seconds. To regenerate after changing
+# `params`, set force_resim <- TRUE before this chunk (or delete the two RDS files).
+cache_f <- "Ess_Output/sims_factual.RDS"   # seal increase (factual)
+cache_c <- "Ess_Output/sims_counter.RDS"   # seals constant (counterfactual)
+if (file.exists(cache_f) && file.exists(cache_c) && !exists("force_resim")) {
+  sims_factual <- readRDS(cache_f)
+  sims_counter <- readRDS(cache_c)
+  cat(sprintf("Loaded cached ensemble: %d paired members (set force_resim<-TRUE to rerun)\n",
+              length(sims_factual)))
+} else {
+  paired <- run_paired_sims(params, n_sims = n_sims, sd = sd_web,
+                            effort_factual = effort_factual,
+                            effort_counter = effort_counter, seed = 42)
+  sims_factual <- paired$factual
+  sims_counter <- paired$counter
+
+  # Keep only COMPLETE pairs (drop index i if either scenario failed) so the two lists
+  # stay aligned & indexable: factual[[k]] and counter[[k]] are the SAME web.
+  ok <- which(!vapply(sims_factual, is.null, logical(1)) &
+              !vapply(sims_counter, is.null, logical(1)))
+  sims_factual <- sims_factual[ok]; sims_counter <- sims_counter[ok]
+  cat(sprintf("Kept %d / %d complete paired ensemble members\n", length(ok), n_sims))
+
+  # Save sim outputs (complete-pair filtered) for downstream use (04_Indicators)
+  saveRDS(sims_factual, cache_f)
+  saveRDS(sims_counter, cache_c)
+}
 
 # Aliases for the downstream figure code (scen2 = factual/with seal increase;
 # scen1 = counterfactual/no seal increase) — now PAIRED by index
 sims_scen2 <- sims_factual
 sims_scen1 <- sims_counter
-
-# Save sim outputs (complete-pair filtered) for downstream use (04_Indicators)
-saveRDS(sims_factual, "Ess_Output/sims_factual.RDS")   # seal increase (factual)
-saveRDS(sims_counter, "Ess_Output/sims_counter.RDS")   # seals constant (counterfactual)
-#sims_factual <- readRDS("Ess_Output/sims_factual.RDS")
-#sims_counter <- readRDS("Ess_Output/sims_counter.RDS")
 
 # Check results from first simulation
 plot(sims_scen2[[4]],time_range=c(1978:2024))

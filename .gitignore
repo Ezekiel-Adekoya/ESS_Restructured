@@ -23,6 +23,10 @@ Rplots.pdf
 Ess_Output/*.jpeg
 Ess_Output/*.pdf
 
+# knitted notebooks + knit logs (regenerable from the .Rmd files)
+0?_*.html
+_knit*.log
+
 # raw / superseded data versions not used by the workflow (kept locally, off the repo)
 SUMMER_csv/
 /inter.rds
