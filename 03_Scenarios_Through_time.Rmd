@@ -143,6 +143,11 @@ per-web difference and ask: across the randomised food webs, does removing the s
 increase let cod / groundfish recover MORE? This is a far stronger robustness claim
 than overlapping ribbons — it isolates the seal effect on identical structure.
 
+The Stage-2 model is an intentional transient relaxation from the calibrated 1978
+reference, not an equilibrium run; attribution therefore rests on this paired
+factual − counterfactual difference, which cancels the large baseline reorganization
+common to both scenarios rather than on either absolute trajectory.
+
 ```{r paired-robustness}
 # Per-species terminal (2024) biomass above each species' survey cutoff (kt)
 cutoff <- species_params(params)$biomass_cutoff; cutoff[is.na(cutoff)] <- 0
@@ -674,4 +679,71 @@ ggsave(
 # Print the plot to the output
 trophic_cascades_plot
 
+```
+
+## Diagnostic (not for manuscript) — baseline reorganization vs the seal signal
+
+Internal triage only, `eval=FALSE` — NOT a paper figure. Held at constant 1978 effort
+the Stage-2 model still reorganizes substantially (groundfish decline, forage release),
+confirming the hindcast is an intentional transient relaxation, not an equilibrium run.
+Useful for spotting which per-species excursions are mechanism vs anomaly; the seal
+attribution itself rests on the paired factual − counterfactual difference above, which
+cancels the reorganization common to both scenarios. Run by hand when needed.
+
+```{r appendix-baseline-vs-seal, eval=FALSE}
+# Three deterministic (un-randomised) projections from the SAME calibrated 1978 state:
+#   control        = ALL gears frozen at 1978 (no forcing change) -> the baseline
+#                    reorganization intrinsic to the off-equilibrium Stage-2 parameters
+#   factual        = observed fishing + seal increase 1978->2024
+#   counterfactual = observed fishing + seals frozen at 1978
+# The factual/counterfactual SEPARATION is the seal signal; both ride on top of the
+# large shared baseline drift that the control characterises.
+effort_const1978    <- effort_factual
+effort_const1978[]  <- matrix(effort_factual[1, ], nrow(effort_factual),
+                              ncol(effort_factual), byrow = TRUE)
+sim_ctrl <- project(params, effort = effort_const1978)
+sim_cf0  <- project(params, effort = effort_counter)   # deterministic counterfactual
+
+# Per-species biomass above each species' survey cutoff (Halibut also gets its upper
+# cutoff as its model w_max exceeds the survey's max caught size).
+w <- params@w; dw <- params@dw; sp <- params@species_params$species
+cl <- params@species_params$biomass_cutoff; cl[is.na(cl)] <- 0
+ch <- params@species_params$biomass_cutoffHigh
+bmass <- function(sim) {
+  yrs <- as.integer(dimnames(sim@n)[[1]])
+  m <- matrix(NA_real_, length(yrs), length(sp), dimnames = list(yrs, sp))
+  for (j in seq_along(sp)) {
+    hi  <- if (sp[j] == "Atlantic Halibut" && !is.na(ch[j])) ch[j] else Inf
+    idx <- w >= cl[j] & w <= hi
+    m[, j] <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3, w[idx] * dw[idx], "*"))
+  }
+  m
+}
+
+# Ratio to each species' own 1978 value (1.0 = no change from the start state).
+runs <- list("constant 1978 effort"        = sim_ctrl,
+             "counterfactual (seals 1978)" = sim_cf0,
+             "factual (seal increase)"     = sim0)
+ratio_df <- imap_dfr(runs, function(s, nm) {
+  m <- bmass(s)
+  as.data.frame(sweep(m, 2, m["1978", ], "/")) |>
+    rownames_to_column("Year") |> mutate(Run = nm)
+}) |>
+  mutate(Year = as.integer(Year), Run = factor(Run, levels = names(runs))) |>
+  pivot_longer(-c(Year, Run), names_to = "Species", values_to = "ratio")
+
+drift_plot <- ggplot(ratio_df, aes(Year, ratio, colour = Run)) +
+  geom_hline(yintercept = 1, linewidth = 0.4, colour = "grey60") +
+  geom_line(linewidth = 0.6) +
+  facet_wrap(~ Species, scales = "free_y") +
+  scale_y_log10() +
+  scale_colour_manual(values = c("constant 1978 effort"        = "grey50",
+                                 "counterfactual (seals 1978)" = "#2c7fb8",
+                                 "factual (seal increase)"     = "firebrick")) +
+  labs(y = expression(B(t) / B[1978]), x = NULL) +
+  theme_bw(base_size = 9) +
+  theme(legend.position = "bottom", legend.title = element_blank())
+ggsave(paste0(save_dir, "appendix_baseline_vs_seal.jpeg"), drift_plot,
+       width = 14, height = 10, dpi = 200)
+drift_plot
 ```
