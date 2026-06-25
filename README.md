@@ -23,17 +23,19 @@ Run in order. **`00a–00e` = data prep**, then **`01–04` = calibration → sc
 | **00e** | `00e_digitise_seal_data.r` | seal abundance (logistic fit), `seal_gear_params.csv`, effort-with-seals |
 | **01** | `01_Calibration_Stage1_steady.Rmd` | **time-averaged 1978–85 steady state** → `params_stage1_steady.RDS` + steady-state diagnostics (size spectra, growth, biomass/yield fits, emergent diet vs Cook & Bundy, seal "catch" vs Bowen & Harrison) |
 | **02** | `02_Calibration_Stage2_AUTO.R` | **factual time-series model** → `params_stage2_AUTO.RDS`. Objective-driven: structural decisions fixed in `apply_structural()`, ecological criteria as penalties, only nuisance parameters optimised (`optimParallel`). Reproducible. |
-| **03** | `03_Scenarios_Through_time.Rmd` | factual vs counterfactual (seals constant) over a **paired** randomised-web ensemble; recovery-robustness analysis + figures |
+| **03** | `03_Scenarios_Through_time.Rmd` | factual vs counterfactual (seals constant) over a **paired** randomised-web ensemble; recovery-robustness analysis + figures. Reads the cached ensemble (`Ess_Output/sims_{factual,counter}.RDS`) — generate it first with `run_ensemble_sims.R` (see below). |
 | **04** | `04_Indicators.Rmd` | community indicators (e.g. mean-weight) computed from the scenario runs |
 
 ### Supplementary files (not numbered steps)
+- `run_ensemble_sims.R` — generates the **n=1000 paired randomised-web ensemble** (the expensive step, ~15 min) → `Ess_Output/sims_{factual,counter}.RDS`. Run once (RStudio or `Rscript run_ensemble_sims.R`) whenever the Stage-2 `params` change; **03** then knits in seconds from the cache. Seed-locked, so results are identical to an in-Rmd run. (In 03, set `force_resim <- TRUE` to rebuild the cache instead.)
 - `Calibration_Stage2_manual_reference.R` — the hand-tuned factual model (`params_stage2_factual.RDS`); kept as a **validation reference** for the AUTO model (step 02).
 - `Workflow_Diagram.Rmd` — workflow overview diagram.
 - `Cook and Bundy.R` / `New_Species_Interaction_DepthStrata.R` — interaction-matrix prep (Schoener's D spatial overlap → θ_ij).
 
 `Ess_data/Useful_functions.R` is the **single** project functions file (custom
-biomass calibration, seal selectivity, and the `getError*` loss functions used by the
-optimiser). All scripts `source()` it.
+biomass calibration, seal selectivity, the `getError*` loss functions used by the
+optimiser, and the paired-ensemble helpers `randomize_interaction_matrix` /
+`run_paired_sims`). All scripts `source()` it.
 
 ## Two-stage calibration
 

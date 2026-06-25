@@ -85,7 +85,7 @@ apply_structural <- function(p) {
   # demersal + cod seal selectivity (relative; absolute scale set by F_peak below)
   gp <- gear_params(p)
   for (s in names(seal_rel)) { ix <- gp$species==s & gp$gear=="Seals"
-    gp$catchability[ix] <- gp$catchability[ix]*seal_rel[s] }
+  gp$catchability[ix] <- gp$catchability[ix]*seal_rel[s] }
   gear_params(p) <- gp
   p
 }
@@ -133,14 +133,14 @@ getErrorSteered <- function(vary, return_params=FALSE) {
   p <- p_base
   gp <- gear_params(p)
   for (i in seq_len(n)) { ix <- gp$species==tune_fish[i] & gp$gear %in% fish_gears
-    gp$catchability[ix] <- gp$catchability[ix]*fm[i] }
+  gp$catchability[ix] <- gp$catchability[ix]*fm[i] }
   gear_params(p) <- gp
   p <- tryCatch(set_seal_Fpeak(setParams(p), Fpeak), error=function(e) NULL)
   if (is.null(p)) return(1e9)
   if (return_params) return(p)
   mb <- tryCatch(project_bio(p), error=function(e) NULL); if (is.null(mb)) return(1e9)
   st <- as.integer(rownames(mb))
-
+  
   ## (2a) weighted SS log-residual (trajectory fit)
   loss <- 0
   for (s in sp) {
@@ -176,7 +176,7 @@ cat("Loss at warm start (manual solution):", round(getErrorSteered(par0),1), "\n
 ncores <- max(1, min(parallel::detectCores()-1, 2*length(par0)))
 cl <- makeCluster(ncores)
 clusterEvalQ(cl, { suppressMessages({library(mizer);library(mizerExperimental);library(dplyr)})
-                   source("Ess_data/Useful_functions.R") })
+  source("Ess_data/Useful_functions.R") })
 clusterExport(cl, c("p_base","effort","dat_ts","sp","tune_fish","fish_gears",
                     "wts","obs_max","obs_min","set_seal_Fpeak","project_bio"))
 setDefaultCluster(cl)
@@ -201,12 +201,12 @@ print(round(setNames(10^fit$par[1:length(tune_fish)], tune_fish),2))
 long <- as.data.frame(mb) |> rownames_to_column("Year") |> mutate(Year=as.integer(Year)) |>
   pivot_longer(-Year, names_to="Species", values_to="B")
 mk <- function(logsc){ g <- ggplot(long, aes(Year,B)) +
-    geom_line(colour="firebrick", linewidth=0.7) +
-    geom_point(data=filter(dat_ts, Biomass>0), aes(Year, Biomass/1e9), colour="black", size=0.6, inherit.aes=FALSE) +
-    facet_wrap(~Species, scales="free_y") + theme_bw(base_size=9) +
-    labs(subtitle="black = DFO survey | red = steered-AUTO model")
-  if(logsc) g+scale_y_log10()+labs(title="Stage 2 steered-AUTO (log10)", y="Biomass (kt, log10)")
-  else g+labs(title="Stage 2 steered-AUTO (linear)", y="Biomass (kt)") }
+  geom_line(colour="firebrick", linewidth=0.7) +
+  geom_point(data=filter(dat_ts, Biomass>0), aes(Year, Biomass/1e9), colour="black", size=0.6, inherit.aes=FALSE) +
+  facet_wrap(~Species, scales="free_y") + theme_bw(base_size=9) +
+  labs(subtitle="black = DFO survey | red = steered-AUTO model")
+if(logsc) g+scale_y_log10()+labs(title="Stage 2 steered-AUTO (log10)", y="Biomass (kt, log10)")
+else g+labs(title="Stage 2 steered-AUTO (linear)", y="Biomass (kt)") }
 ggsave("Ess_Output/stage2_AUTOsteered_trajectories.jpeg",       mk(TRUE),  width=14, height=10, dpi=200)
 ggsave("Ess_Output/stage2_AUTOsteered_trajectories_linear.jpeg",mk(FALSE), width=14, height=10, dpi=200)
 cat("\nSaved params_stage2_AUTO.RDS + steered-AUTO plots\n")
