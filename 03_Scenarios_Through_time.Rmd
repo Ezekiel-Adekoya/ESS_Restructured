@@ -363,12 +363,12 @@ biomass_plot <- ggplot(time_series, aes(x = Year, y = Biomass, colour = Scenario
   geom_line(aes(y = sim_mean)) +
   scale_colour_manual(name = NULL,
                       values = c("#4575B4", "#D73027"),
-                      labels = c("Fishing without additional predation mortality",
-                                 "Fishing with additional predation mortality")) +
+                      labels = c("counterfactual (no seal increase)",
+                                 "factual (seal increase)")) +
   scale_fill_manual(name = NULL,
                     values = c("#4575B4", "#D73027"),
-                    labels = c("Fishing without additional predation mortality",
-                               "Fishing with additional predation mortality")) +
+                    labels = c("counterfactual (no seal increase)",
+                               "factual (seal increase)")) +
   labs(y = "Biomass", x = "Year") +
   theme_pubr() +   
   theme(
@@ -546,12 +546,12 @@ yield_plot = ggplot(time_series_c, aes(x=Year, y=Yield, colour=scen, fill=scen))
   geom_line(data = time_series_c, aes(y=sim_mean, colour=scen)) +   
   scale_colour_manual(name = NULL,
                       values = c("#4575B4", "#D73027"),
-                      labels = c("Fishing without additional predation mortality",
-                                 "Fishing with additional predation mortality")) +
+                      labels = c("counterfactual (no seal increase)",
+                                 "factual (seal increase)")) +
   scale_fill_manual(name = NULL,
                     values = c("#4575B4", "#D73027"),
-                    labels = c("Fishing without additional predation mortality",
-                               "Fishing with additional predation mortality")) +
+                    labels = c("counterfactual (no seal increase)",
+                               "factual (seal increase)")) +
   labs(y = "Catches", x = "Year") +
   theme_pubr() +   
   theme(
@@ -613,10 +613,10 @@ tabl_c <- modStats_c %>%
 # Extract reference spectra from historical period (1970–1985) when cod were abundant
 spectra_reference <- plotSpectra(sims_scen1[[1]], return_data = TRUE, time_range = 1978:1985)
 
-# Extract spectra for Scenario 1 (without additional predation mortality) for 1995–2010
+# Extract spectra for Scenario 1 (counterfactual, no seal increase) for 1995–2010
 spectra_scen1 <- plotSpectra(sims_scen1[[1]], return_data = TRUE, time_range = 1995:2024)
 
-# Extract spectra for Scenario 2 (with additional predation mortality) for 1995–2010
+# Extract spectra for Scenario 2 (factual, seal increase) for 1995–2010
 spectra_scen2 <- plotSpectra(sims_scen2[[1]], return_data = TRUE, time_range = 1995:2024)
 
 # Join Scenario 1 spectra with reference and calculate symmetric relative difference
@@ -630,14 +630,14 @@ sf2 <- mutate(
   rel_diff = (value.y - value.x) / (value.x + value.y))
 
 # Add scenario labels for plotting
-sf1$scenario <- "Fishing without additional predation mortality"
-sf2$scenario <- "Fishing with additional predation mortality"
+sf1$scenario <- "counterfactual (no seal increase)"
+sf2$scenario <- "factual (seal increase)"
 
 # Combine both scenarios into one data frame
 combined_data <- rbind(sf1, sf2)
 
-# Define manual colors for the scenarios
-linecolours <- c("#D73027", "#4575B4")
+# Define manual colors for the scenarios (named so order can't flip factual/counterfactual)
+linecolours <- c("factual (seal increase)" = "#D73027", "counterfactual (no seal increase)" = "#4575B4")
 
 # Set factor levels for consistent facet ordering
 combined_data$Legend <- factor(combined_data$Legend, 
