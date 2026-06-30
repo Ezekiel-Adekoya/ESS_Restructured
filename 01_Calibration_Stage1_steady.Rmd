@@ -572,7 +572,6 @@ external_species_info <- select(external_species_info, c("species","w_max","w_ma
 
 effort_final       <- read.csv("Ess_data/effort_gear_with_seals.csv", row.names = 1)
 effort_final$Year  <- as.numeric(rownames(effort_final))
-
 mean_effort        <- colMeans(effort_final[effort_final$Year %in% years_to_use, ])
 
 # FIX: use initial_effort(params_steady) later for projectToSteady — here we
@@ -789,7 +788,8 @@ heatmap_plot <- ggplot(inter_long, aes(x = Prey, y = Predator, fill = Interactio
   )
 
 heatmap_plot
-
+ggsave(filename = paste0(save_dir, "heatmap_plot.jpeg"), plot = heatmap_plot,
+       width = 10, height = 8, units = "in", dpi = 400)
 ```
 
 
@@ -1249,7 +1249,7 @@ diet_interaction <- ggplot(diet, aes(fill = Prey, x = Predator, y = Ratio)) +
     panel.background = element_blank(),
     plot.background  = element_blank(),
     axis.title       = element_text(face = "bold", size = 11),
-    axis.text        = element_text(face = "bold", size = 9),
+    axis.text        = element_text(face = "bold", size = 11),
     legend.text      = element_text(face = "bold", size = 9),
     legend.title     = element_text(face = "bold", size = 11)
   ) + labs(x = "Predator", y = "Ratio")
@@ -1464,9 +1464,9 @@ size_distributions <- plotSpectra( params_steady,power = 0,resource = FALSE) +
     linetype = "dashed", linewidth = 0.7,colour = "black",inherit.aes = FALSE) +
   facet_wrap(~Species, scales = "free_y") +
   labs(
-    x = "Weight class (g)",y = "Normalised mean biomass",
-    title = "Observed biomass-at-size compared with mizer spectra",
-    subtitle = "Dashed lines indicate biomass cutoff thresholds") +
+    x = "Weight class (g)",y = "Normalised mean biomass")+
+    #title = "Observed biomass-at-size compared with mizer spectra",
+    #subtitle = "Dashed lines indicate biomass cutoff thresholds") +
   theme_bw() +
   theme(
     legend.position = "none",
@@ -1479,7 +1479,8 @@ size_distributions <- plotSpectra( params_steady,power = 0,resource = FALSE) +
     panel.border = element_rect(color = "black", linewidth = 0.8) )
 
 size_distributions
-
+ggsave(filename = paste0(save_dir, "size_distributions.jpeg"), plot = size_distributions,
+       width = 10, height = 8, units = "in", dpi = 400)
 ```
 
 
@@ -1493,9 +1494,9 @@ Calibration_plot_yield <- plotYieldExcl(params_steady, ratio = FALSE, labels = F
 theme_bw() +
     ggtitle("Catch") +  # Adding the title
     theme(
-        plot.title = element_text(size = 10, face = "bold", hjust = 0.5),  # Centering the title
-        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 8, face = "bold"),
-        axis.text.y = element_text(size = 8, face = "bold"),  # Y-axis labels size 8
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5),  # Centering the title
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10, face = "bold"),
+        axis.text.y = element_text(size = 10, face = "bold"),  # Y-axis labels size 8
         axis.title.x = element_text(size = 10, face = "bold"),  # X-axis title size 8
         axis.title.y = element_text(size = 10, face = "bold"),  # Y-axis title size 8
         panel.grid.major.x = element_blank(),
@@ -1522,9 +1523,9 @@ Calibration_plot_biomass <- plotBiomassObservedVsModel(params_steady, ratio = FA
   theme_bw() +
     ggtitle("Biomass") +  # Adding the title
     theme(
-        plot.title = element_text(size = 10, face = "bold", hjust = 0.5),  # Centering the title
-        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 8, face = "bold"),
-        axis.text.y = element_text(size = 8, face = "bold"),  # Y-axis labels size 8
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5),  # Centering the title
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1, size = 10, face = "bold"),
+        axis.text.y = element_text(size = 10, face = "bold"),  # Y-axis labels size 8
         axis.title.x = element_text(size = 10, face = "bold"),  # X-axis title size 8
         axis.title.y = element_text(size = 10, face = "bold"),  # Y-axis title size 8
         panel.grid.major.x = element_blank(),
@@ -1570,8 +1571,8 @@ species_colours <- c(
 # ------------------------------------------------------------
 calibration_theme <- theme_bw() +
   theme(
-    axis.text.x     = element_text(angle = 90, hjust = 1, vjust = 1, face = "bold", size = 8),
-    axis.text.y     = element_text(face = "bold", size = 9),
+    axis.text.x     = element_text(angle = 90, hjust = 1, vjust = 1, face = "bold", size = 10),
+    axis.text.y     = element_text(face = "bold", size = 10),
     panel.grid      = element_blank(),
     panel.border    = element_rect(color = "black", linewidth = 0.8),
     axis.title      = element_text(size = 10, face = "bold"),

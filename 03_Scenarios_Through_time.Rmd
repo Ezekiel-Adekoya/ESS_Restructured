@@ -130,15 +130,14 @@ if (file.exists(cache_f) && file.exists(cache_c) && !exists("force_resim")) {
 sims_scen2 <- sims_factual
 sims_scen1 <- sims_counter
 
-<<<<<<< HEAD
+
 # Save sim outputs (complete-pair filtered) for downstream use (04_Indicators)
 saveRDS(sims_factual, "Ess_Output/sims_factual.RDS")   # seal increase (factual)
 saveRDS(sims_counter, "Ess_Output/sims_counter.RDS")   # seals constant (counterfactual)
 sims_factual <- readRDS("Ess_Output/sims_factual.RDS")
 sims_counter <- readRDS("Ess_Output/sims_counter.RDS")
 
-=======
->>>>>>> 19f434db06ed90d286aa1f6b88357973fc31feaa
+
 # Check results from first simulation
 plot(sims_factual[[4]],time_range=c(1978:2024))
 
@@ -158,6 +157,7 @@ factual − counterfactual difference, which cancels the large baseline reorgani
 common to both scenarios rather than on either absolute trajectory.
 
 ```{r paired-robustness}
+
 # Per-species terminal (2024) biomass above each species' survey cutoff (kt)
 cutoff <- species_params(params)$biomass_cutoff; cutoff[is.na(cutoff)] <- 0
 sppx   <- species_params(params)$species
@@ -220,6 +220,7 @@ pB
 #     cod > factual. Paired (same web both scenarios) => isolates the seal effect, robust
 #     to food-web structural uncertainty. Time-series ribbons = 10-90% ensemble spread
 #     (visual range, NOT a CI); formal claim = the paired fraction-of-webs.
+
 ```
 
 ## Sensitivity to perturbation magnitude (sd)
@@ -243,6 +244,7 @@ robustness_at_sd <- function(sd_val, n = n_sims, seed = 42) {
              pct_cod_recovers_more_without_seals = round(100 * mean(cod_more), 1))
 }
 do.call(rbind, lapply(c(0.1, 0.2), robustness_at_sd))
+
 ```
 
 ## Biomass Figures - make plot of obs and sims
@@ -309,13 +311,11 @@ sim2 <- left_join(biomass_ts, sim2)
 time_series <- rbind(sim1, sim2)
 time_series <- time_series |> rename(Biomass = Biomass_Obs)
 
-<<<<<<< HEAD
 # Add calibration label for years before 1986
 time_series <- time_series |> mutate(scen = ifelse(Year < 1986, "Calibration", scen))
-=======
+
 # Whole time series, no calibration/scenario split: both scenarios (with their ensemble
 # envelopes) run across 1978-2024; they coincide early and diverge as seals increase.
->>>>>>> 19f434db06ed90d286aa1f6b88357973fc31feaa
 
 # Define species names and set factor levels
 species <- levels(time_series$Species) <- c(
@@ -333,7 +333,6 @@ species_ordered <- species_df[order(species_df$maxw), "species"]
 time_series <- time_series |> arrange(Species) |> mutate(Species = factor(Species, species))
 time_series <- time_series |> rename(Scenario = scen)
 
-<<<<<<< HEAD
 biomass_plot <- ggplot(time_series,
     aes(x = Year, y = Biomass/1e9, colour = Scenario, fill = Scenario)) +
   facet_wrap(~factor(Species, levels = c(
@@ -342,52 +341,31 @@ biomass_plot <- ggplot(time_series,
     "Atlantic Herring", "Capelin", "Thorny Skate", "Winter Skate", "Spiny Dogfish",
     "Monkfish", "Sand Lance", "Longhorn Sculpin", "Atlantic Halibut")),
     scales = "free") +
-  geom_point(data = filter(time_series, Biomass > 0), colour = "black", size = 0.5) +
-  geom_ribbon(aes(ymin = sim_lower/1e9, ymax = sim_upper/1e9), alpha = 0.4, colour = NA) +
+  geom_point(data = filter(time_series, Biomass > 0),
+             colour = "black", size = 0.5) +
+  geom_ribbon(aes(ymin = sim_lower/1e9,
+                  ymax = sim_upper/1e9),
+              alpha = 0.4, colour = NA) +
   geom_line(aes(y = sim_mean/1e9)) +
-  scale_colour_manual(name   = NULL, values = c("grey70", "#4575B4", "#D73027"),
-    labels = c("Reference period", "Fishing with constant seal predation mortality",
-               "Fishing with increasing seal predation mortality")) +
-  scale_fill_manual( name   = NULL, values = c("grey70", "#4575B4", "#D73027"),
-    labels = c("Reference period", "Fishing with constant seal predation mortality",
-               "Fishing with increasing seal predation mortality")) +
+  scale_colour_manual(
+    name   = NULL,
+    values = c("grey70", "#4575B4", "#D73027"),
+    labels = c("Reference period",
+               "Counterfactual Scenario (constant seal predation mortality)",
+               "Factual Scenario (increasing seal predation mortality)")) +
+  scale_fill_manual(
+    name   = NULL,
+    values = c("grey70", "#4575B4", "#D73027"),
+    labels = c("Reference period",
+               "Counterfactual Scenario (constant seal predation mortality)",
+               "Factual Scenario (increasing seal predation mortality)")) +
   labs(y = "Biomass (kt)", x = "Year") +
   theme_pubr() +
-=======
-#Biomass Plot
-
-```{r}
-# reorder Species in the plot to go from from small to large max body size.
-time_series <- time_series |> arrange(Species) |> mutate(Species=factor(Species,species))
-
-time_series <- time_series %>% rename(Scenario = scen) 
-##%>% mutate(Species = fct_recode(Species, "SAND LANCE" = "SANDLANCES"))
-biomass_plot <- ggplot(time_series, aes(x = Year, y = Biomass, colour = Scenario, fill = Scenario)) +
-  facet_wrap(~factor(Species, levels = c("Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake",
-                    "Pollock", "Redfish Unseparated","American Plaice", "Yellowtail Flounder","Witch Flounder",
-                     "Atlantic Herring","Capelin", "Thorny Skate", "Winter Skate", "Spiny Dogfish", 
-                    "Monkfish", "Sand Lance","Longhorn Sculpin",  "Atlantic Halibut")), 
-                    scales = "free") +
-  geom_point(aes(y = Biomass), colour = "black", size = 0.5) +
-  geom_ribbon(aes(ymin = sim_lower, ymax = sim_upper), alpha = 0.3, colour = NA) +
-  geom_line(aes(y = sim_mean)) +
-  scale_colour_manual(name = NULL,
-                      values = c("#4575B4", "#D73027"),
-                      labels = c("counterfactual (no seal increase)",
-                                 "factual (seal increase)")) +
-  scale_fill_manual(name = NULL,
-                    values = c("#4575B4", "#D73027"),
-                    labels = c("counterfactual (no seal increase)",
-                               "factual (seal increase)")) +
-  labs(y = "Biomass", x = "Year") +
-  theme_pubr() +   
->>>>>>> 19f434db06ed90d286aa1f6b88357973fc31feaa
-  theme(
-    legend.position = "bottom",
+  theme( legend.position = "bottom",
     legend.text     = element_text(face = "bold"),
     axis.title.x    = element_text(face = "bold"),
     axis.title.y    = element_text(face = "bold"),
-    strip.text      = element_text(face = "bold", size = 8))
+    strip.text      = element_text(face = "bold", size = 12))
 
 ggsave(filename = paste0(save_dir, "biomass_plot.jpeg"), plot = biomass_plot,
        width = 11, height = 8.5, units = "in", dpi = 400)
@@ -417,14 +395,22 @@ x = TaylorDiagram(
 
 
 # Correlation plot by Species
-ggplot(time_series_first4, aes(x = Biomass_observed, y = Biomass)) +
-  geom_point(aes(color = Species), size = 2) +
-  geom_smooth(method = "lm", se = FALSE, color = "black") +
-  stat_cor(aes(label = paste(..r.label.., sep = "~`,`~")), 
-           method = "pearson", label.x.npc = "left", label.y.npc = 0.95) +
+ggplot(time_series_first4,
+       aes(x = Biomass_observed, y = Biomass)) +
+  geom_point(aes(color = Species), size = 2, alpha = 0.8) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.6) +
+  stat_cor(
+    method = "pearson",
+    label.x.npc = "left",
+    label.y.npc = 0.95,
+    size = 3) +
   facet_wrap(~ Species, scales = "free") +
-  theme_bw() +
-  labs( x = "Observed Biomass", y = "Model Biomass")
+  theme_bw(base_size = 11) +
+  theme(
+    legend.position = "none",
+    strip.background = element_blank(),
+    panel.grid.minor = element_blank()) +
+  labs( x = "Observed biomass", y = "Model biomass")
 
 ```
 
@@ -512,12 +498,9 @@ sim2_c <- right_join(yield_ts, sim2_c, by = c("Species", "Year"))
 # Combine scenarios
 # ============================================================
 time_series_c <- rbind(sim1_c, sim2_c)
-<<<<<<< HEAD
 time_series_c <- time_series_c |> mutate(scen = ifelse(Year < 1986, "Calibration", scen))|> 
                 rename(Yield = Yield_Obs)
-=======
-time_series_c <- time_series_c |> rename(Yield = Yield_Obs)
->>>>>>> 19f434db06ed90d286aa1f6b88357973fc31feaa
+
 
 ```
 
@@ -525,12 +508,12 @@ Reorder Species in the plot to go from from small to large max body size.
 ```{r}
 # Reorder Species in the plot to go from from small to large max body size.
 # species_c<-species[-1] #remove sandlances as not fished
-species_order <- c("Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake", "Pollock",                       "Redfish Unseparated", "American Plaice", "Yellowtail Flounder", "Witch Flounder",                    "Atlantic Herring", "Thorny Skate","Winter Skate", "Spiny Dogfish", "Monkfish",
-                  "Atlantic Halibut")
+species_order <- c("Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake", "Pollock",                    "Redfish Unseparated", "American Plaice", "Yellowtail Flounder", 
+                   "Witch Flounder", "Atlantic Herring", "Thorny Skate","Winter Skate", 
+                   "Spiny Dogfish", "Monkfish", "Atlantic Halibut")
 
 time_series_c$Species <- factor(time_series_c$Species, levels = species_order)
 
-<<<<<<< HEAD
 yield_plot <- ggplot(time_series_c,
     aes(x = Year, y = Yield/1e9, colour = scen, fill = scen)) +
   facet_wrap(~factor(Species, levels = species_order), scales = "free") +
@@ -539,41 +522,22 @@ yield_plot <- ggplot(time_series_c,
   geom_ribbon(aes(ymin = sim_lower/1e9,ymax = sim_upper/1e9),alpha = 0.3, colour = NA) +
   geom_line(aes(y = sim_mean/1e9)) +
   scale_colour_manual(name   = NULL, values = c("grey70", "#4575B4", "#D73027"),
-    labels = c("Reference period","Fishing with constant seal predation mortality",
-               "Fishing with increasing seal predation mortality")) +
+    labels = c("Reference period",
+               "Counterfactual Scenario (constant seal predation mortality)",
+               "Factual Scenario (increasing seal predation mortality)")) +
   scale_fill_manual(name   = NULL, values = c("grey70", "#4575B4", "#D73027"),
-    labels = c("Reference period", "Fishing with constant seal predation mortality",
-               "Fishing with increasing seal predation mortality")) +
+    labels = c("Reference period", 
+               "Counterfactual Scenario (constant seal predation mortality)",
+               "Factual Scenario (increasing seal predation mortality)")) +
   labs(y = "Catches (kt)", x = "Year") +
   geom_vline(xintercept = 1986, linetype = "dashed", color = "black") +
   theme_pubr() +
-=======
-yield_plot = ggplot(time_series_c, aes(x=Year, y=Yield, colour=scen, fill=scen)) +   
-  facet_wrap(~factor(Species, levels = c(
-                    "Atlantic Cod", "Haddock", "White Hake", "Red Hake", "Silver Hake","Pollock", 
-                   "Redfish Unseparated", "American Plaice", "Yellowtail Flounder", "Witch Flounder",
-                   "Atlantic Herring", "Thorny Skate","Winter Skate", "Spiny Dogfish", "Monkfish",
-                   "Longhorn Sculpin", "Atlantic Halibut")), scales="free") +   
-  geom_point(aes(y=Yield), colour="black", size=0.3) +   
-  geom_ribbon(data = time_series_c, aes(ymin=sim_lower, ymax=sim_upper), alpha=0.3, colour=NA) +   
-  geom_line(data = time_series_c, aes(y=sim_mean, colour=scen)) +   
-  scale_colour_manual(name = NULL,
-                      values = c("#4575B4", "#D73027"),
-                      labels = c("counterfactual (no seal increase)",
-                                 "factual (seal increase)")) +
-  scale_fill_manual(name = NULL,
-                    values = c("#4575B4", "#D73027"),
-                    labels = c("counterfactual (no seal increase)",
-                               "factual (seal increase)")) +
-  labs(y = "Catches", x = "Year") +
-  theme_pubr() +   
->>>>>>> 19f434db06ed90d286aa1f6b88357973fc31feaa
   theme(
     legend.position = "bottom",
     legend.text     = element_text(face = "bold"),
     axis.title.x    = element_text(face = "bold"),
     axis.title.y    = element_text(face = "bold"),
-    strip.text      = element_text(face = "bold", size = 8))
+    strip.text      = element_text(face = "bold", size = 12))
 
 ggsave(filename = paste0(save_dir, "yield_plot.jpeg"), plot = yield_plot,
        width = 11, height = 7.5, units = "in", dpi = 400)
@@ -590,13 +554,6 @@ library(openair)
 # Add log-transformed variables for catch (Yield)
 time_series_c <- time_series_c |> mutate(logYield = log(Yield),logMeanSimYield=log(sim_mean))
 
-<<<<<<< HEAD
-first_group <- time_series_c %>% dplyr::group_split() %>% .[[1]]
-
- modStats_c = modStats(first_group, obs = "logYield", mod = "logMeanSimYield", type = "scen",rank = "scen",statistic = c("n", "FAC2", "MGE", "RMSE", "r", "COE"),method = "spearman")
- 
-# Compute performance statistics for each 'scen' group (Scenarios and Calibration period)
-=======
 first_group <- time_series_c %>%
   filter(Year >= 1986, Year <= 2024) %>%   # evaluate fit on post-spin-in period only
   dplyr::group_split() %>%
@@ -605,33 +562,28 @@ first_group <- time_series_c %>%
  modStats_c = modStats(first_group, obs = "logYield", mod = "logMeanSimYield", type = "scen",rank = "scen",
   statistic = c("n", "FAC2", "MGE", "RMSE", "r", "COE"),method = "spearman")
 # Compute performance statistics per scenario on the post-spin-in period (>= 1986)
->>>>>>> 19f434db06ed90d286aa1f6b88357973fc31feaa
-time_series <- time_series %>% rename( scen = Scenario )
+time_series <- time_series %>% rename( Scenario = Scenario  )
 time_series <- time_series |> mutate(logBiomass = log(Biomass),logMeanSimBiomass=log(sim_mean))
 
 modStats <- time_series %>%
-<<<<<<< HEAD
-  group_modify(~modStats(.x, obs = "logBiomass", mod = "logMeanSimBiomass", type = "scen", 
-   rank = "Scenario",statistic=c("n","FAC2","MGE","RMSE","r","COE"),method="spearman")) %>%
-=======
   filter(Year >= 1986, Year <= 2024) %>%   # evaluate fit on post-spin-in period only
-  group_modify(~modStats(.x, obs = "logBiomass", mod = "logMeanSimBiomass", type = "scen", rank = "Scenario",statistic=c("n","FAC2","MGE","RMSE","r","COE"),method="spearman")) %>%
->>>>>>> 19f434db06ed90d286aa1f6b88357973fc31feaa
+  group_modify(~modStats(.x, obs = "logBiomass", mod = "logMeanSimBiomass", type = "Scenario", rank = "Scenario",statistic=c("n","FAC2","MGE","RMSE","r","COE"),method="spearman")) %>%
   ungroup()
 
 
 ## Load flextable for formatted tables
 library(flextable)
 # Compute performance statistics for biomass data
-tabl_b <-  modStats %>% mutate(across(where(is.numeric), ~round(., 3))) %>%
-  select(c("scen","n","FAC2","MGE","RMSE","r","COE"))%>% flextable()
+tabl_b <-  modStats %>%
+  mutate(across(where(is.numeric), ~round(., 3))) %>%
+  select(c("Scenario","n","FAC2","MGE","RMSE","r","COE"))%>%
+  flextable()
 # Compute performance statistics for catch data
 tabl_c <- modStats_c %>%
   mutate(across(where(is.numeric), ~round(., 3))) %>%
-  select(c("scen","n","FAC2","MGE","RMSE","r","COE"))%>% flextable()
-tabl_b
+  select(c("scen","n","FAC2","MGE","RMSE","r","COE"))%>%
+  flextable()
 
-tabl_c
 ```
 
 
@@ -640,19 +592,12 @@ tabl_c
 # Extract reference spectra from historical period — 1985 as representative pre-change year
 spectra_reference <- plotSpectra(sims_counter[[1]], return_data = TRUE, time_range = 1978:1985)
 
-<<<<<<< HEAD
 # Extract spectra for Scenario 1 (with constant predation) for 1995–2010
-spectra_scen1 <- plotSpectra(sims_counter[[1]], return_data = TRUE, time_range = 2000:2024)
+spectra_scen1 <- plotSpectra(sims_counter[[1]], return_data = TRUE, time_range = 2000:2020)
 
 # Extract spectra for Scenario 2 (with increasing seal predation) for 1995–2010
-spectra_scen2 <- plotSpectra(sims_factual[[1]], return_data = TRUE, time_range = 2000:2024)
-=======
-# Extract spectra for Scenario 1 (counterfactual, no seal increase) for 1995–2010
-spectra_scen1 <- plotSpectra(sims_scen1[[1]], return_data = TRUE, time_range = 1995:2024)
+spectra_scen2 <- plotSpectra(sims_factual[[1]], return_data = TRUE, time_range = 2000:2020)
 
-# Extract spectra for Scenario 2 (factual, seal increase) for 1995–2010
-spectra_scen2 <- plotSpectra(sims_scen2[[1]], return_data = TRUE, time_range = 1995:2024)
->>>>>>> 19f434db06ed90d286aa1f6b88357973fc31feaa
 
 # Join Scenario 1 spectra with reference and calculate symmetric relative difference
 sf1 <- left_join(spectra_reference, spectra_scen1, by = c("w", "Legend")) |>
@@ -665,24 +610,22 @@ sf2 <- left_join(spectra_reference, spectra_scen2, by = c("w", "Legend")) |>
                     (`Biomass density.x` + `Biomass density.y`))
 
 # Add scenario labels for plotting
-<<<<<<< HEAD
+               
 sf1$scenario <- "Fishing with constant seal predation mortality"
 sf2$scenario <-  "Fishing with increasing seal predation mortality"
-=======
-sf1$scenario <- "counterfactual (no seal increase)"
-sf2$scenario <- "factual (seal increase)"
->>>>>>> 19f434db06ed90d286aa1f6b88357973fc31feaa
+
+sf1$scenario <- "Counterfactual Scenario (constant seal predation mortality)"
+sf2$scenario <- "Factual Scenario (increasing seal predation mortality)"
 
 # Combine both scenarios into one data frame
 combined_data <- rbind(sf1, sf2)
 
-<<<<<<< HEAD
+
 # Define manual colors for the scenarios
 linecolours <- c("#4575B4", "#D73027")
-=======
+
 # Define manual colors for the scenarios (named so order can't flip factual/counterfactual)
-linecolours <- c("factual (seal increase)" = "#D73027", "counterfactual (no seal increase)" = "#4575B4")
->>>>>>> 19f434db06ed90d286aa1f6b88357973fc31feaa
+linecolours <- c("Factual Scenario (increasing seal predation mortality)" = "#D73027", "Counterfactual Scenario (constant seal predation mortality)" = "#4575B4")
 
 # Set factor levels for consistent facet ordering
 combined_data$Legend <- factor(combined_data$Legend,
@@ -875,8 +818,8 @@ sf2 <- left_join(ss_c_ref, ss_c_2,by = "w") %>%
 # 2. Add scenario labels
 # -----------------------------
 ss_c_ref <- ss_c_ref %>%mutate(scenario = "Reference period")
-ss_c_1 <- ss_c_1 %>%mutate(scenario = "Fishing with constant seal predation")
-ss_c_2 <- ss_c_2 %>%mutate(scenario = "Fishing with increasing seal predation")
+ss_c_1 <- ss_c_1 %>%mutate(scenario = "Counterfactual Scenario (constant seal predation mortality)")
+ss_c_2 <- ss_c_2 %>%mutate(scenario = "Factual Scenario (increasing seal predation mortality)")
 
 # -----------------------------
 # 3. Ensure consistent column names
@@ -891,11 +834,12 @@ ss_c_2 <- ss_c_2 %>% rename(value = sim_meanN)
 # -----------------------------
 sf1 <- ss_c_ref %>%left_join(ss_c_1, by = "w", suffix = c(".ref", ".scen1")) %>%
   mutate(rel_diff = (value.scen1 - value.ref) / (value.scen1 + value.ref),
-         scenario = "Fishing with constant seal predation")
+         scenario = "Counterfactual Scenario (constant seal predation mortality)")
 
 sf2 <- ss_c_ref %>%left_join(ss_c_2, by = "w", suffix = c(".ref", ".scen2")) %>%
   mutate(rel_diff = (value.scen2 - value.ref) / (value.scen2 + value.ref),
-         scenario = "Fishing with increasing seal predation")
+         scenario = "Factual Scenario (increasing seal predation mortality)")
+
 
 # 5. Combine both scenarios
 # -----------------------------
@@ -905,8 +849,8 @@ combined_data <- bind_rows(sf1, sf2)
 # 6. Define manual colors for the scenarios
 # -----------------------------
 linecolours <- c(
-  "Fishing with constant seal predation" = "#4575B4",
-  "Fishing with increasing seal predation" = "#D73027")
+"Counterfactual Scenario (constant seal predation mortality)" = "#4575B4",
+"Factual Scenario (increasing seal predation mortality)" = "#D73027")
 
 # -----------------------------
 # 7. Plot
@@ -1008,7 +952,6 @@ ggsave(paste0(save_dir, "appendix_baseline_vs_seal.jpeg"), drift_plot,
 drift_plot
 
 ```
->>>>>>> 19f434db06ed90d286aa1f6b88357973fc31feaa
 ```{r}
 
 ```

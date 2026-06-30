@@ -102,8 +102,8 @@ p <- grViz("digraph workflow {
   Step_5 [label = <<table border='0' cellborder='1' cellspacing='0' cellpadding='8'>
     <tr><td bgcolor='lightgray'><b>Step 5: Dynamical Top-Down Forcing Scenarios</b></td></tr>
     <tr><td bgcolor='white'>
-      • Scenario 1: Fishing effort time series (1970–2010)<br/>
-      • Scenario 2: Additional hypothesized predation mortality (1986–2010)
+      • Scenario 1: Counterfactual (Constant seal predation mortality from 1978–2024)<br/>
+      • Scenario 2: Factual (Increasing seal predation mortality from 1978–2024)
     </td></tr>
   </table>>, pos = '0,-4!']
   
@@ -111,7 +111,7 @@ p <- grViz("digraph workflow {
   Step_6 [label = <<table border='0' cellborder='1' cellspacing='0' cellpadding='8'>
     <tr><td bgcolor='lightgray'><b>Step 6: Run Models with Randomized Interactions</b></td></tr>
     <tr><td bgcolor='white'>
-      • Project model simulations (1970–2010) under two scenarios<br/>
+      • Project model simulations (1978–2024) under two scenarios<br/>
       • Run 1000 randomized interaction matrices for each scenario
     </td></tr>
   </table>>, pos = '2,-4!']

@@ -64,3 +64,101 @@ cat(sprintf("Kept %d / %d complete paired ensemble members\n", length(ok), n_sim
 saveRDS(sims_factual, cache_f)   # seal increase (factual)
 saveRDS(sims_counter, cache_c)   # seals constant (counterfactual)
 cat(sprintf("Saved %s + %s\n", cache_f, cache_c))
+
+
+
+## GEar Plots...
+library(tidyverse)
+library(patchwork)
+
+# Reshape effort_counter (excluding Seals)
+effort_counter_df <- as.data.frame(effort_counter) %>%
+  rownames_to_column("Year") %>%
+  pivot_longer(-Year, names_to = "Gear", values_to = "Effort") %>%
+  mutate(Year = as.numeric(Year)) %>%
+  filter(Gear != "Seals") %>%
+  mutate(Gear = recode(Gear,
+                       "Bottom_Trawl" = "Bottom Trawl",
+                       "Fixed_Gear"   = "Fixed Gear",
+                       "Small_Mesh"   = "Small Mesh"))
+
+# Extract Seals from effort_counter (constant)
+seal_counter <- as.data.frame(effort_counter) %>%
+  rownames_to_column("Year") %>%
+  mutate(Year = as.numeric(Year)) %>%
+  dplyr::select(Year, Effort = Seals) %>%
+  mutate(Scenario = "Counterfactual (Constant)")
+
+# Extract Seals from effort_factual (increasing)
+seal_factual <- as.data.frame(effort_factual) %>%
+  rownames_to_column("Year") %>%
+  mutate(Year = as.numeric(Year)) %>%
+  dplyr::select(Year, Effort = Seals) %>%
+  mutate(Scenario = "Factual (Increasing)")
+
+# Combine both seal series
+seal_combined <- bind_rows(seal_counter, seal_factual)
+
+# Add seal as a facet-compatible data frame (use only one scenario for shape,
+# color handled separately via geom layering)
+seal_for_facet <- seal_combined %>%
+  dplyr::select(Year, Effort, Scenario) %>%
+  mutate(Gear = "Grey Seal Predation")
+
+# Combine gear and seal into one data frame
+effort_all_df <- bind_rows(
+  effort_counter_df %>% mutate(Scenario = NA),
+  seal_for_facet)
+
+# Set facet order so seal panel appears last
+gear_levels <- c("Bottom Trawl", "Fixed Gear", "Small Mesh", "Pelagic", "Grey Seal Predation")
+effort_all_df <- effort_all_df %>%
+  mutate(Gear = factor(Gear, levels = gear_levels))
+
+# Plot
+effort_all_df = ggplot(effort_all_df, aes(x = Year, y = Effort)) +
+  # Gear lines (no scenario)
+  geom_line(data = filter(effort_all_df, Gear != "Grey Seal Predation"),
+            linewidth = 0.5, color = "grey30") +
+  geom_point(data = filter(effort_all_df, Gear != "Grey Seal Predation"),
+             size = 0.8, color = "grey20") +
+  # Seal lines (with scenario color + linetype)
+  geom_line(data = filter(effort_all_df, Gear == "Grey Seal Predation"),
+            aes(color = Scenario, linetype = Scenario), linewidth = 0.5) +
+  geom_point(data = filter(effort_all_df, Gear == "Grey Seal Predation"),
+             aes(color = Scenario), size = 0.8) +
+  scale_color_manual(
+    values = c("Counterfactual (Constant)" = "steelblue4",
+               "Factual (Increasing)"      = "firebrick4"),
+    na.value = "grey30") +
+  scale_linetype_manual(
+    values = c("Counterfactual (Constant)" = "dashed",
+               "Factual (Increasing)"      = "solid"),
+    na.value = "solid") +
+  facet_wrap(~ Gear, scales = "free_y", ncol = 2) +
+  labs(
+    x        = "Year",
+    y        = "Relative Effort",
+    color    = NULL,
+    linetype = NULL) +
+  theme_classic(base_size = 11) +
+  theme(
+    strip.text        = element_text(face = "bold", size = 10),
+    strip.background  = element_blank(),
+    axis.title        = element_text(face = "bold", size = 10),
+    axis.text         = element_text(color = "black", size = 9),
+    legend.position   = "bottom",
+    legend.background = element_rect(fill = "white"),
+    legend.text       = element_text(size = 11,face = "bold"),
+    legend.key.width  = unit(1.4, "cm"),
+    panel.border = element_rect(linewidth = 1.5),
+   # panel.border      = element_rect(colour = "grey60", fill = NA, linewidth = 0.5),
+    panel.spacing     = unit(0.8, "lines"),
+    plot.margin       = margin(6, 8, 6, 8)) +
+  theme(
+    strip.text       = element_text(face = "bold", size = 12),
+    strip.background = element_rect(fill = "grey", color = NA),
+  )
+
+ggsave(filename = paste0(save_dir, "effort_by_gear.jpeg"), plot = effort_all_df,
+       width = 11, height = 7.5, units = "in", dpi = 400)
