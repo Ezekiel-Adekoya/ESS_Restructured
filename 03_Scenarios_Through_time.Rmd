@@ -341,34 +341,36 @@ biomass_plot <- ggplot(time_series,
     "Atlantic Herring", "Capelin", "Thorny Skate", "Winter Skate", "Spiny Dogfish",
     "Monkfish", "Sand Lance", "Longhorn Sculpin", "Atlantic Halibut")),
     scales = "free") +
-  geom_point(data = filter(time_series, Biomass > 0),
-             colour = "black", size = 0.5) +
-  geom_ribbon(aes(ymin = sim_lower/1e9,
-                  ymax = sim_upper/1e9),
-              alpha = 0.4, colour = NA) +
+  geom_point(data = filter(time_series, Biomass > 0), colour = "black", size = 0.5) +
+  geom_ribbon(aes(ymin = sim_lower/1e9, ymax = sim_upper/1e9), alpha = 0.4, colour = NA) +
   geom_line(aes(y = sim_mean/1e9)) +
   scale_colour_manual(
-    name   = NULL,
-    values = c("grey70", "#4575B4", "#D73027"),
+    name   = NULL, values = c("grey70", "#4575B4", "#D73027"),
     labels = c("Reference period",
                "Counterfactual Scenario (constant seal predation mortality)",
                "Factual Scenario (increasing seal predation mortality)")) +
+  geom_vline(xintercept = 1985, linetype = "dashed", color = "black") +
   scale_fill_manual(
     name   = NULL,
     values = c("grey70", "#4575B4", "#D73027"),
     labels = c("Reference period",
                "Counterfactual Scenario (constant seal predation mortality)",
                "Factual Scenario (increasing seal predation mortality)")) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 4)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 4),
+                      labels = scales::label_number(accuracy = 1)) +
   labs(y = "Biomass (kt)", x = "Year") +
   theme_pubr() +
-  theme( legend.position = "bottom",
-    legend.text     = element_text(face = "bold"),
+  theme(
+    legend.position = "bottom",
+   legend.text     = element_text(face = "bold", size = 12),
     axis.title.x    = element_text(face = "bold"),
     axis.title.y    = element_text(face = "bold"),
+    axis.text.x     = element_text(face = "bold"),
+    axis.text.y     = element_text(face = "bold"),
     strip.text      = element_text(face = "bold", size = 12))
-
 ggsave(filename = paste0(save_dir, "biomass_plot.jpeg"), plot = biomass_plot,
-       width = 11, height = 8.5, units = "in", dpi = 400)
+       width = 13, height = 8.5, units = "in", dpi = 400)
 
 biomass_plot
 ```
@@ -519,7 +521,7 @@ yield_plot <- ggplot(time_series_c,
   facet_wrap(~factor(Species, levels = species_order), scales = "free") +
   geom_point(data = filter(time_series_c, Yield > 0),
              colour = "black", size = 0.3) +
-  geom_ribbon(aes(ymin = sim_lower/1e9,ymax = sim_upper/1e9),alpha = 0.3, colour = NA) +
+  geom_ribbon(aes(ymin = sim_lower/1e9, ymax = sim_upper/1e9), alpha = 0.3, colour = NA) +
   geom_line(aes(y = sim_mean/1e9)) +
   scale_colour_manual(name   = NULL, values = c("grey70", "#4575B4", "#D73027"),
     labels = c("Reference period",
@@ -529,18 +531,24 @@ yield_plot <- ggplot(time_series_c,
     labels = c("Reference period", 
                "Counterfactual Scenario (constant seal predation mortality)",
                "Factual Scenario (increasing seal predation mortality)")) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 4)) +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 4),
+                      labels = scales::label_number(accuracy = 1)) +
   labs(y = "Catches (kt)", x = "Year") +
   geom_vline(xintercept = 1986, linetype = "dashed", color = "black") +
   theme_pubr() +
   theme(
     legend.position = "bottom",
-    legend.text     = element_text(face = "bold"),
+    legend.text     = element_text(face = "bold", size = 12),
     axis.title.x    = element_text(face = "bold"),
     axis.title.y    = element_text(face = "bold"),
+    axis.text.x     = element_text(face = "bold"),
+    axis.text.y     = element_text(face = "bold"),
     strip.text      = element_text(face = "bold", size = 12))
 
+
 ggsave(filename = paste0(save_dir, "yield_plot.jpeg"), plot = yield_plot,
-       width = 11, height = 7.5, units = "in", dpi = 400)
+       width = 13, height = 8.5, units = "in", dpi = 400)
 
 yield_plot
 
@@ -649,7 +657,7 @@ trophic_cascades_plot <- ggplot(combined_data, aes(x = w, y = rel_diff, colour =
     axis.title = element_text(size = 12, face = "bold"),
     axis.text = element_text(size = 10, face = "bold"),
     legend.title = element_blank(),
-    legend.text = element_text(size = 10, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
     legend.position = "bottom",
     panel.grid.minor = element_blank(),
     panel.border = element_rect(linewidth = 1),
@@ -666,11 +674,49 @@ trophic_cascades_plot
 
 
 Spectra_community
+Data Prep
+```{r}
+stat <- read.csv("Ess_data/LF_Biomass_Abund.csv")
+# Full-range bio_size (1978–2024), built from stat
+bio_size <- stat |>
+  mutate(strat_num = suppressWarnings(as.numeric(as.character(STRAT)))) |>
+  filter(!is.na(strat_num), strat_num >= 443, strat_num <= 466) |>
+  filter(YEAR >= 1978, YEAR <= 2024) |>
+  select(Year = YEAR, species_name_raw = COMMON_NAME,
+         length_cm = FLEN, Biomass = Biomass_Strata_KG) |>
+  mutate(length_cm = ifelse(species_name_raw == "HERRING(ATLANTIC)" & length_cm > 50,
+                             length_cm / 10, length_cm),
+         Species = species_code_lookup[species_name_raw]) |>
+  filter(!is.na(Species)) |>
+  select(Year, Species, length_cm, Biomass)
+
+# NOW re-run the weightclass/norm_biomass pipeline on this full-range object
+bio_size <- left_join(bio_size, wl) |> 
+  group_by(Species) |> 
+  mutate(w = a * length_cm^b) |>
+  subset(!is.na(Biomass)) |>
+  ungroup()   # <-- no Year filter here this time
+
+bio_size$weightclass <- cut(bio_size$w, breaks = 10^seq(0, 6, 0.5))
+levels(bio_size$weightclass) <- mid
+bio_size$weightclass <- round(as.integer(as.character(bio_size$weightclass)), 2)
+
+bio_size$widths <- bio_size$weightclass
+levels(bio_size$widths) <- widths
+bio_size$widths <- round(as.integer(as.character(bio_size$widths)), 2)
+bio_size$norm_biomass <- bio_size$Biomass / bio_size$widths
+
+## write.csv(bio_size, "Ess_data/bio_size.csv", row.names = FALSE)
+
+```
+
+
 ```{r}
 # Size spectra of the observed 
-bio_size_read <- read.csv("Ess_data/bio_size.csv")
-biomass_size_spectra <-bio_size %>%
-  group_by(weightclass,Year)%>% summarise(nbiomass=sum(norm_biomass))%>%
+# bio_size <- read.csv("Ess_data/bio_size.csv")   # match the name used below
+biomass_size_spectra <- bio_size %>%
+  group_by(weightclass, Year) %>% 
+  summarise(nbiomass = sum(norm_biomass)) %>%
   ungroup() 
 
 #Observed Reference period 1970-1985
