@@ -51,6 +51,21 @@ cat(sprintf("Ensemble size: %d factual, %d counterfactual paired members\n",
             length(sims_factual), length(sims_counter)))
 ```
 
+# Read abundance by species
+```{r}
+# read abundace by species
+  mean_weight_ts <- read.csv("Ess_data/abundance_obs.csv")
+# Make sure Species types match for the join (biomass_ts$Species is a factor)
+abundance_long <- abundance_obs %>%
+  mutate(Species = factor(Species, levels = levels(biomass_ts$Species)))
+
+# Join and compute mean weight
+mean_weight_ts <- biomass_ts %>%
+  left_join(abundance_long, by = c("Year", "Species")) %>%
+  mutate(MeanWeight = Biomass / Abundance)
+```
+
+
 ## Per-sim indicators (biomass, numbers, mean weight) above the survey cutoff
 
 ```{r indicator-helper}
@@ -77,8 +92,24 @@ ensemble_indicators <- function(sims, scenario) {
 
 df_all <- bind_rows(
   ensemble_indicators(sims_factual, "Factual (seal increase)"),
-  ensemble_indicators(sims_counter, "Counterfactual (seals constant)")
-)
+  ensemble_indicators(sims_counter, "Counterfactual (seals constant)"))
+
+```
+
+```{r}
+# ── READ & PREPARE OBSERVED MEAN WEIGHT ──────────────────────────────────────
+abundance_obs <- read.csv("Ess_data/abundance_obs.csv")
+
+# Match Species factor levels to biomass_ts so the join works cleanly
+abundance_long <- abundance_obs %>%
+  mutate(Species = factor(Species, levels = levels(biomass_ts$Species)))
+
+# Join biomass and abundance, compute observed mean individual weight (g)
+mean_weight_ts <- biomass_ts %>%
+  left_join(abundance_long, by = c("Year", "Species")) %>%
+  mutate(MeanWeight = Biomass / Abundance) %>%        # Biomass in g, Abundance in numbers
+  filter(!is.na(MeanWeight), MeanWeight > 0,          # drop missing / zero
+         is.finite(MeanWeight))                        # drop Inf from zero abundance
 ```
 
 ## Indicator 1 — mean individual weight per species, factual vs counterfactual
@@ -86,38 +117,63 @@ df_all <- bind_rows(
 ```{r mean-weight}
 # Ensemble median + 10-90% band (the band is the ensemble spread across randomised
 # food webs, NOT a formal CI). Factual vs counterfactual overlaid per species.
-mw <- df_all |>
-  group_by(scen, Species, Year) |>
+# ── SUMMARISE ENSEMBLE ────────────────────────────────────────────────────────
+mw <- df_all %>%
+  group_by(scen, Species, Year) %>%
   summarise(med = median(MeanWeight),
             lo  = quantile(MeanWeight, 0.10),
-            hi  = quantile(MeanWeight, 0.90), .groups = "drop")
+            hi  = quantile(MeanWeight, 0.90), .groups = "drop") %>%
+  mutate(Species = factor(Species, levels = levels(mean_weight_ts$Species))) %>%
+  arrange(Species, Year)
 
+# ── PLOT ──────────────────────────────────────────────────────────────────────
 p_mw <- ggplot(mw, aes(Year, med, colour = scen, fill = scen)) +
+
+  # Ensemble spread (10–90% band)
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.20, colour = NA) +
+
+  # Ensemble median lines
   geom_line(linewidth = 0.6) +
+
+  # Observed mean weight — black points, separate data layer
+  geom_point(
+    data        = mean_weight_ts,          # already filtered above
+    aes(x = Year, y = MeanWeight),
+    inherit.aes = FALSE,
+    colour      = "black",
+    shape       = 16,
+    size        = 0.8
+  ) +
+
   facet_wrap(~ Species, scales = "free_y") +
-  scale_colour_manual(values = c("Factual (seal increase)" = "firebrick",
-                                 "Counterfactual (seals constant)" = "steelblue")) +
-  scale_fill_manual(values = c("Factual (seal increase)" = "firebrick",
-                               "Counterfactual (seals constant)" = "steelblue")) +
+
+  scale_colour_manual(
+    values = c("Factual (seal increase)"         = "firebrick",
+               "Counterfactual (seals constant)" = "steelblue")
+  ) +
+  scale_fill_manual(
+    values = c("Factual (seal increase)"         = "firebrick",
+               "Counterfactual (seals constant)" = "steelblue")
+  ) +
   theme_bw(base_size = 9) +
   labs(x = "Year", y = "Mean individual weight (g)") +
-  theme(legend.position = "bottom", legend.title = element_blank())+
-  theme_bw() +
   theme(
-    text = element_text(size = 12, face = "bold"),
-    axis.title = element_text(size = 12, face = "bold"),
-    axis.text.y = element_text(size = 10, face = "bold"),
-    axis.text.x = element_markdown(size = 10),  # <- bold x-axis labels
-    legend.title = element_blank(),
-    legend.text = element_text(size = 10, face = "bold"),
-    legend.position = "bottom",
+    text             = element_text(size = 12, face = "bold"),
+    axis.title       = element_text(size = 12, face = "bold"),
+    axis.text.y      = element_text(size = 10, face = "bold"),
+    axis.text.x      = element_text(size = 10, face = "bold"),
+    legend.title     = element_blank(),
+    legend.text      = element_text(size = 10, face = "bold"),
+    legend.position  = "bottom",
     panel.grid.minor = element_blank(),
-    panel.border = element_rect(linewidth = 1),
-    panel.grid.major.x = element_blank(),
-    panel.grid.major.y = element_blank())
-ggsave(paste0(save_dir, "indicator_mean_weight.jpeg"), p_mw, width = 14, height = 10, dpi = 200)
+    panel.border     = element_rect(linewidth = 1),
+    panel.grid.major = element_blank()
+  )
+
 p_mw
+ggsave(paste0(save_dir, "indicator_mean_weight.jpeg"),
+       p_mw, width = 14, height = 10, dpi = 200)
+
 # INTERPRETATION (comment): where the counterfactual (blue) sits above the factual (red),
 # removing the seal increase leaves larger mean body size (less size-selective seal
 # predation + recovered large fish). Bands = 10-90% of ensemble webs.
