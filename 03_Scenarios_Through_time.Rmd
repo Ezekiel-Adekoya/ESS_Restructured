@@ -684,8 +684,8 @@ bio_size <- stat |>
   filter(YEAR >= 1978, YEAR <= 2024) |>
   select(Year = YEAR, species_name_raw = COMMON_NAME,
          length_cm = FLEN, Biomass = Biomass_Strata_KG) |>
-  mutate(length_cm = ifelse(species_name_raw == "HERRING(ATLANTIC)" & length_cm > 50,
-                             length_cm / 10, length_cm),
+  mutate(# Herring FLEN is recorded in mm (all rows) — convert to cm to match other species
+         length_cm = ifelse(species_name_raw == "HERRING(ATLANTIC)", length_cm / 10, length_cm),
          Species = species_code_lookup[species_name_raw]) |>
   filter(!is.na(Species)) |>
   select(Year, Species, length_cm, Biomass)
