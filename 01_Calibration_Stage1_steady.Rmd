@@ -15,10 +15,14 @@ historical effort and tunes the dynamic processes (collapse + non-recovery).
 Corrections incorporated (see ESS_calibration_status.md):
 - **Empirical seal gear** (`seal_gear_params.csv`, Bowen & Harrison 1994): per-species
   w_opt = mean prey weights (15-201 g), sigma 0.75 — replaces the flat 1500 g placeholder.
-- **Lower cutoff = occurrence-based gear retention** (smallest length caught in a
-  self-scaling fraction of survey years) — replaces the old abundance q01 + 0.25*w_mat cap.
-- **biomass_cutoffHigh = biomass-weighted q99** (upper cutoff; display-only, not in matchBiomasses).
-- Halibut w_max retained at 1624 kg (FishBase Lmax 470 cm — correct).
+- **Lower cutoff = abundance-weighted q05 length** (the size below which only ~5% of
+  caught individuals fall) — replaces the occurrence-floor cutoff that put the gadoid
+  cutoffs at 4-6 cm and crashed the within-window mean-weight indicator on recruit pulses.
+- **biomass_cutoffHigh = biomass-weighted q99** (upper *reporting* cutoff; not used in matchBiomasses).
+- **w_max = biomass-weighted q99.9 survey length** (regional max size), replacing the FishBase record
+  Lmax that over-inflated the largest species (cod 198->136 cm, halibut 484->206 cm) and drove an
+  unrealistic giant-fish pile-up at w_max once recruitment collapses in Stage 2. Herring held at its
+  FishBase value (small forage species, not subject to the pile-up).
 
 Diagnostics at the end: size spectra, growth curves, biomass/yield fits, emergent
 diet heatmap vs Cook & Bundy (2010), and seal "catch" composition vs Bowen & Harrison (1994).
@@ -65,8 +69,7 @@ options(na.print = "NA")
 Set up directories
 ```{r setup, include=FALSE}
 library("here")
-dir <- setwd(here())
-knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/ESS_restructured/")
+knitr::opts_knit$set(root.dir = here::here())
 # Define the save directory
 save_dir <- paste0(here(), "/Ess_Output/")
 # R.options resets na.print to a valid string at the start of every chunk.
@@ -115,7 +118,7 @@ external_species_info <- read.csv("Ess_data/ESS_species_params.csv") |>
   filter(!is.na(Species)) |> arrange(Species) |> mutate(Species = as.character(Species)) |>
   rename(species = Species)
 
-years_to_use<-as.character(1978:1985)  #Assign years for the reference period, to initialise steady state model before applying dynamics over whole period
+years_to_use<-as.character(1978:1981)  # Reference (base) period for the steady state: the relatively STABLE post-EEZ plateau selected by a rolling-window stability screen (see below). 1978-81 has CV=0.12 and ~zero trend in cod survey biomass; the early-1970s foreign-fleet era is erratic (CV 0.7-0.9) and 1982-83 is a transient spike (CV>0.5), so both are excluded.
 
 # #The initial Rmax was estimated from an empirical equation as in (Blanchard et al., 2014)
 external_species_info <- external_species_info |> mutate(R_max = 10^13 * w_max^-1.5)
@@ -178,50 +181,10 @@ lf_year_length <- stat2 %>%
     abundance = sum(abundance, na.rm = TRUE),
     .groups = "drop")
 
-# ── OCCURRENCE-BASED GEAR-RETENTION CUTOFF ──────────────────────────────────
-# Robust definition of the size range the survey *consistently* samples: for each
-# 2-cm length bin, the fraction of survey years in which the species is caught
-# (>= occ_min_count individuals). The lower cutoff is the smallest bin whose
-# occurrence reaches occ_threshold — i.e. where the gear starts reliably retaining
-# the species. This is outlier-proof (a single freak small fish has occ ~ 1/nyears)
-# and applies the SAME criterion to every species, unlike a percentile of the
-# pooled abundance (which is driven by abundance magnitude and a single odd tow).
-# It replaces the old `a * q01_q75^b` cutoff and the `0.25 * w_mat` patch.
-#
-# The occurrence threshold is SELF-SCALING to each species' own peak occurrence
-# (occ >= occ_peak_frac * max occ, with an absolute floor occ_floor). A fixed high
-# threshold (e.g. 0.75) breaks for sparsely-caught species: Spiny Dogfish collapses
-# to a single near-w_mat bin, and Atlantic Halibut / Winter Skate disappear entirely
-# (no bin is caught in >=75% of years). Peak-scaling defines "consistently sampled"
-# relative to how often the gear catches that species at all, which works for both
-# the abundant groundfish (peak ~ 1) and the rare large predators (peak ~ 0.7).
-occ_min_count <- 2     # >= this many fish for a bin to count as "present" in a year
-occ_peak_frac <- 0.5   # bin counts if caught in >= 50% of the years its modal bin is
-occ_floor     <- 0.33  # ...but never below 1/3 of years (guards very spiky species)
-
-n_years_sp <- lf_year_length %>%
-  group_by(species_name) %>%
-  summarise(n_years = n_distinct(year), .groups = "drop")
-
-length_occurrence <- lf_year_length %>%
-  mutate(length_bin = floor(length_cm / 2) * 2) %>%
-  group_by(species_name, length_bin) %>%
-  summarise(years_present = n_distinct(year[abundance >= occ_min_count]),
-            .groups = "drop") %>%
-  left_join(n_years_sp, by = "species_name") %>%
-  mutate(occ = years_present / n_years) %>%
-  group_by(species_name) %>%
-  mutate(occ_thr = pmax(occ_peak_frac * max(occ), occ_floor)) %>%
-  ungroup()
-
-# Consistently-sampled range = bins at/above the species' self-scaled threshold
-occurrence_cutoff <- length_occurrence %>%
-  filter(occ >= occ_thr) %>%
-  group_by(species_name) %>%
-  summarise(occ_lower_cm = min(length_bin),
-            occ_upper_cm = max(length_bin), .groups = "drop")
-
-occurrence_cutoff
+# ── LOWER GEAR-RETENTION CUTOFF (abundance-weighted q05 length) ──────────────
+# The lower cutoff is computed below as the abundance-weighted 5th-percentile of
+# length (see `lower_cutoff`, after weighted_quantile is defined). Rationale and
+# derivation are documented there.
 
 
 weighted_quantile <- function(x, w, probs = 0.05) {
@@ -238,31 +201,29 @@ weighted_quantile <- function(x, w, probs = 0.05) {
   x[which(cw >= probs)[1]]
 }
 
-# LEGACY abundance-weighted quantiles — NO LONGER feed the lower cutoff (which is now
-# occurrence-based, above). Retained only as a cross-check: cutoff_q01_q75 is the old
-# q01-of-length cutoff and should sit near the occurrence-based occ_lower_cm.
-annual_length_quantiles <- lf_year_length %>%
-  group_by(species_name, year) %>%
-  summarise(
-    q01_length_cm = weighted_quantile(length_cm, abundance, 0.01),
-    q05_length_cm = weighted_quantile(length_cm, abundance, 0.05),
-    q50_length_cm = weighted_quantile(length_cm, abundance, 0.50),
-    .groups = "drop")
-
-cutoff_quantile_summary <- annual_length_quantiles %>%
+# ── LOWER GEAR-RETENTION CUTOFF = abundance-weighted 5th-percentile length ────
+# The survey trawl under-catches small fish, so the lower cutoff marks where the
+# gear starts reliably retaining a species: the length below which only ~5% of the
+# individuals it catches (by number) fall. Computed as the abundance-weighted 5th
+# percentile of length, POOLED across all survey years (robust — a single odd tow
+# cannot move a q05). This REPLACES the earlier occurrence-floor cutoff, whose
+# "caught in >= 1/3 of years" floor picked up rare larval/juvenile bins and put the
+# gadoid cutoffs at 4-6 cm (e.g. cod 6 cm / 1.7 g). That artificially low cutoff let
+# occasional recruit pulses dominate the within-window mean-weight indicator (04),
+# collapsing it (cod 2024 mean weight -> 55 g vs a survey ~1 kg). The q05 gives
+# realistic, gear-appropriate cutoffs (cod 18 cm / 51 g, silver hake 23 g,
+# white hake 118 g, pollock 194 g).
+lower_cutoff <- lf_year_length %>%
   group_by(species_name) %>%
-  summarise(
-    cutoff_q01_median = median(q01_length_cm, na.rm = TRUE),
-    cutoff_q01_q75 = quantile(q01_length_cm, 0.75, na.rm = TRUE),
-    cutoff_q05_median = median(q05_length_cm, na.rm = TRUE),
-    .groups = "drop")
+  summarise(lower_cm = weighted_quantile(length_cm, abundance, 0.05),
+            .groups = "drop")
 
-cutoff_quantile_summary
+lower_cutoff
 
 # Overall length distributions for display, BIOMASS-weighted (shows where the biomass
 # sits and the size range carrying the biomass-weighted UPPER cutoff). NB: the dashed
-# LOWER cutoff overlaid below is occurrence-based (a count threshold), not from this
-# biomass-weighting — biomass-weighting is no longer used for the lower cutoff.
+# LOWER cutoff overlaid below is the abundance-weighted q05 length (a count-based
+# gear-retention threshold), so it sits at the small end where the biomass is low.
 lf_overall <- lf_year_length %>%
   left_join(external_species_info %>% select(species, a, b),
             by = c("species_name" = "species")) %>%
@@ -277,11 +238,11 @@ lf_overall <- lf_year_length %>%
   ) %>%
   filter(!is.na(species_name), !is.na(length_bin), biomass > 0)
 
-# Lower size cutoff (occurrence-based gear retention — a count/consistency threshold)
-length_thresholds <- occurrence_cutoff %>%
+# Lower size cutoff (abundance-weighted q05 length — gear retention)
+length_thresholds <- lower_cutoff %>%
   transmute(
     species_name,
-    threshold_cm = occ_lower_cm)
+    threshold_cm = lower_cm)
 
 
 
@@ -299,24 +260,24 @@ ggplot(lf_overall, aes(x = length_bin, y = biomass)) +
     x = "Length (cm)",
     y = "Total stratified biomass (g)",
     title = "Biomass-weighted length distributions across all years and strata",
-    subtitle = "Dashed line = lower size cutoff (occurrence-based: smallest bin caught in >= 0.5*peak of survey years)")
+    subtitle = "Dashed line = lower size cutoff (abundance-weighted 5th-percentile length)")
 
 
 
-# ── LOWER SIZE CUTOFF FOR ESTIMATING BIOMASS (occurrence-based) ──────────────
-# = weight at the smallest length the survey catches consistently (occ >= the
-#   species' self-scaled threshold, occ_peak_frac * peak occ, floored at occ_floor).
+# ── LOWER SIZE CUTOFF FOR ESTIMATING BIOMASS (abundance-weighted q05 length) ──
+# = weight at the abundance-weighted 5th-percentile length (the size below which
+#   only ~5% of caught individuals fall — where the gear starts retaining the fish).
 # matchBiomasses then compares model biomass ABOVE this cutoff to the survey total
 # (which itself only ever contains fish above gear retention) — i.e. both sides are
 # on the SAME, comparable size range, and mizer estimates the unsampled small end
-# self-consistently. No w_mat cap is needed: the cutoff is the honest retention size.
-biomass_cutoff <- occurrence_cutoff |>
+# self-consistently.
+biomass_cutoff <- lower_cutoff |>
   left_join(
     external_species_info |>
       select(species, a, b),
     by = c("species_name" = "species")) |>
   mutate(
-    biomass_cutoff = round(a * occ_lower_cm ^ b, 1)) |>
+    biomass_cutoff = round(a * lower_cm ^ b, 1)) |>
   select(
     species = species_name,
     biomass_cutoff)
@@ -331,18 +292,15 @@ external_species_info <- external_species_info |>
     by = "species")
 
 
-# CHeck if need to adjust max_w for some species (too small max_w from RFishBase)
-
-# Survey maximum lengths.
-# UPPER cutoff (biomass_cutoffHigh) = BIOMASS-weighted 99th-percentile length.
-# CORRECTED 2026-06: previously abundance-weighted, which is dominated by the
-# numerous juveniles and put cutoffHigh far below the large fish the survey
-# actually catches (e.g. cod 2.7 kg, vs ~9 kg biomass-weighted; halibut 139 vs
-# 207 cm). Biomass-weighting captures the size range that carries the biomass.
-# NOTE: biomass_cutoffHigh is currently DISPLAY-ONLY (not used in matchBiomasses,
-# which uses only the lower biomass_cutoff against the survey total). It matters
-# only for species whose model w_max exceeds the survey's max caught size
-# (Atlantic Halibut: model w_max 1624 kg / 470 cm vs survey max ~207 cm/121 kg).
+# ── SURVEY-DERIVED UPPER REPORTING CUTOFF AND MAX SIZE (w_max override) ───────
+# From the BIOMASS-weighted length distribution the survey actually catches:
+#   biomass_cutoffHigh = biomass-weighted q99   -> UPPER REPORTING cutoff (used in 04
+#                        and for display; NOT in matchBiomasses, which uses only the
+#                        lower cutoff against the survey total).
+#   w_max (override)   = biomass-weighted q99.9 -> regional MAX SIZE (see override below).
+# Biomass-weighting (not abundance) makes the quantiles reflect the size range carrying
+# the biomass, not the numerous juveniles (corrected 2026-06: was abundance-weighted,
+# which put the cutoff far below the large fish actually caught).
 survey_max_lengths <- stat2 %>%
   left_join(external_species_info %>% select(species, a, b),
             by = c("species_name" = "species")) %>%
@@ -350,30 +308,50 @@ survey_max_lengths <- stat2 %>%
   group_by(species_name) %>%
   summarise(
     survey_max_length_cm = max(length_cm, na.rm = TRUE),
-    q99_length_cm = weighted_quantile(length_cm, biomass_at_length, 0.99),
+    q99_length_cm  = weighted_quantile(length_cm, biomass_at_length, 0.99),
+    q999_length_cm = weighted_quantile(length_cm, biomass_at_length, 0.999),
     .groups = "drop")
 
-# Convert FishBase max lengths to max weights using W = aL^b
+# Convert survey lengths to weights using W = aL^b.
 max_weight_comparison <- survey_max_lengths %>%
   left_join(
     external_species_info %>% select(species, a, b, w_max),
     by = c("species_name" = "species")) %>%
   mutate(
     survey_max_weight_g = a * survey_max_length_cm ^ b,
-    biomass_cutoffHigh = a * q99_length_cm ^ b,
-    w_max_ratio = survey_max_weight_g / w_max, # survey max w, proportion of model w_max, should be less than 1
-    q99_ratio =  biomass_cutoffHigh / w_max  #99th percentile of max weights, should be less than 1
-  )
+    biomass_cutoffHigh  = a * q99_length_cm ^ b,   # q99  -> reporting cutoff
+    w_max_survey        = a * q999_length_cm ^ b,  # q99.9 -> regional max size
+    old_wmax_ratio      = w_max / w_max_survey      # FishBase-record w_max as a multiple of survey q99.9
+  )                                                 #   (>~2 flags an over-inflated FishBase Lmax)
 
-max_weight_comparison 
-max_weight_comparison <- max_weight_comparison |> select(species = species_name, biomass_cutoffHigh  )
+max_weight_comparison
 
+# ── OVERRIDE w_max WITH THE SURVEY-DERIVED REGIONAL MAX SIZE ──────────────────
+# mizer 2.5.x defines w_max as the species' maximum size (the von-Bertalanffy w_inf
+# route is deprecated). FishBase's *global record* Lmax over-inflates the largest
+# species, so once recruitment collapses in Stage 2 the survivors pile up at that
+# giant w_max (e.g. cod biomass concentrating at ~74 kg). Replace it with the
+# regional biomass-weighted q99.9 survey length, which sits just above the q99
+# reporting cutoff (headroom for the large fish the trawl under-catches) yet is
+# robust to a single outlier tow. Herring is held at its FishBase value (its survey
+# FLEN is mm-coded and it is a small forage species, not subject to the pile-up).
+# R_max (an empirical *starting* value, retuned during calibration) is recomputed
+# from the corrected w_max for internal consistency.
+biomass_cutoffHigh_tbl <- max_weight_comparison |> select(species = species_name, biomass_cutoffHigh)
+w_max_survey_tbl       <- max_weight_comparison |> select(species = species_name, w_max_survey)
 
-# ── JOIN BACK TO SPECIES INFO ─────────────────────────────────────────────────
 external_species_info <- external_species_info |>
   select(-any_of("biomass_cutoffHigh")) |>
-  left_join(max_weight_comparison, by = "species" )
+  left_join(biomass_cutoffHigh_tbl, by = "species") |>
+  left_join(w_max_survey_tbl,       by = "species") |>
+  mutate(
+    w_max = ifelse(species == "Atlantic Herring" | is.na(w_max_survey),
+                   w_max, round(w_max_survey, 1)),
+    R_max = 10^13 * w_max^-1.5) |>
+  select(-w_max_survey)
 
+# Sanity: corrected w_max must still exceed w_mat for every species
+stopifnot(all(external_species_info$w_max > external_species_info$w_mat))
 
 ```
 
@@ -1416,8 +1394,8 @@ bio_size <- stat |>
   filter(YEAR >= 1978, YEAR <= 1985) |>
   select(Year = YEAR,species_name_raw = COMMON_NAME,
     length_cm = FLEN, Biomass = Biomass_Strata_KG) |>
-  mutate(# Herring FLEN is in mm, convert once to cm
-    length_cm = ifelse(species_name_raw == "HERRING(ATLANTIC)" & length_cm > 50,length_cm / 10,length_cm),
+  mutate(# Herring FLEN is recorded in mm (all rows) — convert to cm to match other species
+    length_cm = ifelse(species_name_raw == "HERRING(ATLANTIC)", length_cm / 10, length_cm),
     Species = species_code_lookup[species_name_raw]) |>
   filter(!is.na(Species)) |> select(Year, Species, length_cm, Biomass)
 # ------------------------------------------------------------

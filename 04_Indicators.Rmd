@@ -44,7 +44,8 @@ sims_counter <- readRDS("Ess_Output/sims_counter.RDS")
 biomass_ts <- readRDS("Ess_data/biomass_ts.RDS")
 
 sp    <- species_params(params)$species
-cl    <- species_params(params)$biomass_cutoff; cl[is.na(cl)] <- 0  # per-species lower cutoff
+cl    <- species_params(params)$biomass_cutoff;     cl[is.na(cl)] <- 0    # lower survey cutoff
+ch    <- species_params(params)$biomass_cutoffHigh; ch[is.na(ch)] <- Inf  # upper survey cutoff
 w     <- params@w; dw <- params@dw
 n_sims <- length(sims_factual)
 cat(sprintf("Ensemble size: %d factual, %d counterfactual paired members\n",
@@ -53,9 +54,9 @@ cat(sprintf("Ensemble size: %d factual, %d counterfactual paired members\n",
 
 # Read abundance by species
 ```{r}
-# read abundace by species
-  mean_weight_ts <- read.csv("Ess_data/abundance_obs.csv")
-# Make sure Species types match for the join (biomass_ts$Species is a factor)
+# read abundance by species (survey numbers per species-year)
+abundance_obs <- read.csv("Ess_data/abundance_obs.csv")
+# Make sure Species types match for the join
 abundance_long <- abundance_obs %>%
   mutate(Species = factor(Species, levels = levels(biomass_ts$Species)))
 
@@ -69,13 +70,16 @@ mean_weight_ts <- biomass_ts %>%
 ## Per-sim indicators (biomass, numbers, mean weight) above the survey cutoff
 
 ```{r indicator-helper}
-# For one MizerSim: per species & year, biomass and numbers ABOVE that species'
-# survey cutoff (so it is comparable to the survey), and mean individual weight =
-# biomass / numbers (g). Returns long data.frame.
+# For one MizerSim: per species & year, biomass and numbers WITHIN that species'
+# survey size window [biomass_cutoff, biomass_cutoffHigh] (comparable to the survey,
+# which misses both the smallest AND the largest fish), mean individual weight =
+# biomass / numbers (g). The UPPER cutoff is essential: without it a collapsed stock's
+# few huge old survivors inflate mean weight far above the survey (cod 2024: 23 kg
+# lower-only vs ~23 g within-window). Returns long data.frame.
 sim_indicators <- function(sim) {
   st <- as.integer(dimnames(sim@n)[[1]])
   do.call(rbind, lapply(seq_along(sp), function(j) {
-    idx <- w >= cl[j]
+    idx <- w >= cl[j] & w <= ch[j]
     B <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3, (w * dw)[idx], "*"))  # g
     N <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3,  dw[idx],      "*"))  # numbers
     data.frame(Species = sp[j], Year = st, Biomass = B, Number = N,
@@ -189,6 +193,23 @@ obs_catch <- readRDS("Ess_data/yield_ts.RDS") |>
   filter(!Species %in% c("Sand Lance", "Capelin", "Longhorn Sculpin")) |>
   transmute(Species, Year, Yield_obs = Yield / 1e9)
 
+# Modelled fishing catch per ensemble member (sum over fishing gears, excl. Seals) — g
+fish_gears <- c("Bottom_Trawl", "Fixed_Gear", "Small_Mesh", "Pelagic")
+sim_catch <- function(sim) {
+  yg <- getYieldGear(sim)                                   # [time, gear, species]
+  fy <- apply(yg[, dimnames(yg)[[2]] %in% fish_gears, , drop = FALSE], c(1, 3), sum)
+  st <- as.integer(rownames(fy))
+  do.call(rbind, lapply(seq_along(sp),
+    function(j) data.frame(Species = sp[j], Year = st, Yield = fy[, j])))
+}
+ensemble_catch <- function(sims, scenario) {
+  do.call(rbind, lapply(seq_along(sims), function(k) {
+    d <- sim_catch(sims[[k]]); d$sim <- k; d$scen <- scenario; d }))
+}
+df_catches <- bind_rows(
+  ensemble_catch(sims_factual, "Factual (seal increase)"),
+  ensemble_catch(sims_counter, "Counterfactual (seals constant)"))
+
 # Per ensemble member: Spearman rho for biomass
 skill_biomass <- df_all |>
   mutate(Biomass = Biomass / 1e9) |>
@@ -239,7 +260,7 @@ p_sk <- ggplot(skill, aes(scen, rho, fill = scen)) +
     text = element_text(size = 12, face = "bold"),
     axis.title = element_text(size = 12, face = "bold"),
     axis.text.y = element_text(size = 10, face = "bold"),
-    axis.text.x = element_markdown(size = 10),  # <- bold x-axis labels
+    axis.text.x = element_text(size = 10, face = "bold"),
     legend.title = element_blank(),
     legend.text = element_text(size = 10, face = "bold"),
     legend.position = "bottom",
