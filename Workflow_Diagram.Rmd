@@ -77,18 +77,18 @@ p <- grViz("digraph workflow {
   
   # Step 3: Calibrate the baseline steady-state model
   Step_3 [label = <<table border='0' cellborder='1' cellspacing='0' cellpadding='8'>
-    <tr><td bgcolor='lightgray'><b>Step 3: Calibrate Steady State Baseline Model</b></td></tr>
+    <tr><td bgcolor='lightgray'><b>Step 3: Calibrate Model</b></td></tr>
     <tr><td bgcolor='white'>
-      • Calibration of model steady state to time-averaged reference period<br/>
-      • Match biomasses, yields, sensitivity to fishing
+      • Calibrate steady state to the time-averaged reference period, then the dynamic (historical) run through time<br/>
+      • Match biomasses, yields and time-series fit; sensitivity to fishing
     </td></tr>
   </table>>, width = 10, height=0.3, pos = '0,0!']
   
   # Step 4: Check diagnostics
   Step_4 [label = <<table border='0' cellborder='1' cellspacing='0' cellpadding='8'>
-    <tr><td bgcolor='lightgray'><b>Step 4: Steady State Diagnostics</b></td></tr>
+    <tr><td bgcolor='lightgray'><b>Step 4: Model Diagnostics</b></td></tr>
     <tr><td bgcolor='white'>
-      • Check diagnostic plots (biomasses, yields, growth curves, diets)<br/>
+      • Diagnostic plots (biomasses, yields, growth curves, diets, size structure) at steady state and through time<br/>
       • Check if outputs meet skill criteria
     </td></tr>
   </table>>, width = 10, height=0.3, pos = '0,-10!']
@@ -103,7 +103,7 @@ p <- grViz("digraph workflow {
     <tr><td bgcolor='lightgray'><b>Step 5: Dynamical Top-Down Forcing Scenarios</b></td></tr>
     <tr><td bgcolor='white'>
       • Scenario 1: Counterfactual (Constant seal predation mortality from 1978–2024)<br/>
-      • Scenario 2: Factual (Increasing seal predation mortality from 1978–2024)
+      • Scenario 2: Historical (Increasing seal predation mortality from 1978–2024)
     </td></tr>
   </table>>, pos = '0,-4!']
   
