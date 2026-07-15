@@ -471,6 +471,25 @@ mean_biomass_obs$biomass_observed<- ifelse(is.nan( mean_biomass_obs$biomass_obse
 
 ```
 
+#### Extract abundance
+```{r}
+abundance_obs <- stat %>%
+  mutate(strat_num = suppressWarnings(as.numeric(as.character(STRAT)))) %>%
+  filter(!is.na(strat_num), strat_num >= 443, strat_num <= 466,
+         YEAR >= 1978, YEAR <= 2024) %>%
+  mutate(species_name = species_code_lookup[COMMON_NAME]) %>%
+  filter(!is.na(species_name)) %>%
+  group_by(Year = YEAR, species_name) %>%
+  summarise(abundance = sum(Abund_Strata, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = species_name, values_from = abundance, values_fill = 0) %>%
+  select(Year, any_of(species_order))
+abundance_obs[is.na(abundance_obs)] <- 0
+
+# Apply same forage catchability multipliers as biomass
+# (same availability deficit applies to both biomass and numbers)
+for (sp in names(forage_catchability_mult))
+  abundance_obs[[sp]] <- abundance_obs[[sp]] * forage_catchability_mult[[sp]]
+```
 
 
 Read in catch data/Subset and average the catch data 
@@ -1480,7 +1499,7 @@ size_distributions <- plotSpectra( params_steady,power = 0,resource = FALSE) +
 
 size_distributions
 ggsave(filename = paste0(save_dir, "size_distributions.jpeg"), plot = size_distributions,
-       width = 10, height = 8, units = "in", dpi = 400)
+       width = 12, height = 8, units = "in", dpi = 400)
 ```
 
 
