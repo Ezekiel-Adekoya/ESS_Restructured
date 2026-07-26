@@ -135,48 +135,40 @@ p_mw <- ggplot(mw, aes(Year, med, colour = scen, fill = scen)) +
 
   # Ensemble spread (10–90% band)
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.20, colour = NA) +
-
   # Ensemble median lines
   geom_line(linewidth = 0.6) +
-
   # Observed mean weight — black points, separate data layer
   geom_point(
     data        = mean_weight_ts,          # already filtered above
     aes(x = Year, y = MeanWeight),
     inherit.aes = FALSE,
     colour      = "black",
-    shape       = 16,
-    size        = 0.8
-  ) +
-
+    size =0.8) +
   facet_wrap(~ Species, scales = "free_y") +
-
   scale_colour_manual(
     values = c("Factual (seal increase)"         = "firebrick",
-               "Counterfactual (seals constant)" = "steelblue")
-  ) +
+               "Counterfactual (seals constant)" = "steelblue")) +
   scale_fill_manual(
     values = c("Factual (seal increase)"         = "firebrick",
-               "Counterfactual (seals constant)" = "steelblue")
-  ) +
+               "Counterfactual (seals constant)" = "steelblue") ) +
   theme_bw(base_size = 9) +
   labs(x = "Year", y = "Mean individual weight (g)") +
   theme(
     text             = element_text(size = 12, face = "bold"),
     axis.title       = element_text(size = 12, face = "bold"),
-    axis.text.y      = element_text(size = 10, face = "bold"),
-    axis.text.x      = element_text(size = 10, face = "bold"),
+    axis.text.y      = element_text(size = 12, face = "bold"),
+    axis.text.x      = element_text(size = 12, face = "bold"),
     legend.title     = element_blank(),
-    legend.text      = element_text(size = 10, face = "bold"),
+    strip.text      = element_text(face = "bold", size = 12),
+    legend.text      = element_text(size = 12, face = "bold"),
     legend.position  = "bottom",
     panel.grid.minor = element_blank(),
     panel.border     = element_rect(linewidth = 1),
-    panel.grid.major = element_blank()
-  )
+    panel.grid.major = element_blank() )
 
 p_mw
 ggsave(paste0(save_dir, "indicator_mean_weight.jpeg"),
-       p_mw, width = 14, height = 10, dpi = 200)
+ p_mw, width = 14, height = 10, dpi = 200)
 
 # INTERPRETATION (comment): where the counterfactual (blue) sits above the factual (red),
 # removing the seal increase leaves larger mean body size (less size-selective seal
@@ -184,112 +176,144 @@ ggsave(paste0(save_dir, "indicator_mean_weight.jpeg"),
 ```
 
 
-## Indicator 2 — model skill (modelled vs observed biomass) by scenario
+## Model skill assessment (biomass, catch, mean weight vs observed)
 
-```{r model-skill}
-# Observed survey biomass and catches per species-year
+```{r skill-inputs}
+# Observed survey biomass (g) — reloaded here for the skill comparison section
+biomass_ts <- readRDS("Ess_data/biomass_ts.RDS")
+
+# Observed survey biomass and catches per species-year, rescaled (g -> Mt, /1e9)
 obs <- biomass_ts |> transmute(Species, Year, Biomass_obs = Biomass / 1e9)
 obs_catch <- readRDS("Ess_data/yield_ts.RDS") |>
-  filter(!Species %in% c("Sand Lance", "Capelin", "Longhorn Sculpin")) |>
+  filter(!Species %in% c("Sand Lance", "Capelin", "Longhorn Sculpin")) |>  # no reliable catch data for these
   transmute(Species, Year, Yield_obs = Yield / 1e9)
+```
 
+### Modelled fishing catch
+
+```{r sim-catch-fn}
 # Modelled fishing catch per ensemble member (sum over fishing gears, excl. Seals) — g
 fish_gears <- c("Bottom_Trawl", "Fixed_Gear", "Small_Mesh", "Pelagic")
 sim_catch <- function(sim) {
   yg <- getYieldGear(sim)                                   # [time, gear, species]
-  fy <- apply(yg[, dimnames(yg)[[2]] %in% fish_gears, , drop = FALSE], c(1, 3), sum)
+  fy <- apply(yg[, dimnames(yg)[[2]] %in% fish_gears, , drop = FALSE], c(1, 3), sum)  # sum over fishing gears only
   st <- as.integer(rownames(fy))
   do.call(rbind, lapply(seq_along(sp),
-    function(j) data.frame(Species = sp[j], Year = st, Yield = fy[, j])))
+                        function(j) data.frame(Species = sp[j], Year = st, Yield = fy[, j])))
 }
+
+# Apply sim_catch() across every ensemble member, tagging sim index + scenario
 ensemble_catch <- function(sims, scenario) {
   do.call(rbind, lapply(seq_along(sims), function(k) {
     d <- sim_catch(sims[[k]]); d$sim <- k; d$scen <- scenario; d }))
 }
+
 df_catches <- bind_rows(
   ensemble_catch(sims_factual, "Factual (seal increase)"),
   ensemble_catch(sims_counter, "Counterfactual (seals constant)"))
 
-# Per ensemble member: Spearman rho for biomass
+```
+
+### Skill metrics: Spearman rho and log-scale RMSE
+
+```{r skill-metrics}
+# Simple RMSE helper, used on log-transformed values below
+rmse <- function(pred, obs) sqrt(mean((pred - obs)^2, na.rm = TRUE))
+
+# Per ensemble member: Spearman rho and log-scale RMSE for biomass (modelled vs observed)
 skill_biomass <- df_all |>
   mutate(Biomass = Biomass / 1e9) |>
   inner_join(obs, by = c("Species", "Year")) |>
-  filter(Biomass_obs > 0, Biomass > 0) |>
+  filter(Biomass_obs > 0, Biomass > 0, Year >= 1986, Year <= 2024) |>  # skip zero/negative & pre-1986 years
   group_by(scen, sim) |>
-  summarise(rho_biomass = cor(Biomass, Biomass_obs, method = "spearman"), .groups = "drop")
+  summarise(rho_biomass  = cor(Biomass, Biomass_obs, method = "spearman"),
+            rmse_biomass = rmse(log(Biomass), log(Biomass_obs)),
+            .groups = "drop")
 
-# Per ensemble member: Spearman rho for catches
+# Per ensemble member: Spearman rho and log-scale RMSE for catches (modelled vs observed)
 skill_catch <- df_catches |>
   mutate(Yield = Yield / 1e9) |>
   inner_join(obs_catch, by = c("Species", "Year")) |>
-  filter(Yield_obs > 0, Yield > 0) |>
+  filter(Yield_obs > 0, Yield > 0, Year >= 1986, Year <= 2024) |>
   group_by(scen, sim) |>
-  summarise(rho_catch = cor(Yield, Yield_obs, method = "spearman"), .groups = "drop")
+  summarise(rho_catch  = cor(Yield, Yield_obs, method = "spearman"),
+            rmse_catch = rmse(log(Yield), log(Yield_obs)),
+            .groups = "drop")
 
-# Per ensemble member: Spearman rho for mean individual weight
-# (no observed counterpart — cross-scenario comparison only: factual vs counterfactual)
+# Per ensemble member: Spearman rho and log-scale RMSE for mean individual weight,
+# against OBSERVED mean weight (mean_weight_ts), consistent in structure
+# with biomass and catch above.
 skill_mw <- df_all |>
   filter(!is.na(MeanWeight), MeanWeight > 0) |>
+  inner_join(
+    mean_weight_ts |> transmute(Species, Year, MeanWeight_obs = MeanWeight),
+    by = c("Species", "Year")) |>
+  filter(MeanWeight_obs > 0, MeanWeight > 0, Year >= 1986, Year <= 2024) |>
   group_by(scen, sim) |>
-  summarise(rho_mw = cor(MeanWeight, Year, method = "spearman"), .groups = "drop")
-# Note: rho_mw here is the trend correlation (weight ~ year) per scenario/sim.
-# A positive rho = mean weight increasing over time; negative = declining.
-# The difference between scenarios isolates the seal effect on body size.
+  summarise(rho_mw  = cor(MeanWeight, MeanWeight_obs, method = "spearman"),
+            rmse_mw = rmse(log(MeanWeight), log(MeanWeight_obs)),
+            .groups = "drop")
 
-# Combine all three skill metrics
+# Combine all skill metrics: Spearman rho and log-scale RMSE across all 3 indicators,
+# reshaped long for faceted plotting below
 skill <- left_join(skill_biomass, skill_catch, by = c("scen", "sim")) |>
   left_join(skill_mw, by = c("scen", "sim")) |>
-  pivot_longer(cols = c(rho_biomass, rho_catch, rho_mw),
-               names_to = "indicator", values_to = "rho") |>
-  mutate(indicator = recode(indicator,
-    "rho_biomass" = "Biomass",
-    "rho_catch"   = "Catch",
-    "rho_mw"      = "Mean individual weight"))
+  pivot_longer(cols = c(rho_biomass, rho_catch, rho_mw,
+                        rmse_biomass, rmse_catch, rmse_mw),
+               names_to = "metric", values_to = "value") |>
+  mutate(
+    indicator = case_when(
+      metric %in% c("rho_biomass", "rmse_biomass") ~ "Biomass",
+      metric %in% c("rho_catch", "rmse_catch")      ~ "Catch",
+      metric %in% c("rho_mw", "rmse_mw")            ~ "Mean individual weight"),
+    stat_type = case_when(
+      metric %in% c("rho_biomass", "rho_catch", "rho_mw")    ~ "Spearman rho",
+      metric %in% c("rmse_biomass", "rmse_catch", "rmse_mw") ~ "RMSE (log-scale)"),
+    indicator = factor(indicator, levels = c("Biomass", "Catch", "Mean individual weight")),
+    stat_type = factor(stat_type, levels = c("Spearman rho", "RMSE (log-scale)")))
+```
 
-p_sk <- ggplot(skill, aes(scen, rho, fill = scen)) +
-  geom_boxplot(width = 0.6, outlier.size = 0.3) +
-  facet_wrap(~ indicator) +
+### Skill plot
+
+Grid of violin+boxplots — rows = Spearman rho, RMSE (log-scale); columns =
+Biomass / Catch / Mean individual weight. All three indicators compare
+modelled vs observed values directly. RMSE is computed on log-transformed
+values throughout, expressing error as an order-of-magnitude discrepancy
+rather than being dominated by whichever species/years have the largest
+absolute biomass, catch, or mean weight. **Higher rho / lower RMSE = better
+model–observation agreement for that scenario.**
+
+```{r skill-plot, fig.width=10, fig.height=6}
+p_sk <- ggplot(skill, aes(x = scen, y = value, fill = scen)) +
+  geom_violin(alpha = 0.5, trim = FALSE, width = 0.9) +
+  geom_boxplot(width = 0.15, outlier.size = 0.3, fill = "white", colour = "black") +
+  facet_grid(stat_type ~ indicator, scales = "free_y", switch = "y") +
   scale_fill_manual(values = c("Factual (seal increase)"         = "red",
                                "Counterfactual (seals constant)" = "blue")) +
   theme_bw(base_size = 11) +
-  labs(x = NULL, y = "Spearman rho (modelled vs observed)") +
-  theme(legend.position = "none",
-        strip.text = element_text(face = "bold"))+
-  theme_bw() +
+  labs(x = NULL, y = NULL) +
   theme(
     text = element_text(size = 12, face = "bold"),
     axis.title = element_text(size = 12, face = "bold"),
-    axis.text.y = element_text(size = 10, face = "bold"),
-    axis.text.x = element_text(size = 10, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
     legend.title = element_blank(),
-    legend.text = element_text(size = 10, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold"),
     legend.position = "bottom",
+    strip.text = element_text(size = 12, face = "bold"),
+    strip.placement = "outside",
     panel.grid.minor = element_blank(),
     panel.border = element_rect(linewidth = 1),
     panel.grid.major.x = element_blank(),
     panel.grid.major.y = element_blank())
-ggsave("plot.png", p_sk, width = 10, height = 5, dpi = 300)
-ggsave(paste0(save_dir, "indicator_model_skill.jpeg"), p_sk, width = 14, height = 5, dpi = 200)
+
+# Save skill plot: a quick local debug copy, and the "real" copy in save_dir
+ggsave("indicator_model_skill.png", p_sk, width = 8, height = 5, dpi = 300)
+ggsave(paste0(save_dir, "indicator_model_skill.jpeg"), p_sk, width = 14, height = 8, dpi = 200)
+
 p_sk
-
-# Median skill per scenario and indicator across the ensemble
-skill |> group_by(scen, indicator) |>
-  summarise(median_rho = round(median(rho), 3),
-            q10 = round(quantile(rho, 0.10), 3),
-            q90 = round(quantile(rho, 0.90), 3), .groups = "drop")
-# INTERPRETATION (comment): three-panel skill plot — biomass, catch, mean weight.
-# Biomass and catch rho = Spearman correlation of modelled vs observed pattern.
-# Mean weight rho = temporal trend (weight ~ year) per scenario; difference between
-# scenarios isolates the seal effect on community body size structure.
-# Higher biomass/catch rho = better fit to data; mean weight panel shows direction
-# and consistency of the size-structure response to the seal increase.
-
-# INTERPRETATION (comment): higher rho = better reproduction of the observed biomass
-# pattern. If the factual (seal-increase) scenario has higher skill than the
-# counterfactual, the data favour the seal-increase mechanism.
-
 ```
-
 
 
 ```{r}

@@ -458,7 +458,7 @@ abundance_obs <- stat %>%
   mutate(species_name = species_code_lookup[COMMON_NAME]) %>%
   filter(!is.na(species_name)) %>%
   group_by(Year = YEAR, species_name) %>%
-  summarise(abundance = sum(Abund_Strata, na.rm = TRUE), .groups = "drop") %>%
+  summarise(abundance = sum(Abundance_Strata, na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(names_from = species_name, values_from = abundance, values_fill = 0) %>%
   select(Year, any_of(species_order))
 abundance_obs[is.na(abundance_obs)] <- 0
@@ -1256,7 +1256,7 @@ ggsave(filename = paste0(save_dir, "diet_interaction.jpeg"), plot = diet_interac
        width = 11, height = 8.5, units = "in", dpi = 400)
 
 # Diet including resource
-diet_full <- data.frame(melt(apply(getDiet(params)[, which(params@w > 10), ], c(1, 3), sum) / rowSums(apply(getDiet(params)[, which(params@w > 10), ], c(1, 3), sum)[, ])))
+diet_full <- data.frame(melt(apply(getDiet(params_steady)[, which(params@w > 10), ], c(1, 3), sum) / rowSums(apply(getDiet(params)[, which(params@w > 10), ], c(1, 3), sum)[, ])))
 
 ggplot(diet_full, aes(fill = prey, x = predator, y = value)) +
   geom_bar(position = "stack", stat = "identity") + coord_flip()

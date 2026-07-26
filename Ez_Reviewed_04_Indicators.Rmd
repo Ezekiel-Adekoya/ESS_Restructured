@@ -1,0 +1,429 @@
+---
+title: "Ez_Reviewed_Community indicators by scenario (mean weight & model skill)"
+subtitle: "Biomass, catch, and mean individual weight — modelled vs observed"
+author: "Ezekiel"
+date: "2026-07-21"
+output: html_document
+---
+
+`<!--
+Step 04 of the workflow. Computes two indicators from the PAIRED scenario ensembles
+produced by 03_Scenarios_Through_time.Rmd (saved as sims_factual / sims_counter):
+  (1) per-species MEAN INDIVIDUAL WEIGHT through time (size-structure indicator),
+      factual (seal increase) vs counterfactual (seals held at 1978);
+  (2) MODEL SKILL = Spearman correlation of modelled vs observed biomass across the
+      ensemble, factual vs counterfactual.
+Current dimensions: 1978-2024 (47 yr), all 19 species, per-species survey cutoffs.
+(Journal style: no plot titles/subtitles; notes/interpretation as comments.)
+-->
+
+```{r setup, include=FALSE}
+library(here)
+library(mizer)
+library(mizerExperimental)
+library(tidyverse)
+library(patchwork)
+knitr::opts_knit$set(root.dir = here::here())   # portable project root
+save_dir <- paste0(here::here(), "/Ess_Output/")
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+## Inputs — factual model + paired scenario ensembles (from step 03)
+
+Load the fitted Stage-2 model, the paired factual/counterfactual simulation
+ensembles from step 03, and the observed survey biomass series used for the
+skill comparison later on.
+
+```{r load-inputs}
+# Factual Stage-2 model (for species set + per-species survey cutoffs)
+# Prefers the AUTO-tuned params file if it exists, falls back to the base factual one
+params <- readRDS(if (file.exists("Ess_data/params_stage2_AUTO.RDS"))
+  "Ess_data/params_stage2_AUTO.RDS" else
+    "Ess_data/params_stage2_factual.RDS")
+
+# Paired ensembles from 03 (same randomised web under both scenarios):
+#   sims_factual = seal effort increases 1978->2024
+#   sims_counter = seal effort held constant at the 1978 level (the counterfactual)
+sims_factual <- readRDS("Ess_Output/sims_factual.RDS")
+sims_counter <- readRDS("Ess_Output/sims_counter.RDS")
+
+# Observed survey biomass (g) for the skill comparison
+biomass_ts <- readRDS("Ess_data/biomass_ts.RDS")
+```
+
+### Species set and survey-cutoff setup
+
+```{r cutoff-setup}
+# Species names, and von Bertalanffy-style weight-length parameters (W = a * L^b)
+sp    <- species_params(params)$species
+a     <- species_params(params)$a
+b     <- species_params(params)$b
+
+# Mizer's weight grid (w = weight bins in g, dw = bin widths) — shared by all species/sims
+w      <- params@w; dw <- params@dw
+n_sims <- length(sims_factual)
+
+# Per-species survey weight cutoffs (g); NA means "no cutoff" -> replaced with 0 / Inf
+cl_w <- species_params(params)$biomass_cutoff;     cl_w[is.na(cl_w)] <- 0    # lower cutoff, g
+ch_w <- species_params(params)$biomass_cutoffHigh; ch_w[is.na(ch_w)] <- Inf  # upper cutoff, g
+
+cl <- cl_w   # grams, used by sim_indicators() to window the mizer weight grid
+ch <- ch_w   # grams, used by sim_indicators()
+
+# Convert the same weight cutoffs to length (cm) via W = a*L^b, for filtering the
+# OBSERVED survey data later, which records fish length (FLEN) rather than weight
+cl_len <- (cl_w / a) ^ (1 / b)   # cm, used by cutoff_lookup for observed FLEN filter
+ch_len <- ifelse(is.infinite(ch_w), Inf, (ch_w / a) ^ (1 / b))
+
+# Lookup table joining species name to its cm-based survey window, used later against stat2
+cutoff_lookup <- tibble(
+  species_name = sp,
+  cl = cl_len,
+  ch = ch_len)
+
+cat(sprintf("Ensemble size: %d factual, %d counterfactual paired members\n",
+            length(sims_factual), length(sims_counter)))
+```
+
+## Per-sim indicators (biomass, numbers, mean weight) above the survey cutoff
+
+For one `MizerSim`: per species & year, biomass and numbers **within** that
+species' survey size window `[biomass_cutoff, biomass_cutoffHigh]`, comparable
+to the survey (which misses both the smallest and the largest fish). Mean
+individual weight = biomass / numbers (g). The upper cutoff matters a lot —
+without it a collapsed stock's few huge old survivors inflate mean weight far
+above the survey (e.g. cod 2024: 23 kg lower-only vs ~23 g within-window).
+
+```{r sim-indicators-fn}
+sim_indicators <- function(sim) {
+  st <- as.integer(dimnames(sim@n)[[1]])              # time steps (years) in this sim
+  do.call(rbind, lapply(seq_along(sp), function(j) {
+    idx <- w >= cl[j] & w <= ch[j]                     # weight bins within this species' survey window
+    B <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3, (w * dw)[idx], "*"))  # biomass, g
+    N <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3,  dw[idx],      "*"))  # numbers
+    data.frame(Species = sp[j], Year = st, Biomass = B, Number = N,
+               MeanWeight = B / N)                     # mean individual weight, g
+  }))
+}
+
+# Apply sim_indicators() across every member of an ensemble, tagging sim index + scenario
+# so the two scenarios (factual / counterfactual) can be told apart downstream
+ensemble_indicators <- function(sims, scenario) {
+  do.call(rbind, lapply(seq_along(sims), function(k) {
+    d <- sim_indicators(sims[[k]]); d$sim <- k; d$scen <- scenario; d
+  }))
+}
+```
+
+```{r build-df-all}
+# Stack factual + counterfactual indicator series into one long data frame
+df_all <- bind_rows(
+  ensemble_indicators(sims_factual, "Factual (seal increase)"),
+  ensemble_indicators(sims_counter, "Counterfactual (seals constant)"))
+```
+
+## Observed survey data
+
+Load raw survey length/biomass/abundance data and map raw species codes onto
+the model's species names.
+
+```{r load-survey}
+stat <- read.csv("Ess_data/LF_Biomass_Abund.csv")
+
+# ── LOOKUP: RAW SURVEY NAME -> MODEL NAME ────────────────────────────────────
+species_code_lookup <- c(
+  "COD(ATLANTIC)"             = "Atlantic Cod",
+  "HADDOCK"                   = "Haddock",
+  "WHITE HAKE"                = "White Hake",
+  "SILVER HAKE"               = "Silver Hake",
+  "POLLOCK"                   = "Pollock",
+  "REDFISH UNSEPARATED"       = "Redfish Unseparated",
+  "AMERICAN PLAICE"           = "American Plaice",
+  "YELLOWTAIL FLOUNDER"       = "Yellowtail Flounder",
+  "SPINY DOGFISH"             = "Spiny Dogfish",
+  "HALIBUT(ATLANTIC)"         = "Atlantic Halibut",
+  "SQUIRREL OR RED HAKE"      = "Red Hake",
+  "MONKFISH,GOOSEFISH,ANGLER" = "Monkfish",
+  "NORTHERN SAND LANCE"       = "Sand Lance",
+  "WITCH FLOUNDER"            = "Witch Flounder",
+  "HERRING(ATLANTIC)"         = "Atlantic Herring",
+  "THORNY SKATE"              = "Thorny Skate",
+  "WINTER SKATE"              = "Winter Skate",
+  "LONGHORN SCULPIN"          = "Longhorn Sculpin",
+  "CAPELIN"                   = "Capelin")
+```
+
+### Filter and derive
+
+```{r filter-derive}
+
+stat2 <- stat |>
+  filter(YEAR >= 1978, YEAR <= 2024) |>                            # match model simulation years
+  mutate(strat_num = suppressWarnings(as.numeric(as.character(STRAT)))) |>
+  filter(!is.na(strat_num), strat_num >= 443, strat_num <= 466) |> # restrict to 4VsW survey strata
+  mutate(FLEN = ifelse(COMMON_NAME == "HERRING(ATLANTIC)",  
+  # herring looks like it's measured in mm!
+  FLEN / 10, FLEN),  # convert herring mm -> cm to match other species
+  species_name = species_code_lookup[COMMON_NAME]) |>  
+  filter(!is.na(species_name))      
+
+# Apply each species' survey length window (cm) to the observed data,
+# so it's comparable to the mizer simulation window applied in sim_indicators()
+stat2 <- stat2 %>%
+  left_join(cutoff_lookup, by = "species_name") %>%
+  filter(FLEN >= cl, FLEN <= ch)
+
+```
+
+### Biomass and abundance summaries
+
+```{r biomass-abundance-summaries}
+# ── BIOMASS SUMMARY ───────────────────────────────────────────────────────
+# Sum observed biomass (converted kg -> g) per species-year, wide format (species as columns)
+biomass_obs <- stat2 %>% group_by(Year = YEAR, species_name) %>%
+  summarise(biomass_g = sum(Biomass_Strata_KG, na.rm = TRUE) * 1e3,   .groups = "drop") %>% pivot_wider(names_from = species_name, values_from = biomass_g, values_fill = 0) %>% select(Year, any_of(species_order)) 
+biomass_obs[is.na(biomass_obs)] <- 0    
+
+# ── ABUNDANCE SUMMARY ─────────────────────────────────────────────────────
+# Same as above but for observed abundance (numbers) per species-year
+abundance_obs <- stat2 %>%group_by(Year = YEAR, species_name) %>%
+  summarise(abundance = sum(Abundance_Strata, na.rm = TRUE), 
+  .groups = "drop") %>% pivot_wider(names_from = species_name, 
+  values_from = abundance, values_fill = 0) %>%
+  select(Year, any_of(species_order))
+abundance_obs[is.na(abundance_obs)] <- 0
+
+```
+
+### Long format and observed mean individual weight
+
+```{r mean-weight-obs}
+# ── LONG FORMAT (Species factor matched to biomass_ts levels) ───────────────
+abundance_long <- abundance_obs %>%
+  pivot_longer(-Year, names_to = "Species", values_to = "abundance") %>%
+  mutate(Species = factor(Species, levels = levels(biomass_ts$Species)))
+
+biomass_long <- biomass_obs %>%
+  pivot_longer(-Year, names_to = "Species", values_to = "biomass_g") %>%
+  mutate(Species = factor(Species, levels = levels(biomass_ts$Species)))
+
+# ── OBSERVED MEAN INDIVIDUAL WEIGHT (g) ──────────────────────────────────────
+# Derive observed mean weight = biomass / abundance, per species-year;
+mean_weight_ts <- biomass_long %>%
+  left_join(abundance_long, by = c("Year", "Species")) %>%
+  mutate(MeanWeight = biomass_g / abundance) %>% # biomass_g in g, abundance in numbers
+  filter(!is.na(MeanWeight), MeanWeight > 0, is.finite(MeanWeight))
+```
+
+## Mean individual weight: factual vs counterfactual, with observed overlay
+
+Ensemble median + 10–90% band (the band is the ensemble spread across
+randomised food webs, **not** a formal confidence interval). Factual vs
+counterfactual are overlaid per species, with observed points in black.
+
+```{r mean-weight-plot, fig.width=10, fig.height=8}
+mw <- df_all %>%
+  group_by(scen, Species, Year) %>%
+  summarise(med = median(MeanWeight),
+            lo  = quantile(MeanWeight, 0.10),
+            hi  = quantile(MeanWeight, 0.90), .groups = "drop") %>%
+  mutate(Species = factor(Species, levels = levels(mean_weight_ts$Species))) %>%
+  arrange(Species, Year)
+
+# Create a plotting-only column that recodes the reference period
+mw <- mw |>
+  mutate(colour_grp = if_else(Year < 1986, "Reference period", as.character(scen)))
+
+p_mw <- ggplot(mw, aes(Year, med, colour = colour_grp, fill = colour_grp, group = scen)) +
+  # Ensemble spread (10–90% band)
+  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.20, colour = NA) +
+  # Ensemble median lines
+  geom_line(linewidth = 0.6) +
+  # Observed mean weight — black points, separate data layer
+  geom_point(
+    data        = mean_weight_ts,          # already filtered above
+    aes(x = Year, y = MeanWeight),
+    inherit.aes = FALSE,
+    colour      = "black",
+    size        = 0.8) +
+  facet_wrap(~ Species, scales = "free_y") +   
+  geom_vline(xintercept = 1986, linetype = "dashed", color = "black") +
+  scale_colour_manual(
+    values = c("Factual (seal increase)"         = "firebrick",
+               "Counterfactual (seals constant)" = "steelblue",
+               "Reference period"           = "grey70")) +
+  scale_fill_manual(
+    values = c("Factual (seal increase)"         = "firebrick",
+               "Counterfactual (seals constant)" = "steelblue",
+               "Reference period"           = "grey70")) +
+  theme_bw(base_size = 9) +
+  labs(x = "Year", y = "Mean individual weight (g)") +
+  theme(
+    text             = element_text(size = 12, face = "bold"),
+    axis.title       = element_text(size = 12, face = "bold"),
+    axis.text.y      = element_text(size = 12, face = "bold"),
+    axis.text.x      = element_text(size = 12, face = "bold"),
+    legend.title     = element_blank(),
+    strip.text       = element_text(face = "bold", size = 12),
+    legend.text      = element_text(size = 12, face = "bold"),
+    legend.position  = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.border     = element_rect(linewidth = 1),
+    panel.grid.major = element_blank())
+p_mw
+ggsave(paste0(save_dir, "indicator_mean_weight.jpeg"),
+ p_mw, width = 14, height = 10, dpi = 200)
+```
+
+## Model skill assessment (biomass, catch, mean weight vs observed)
+
+```{r skill-inputs}
+# Observed survey biomass (g) — reloaded here for the skill comparison section
+biomass_ts <- readRDS("Ess_data/biomass_ts.RDS")
+
+# Observed survey biomass and catches per species-year, rescaled (g -> Mt, /1e9)
+obs <- biomass_ts |> transmute(Species, Year, Biomass_obs = Biomass / 1e9)
+obs_catch <- readRDS("Ess_data/yield_ts.RDS") |>
+  filter(!Species %in% c("Sand Lance", "Capelin", "Longhorn Sculpin")) |>  # no reliable catch data for these
+  transmute(Species, Year, Yield_obs = Yield / 1e9)
+```
+
+### Modelled fishing catch
+
+```{r sim-catch-fn}
+# Modelled fishing catch per ensemble member (sum over fishing gears, excl. Seals) — g
+fish_gears <- c("Bottom_Trawl", "Fixed_Gear", "Small_Mesh", "Pelagic")
+sim_catch <- function(sim) {
+  yg <- getYieldGear(sim)                                   # [time, gear, species]
+  fy <- apply(yg[, dimnames(yg)[[2]] %in% fish_gears, , drop = FALSE], c(1, 3), sum)  # sum over fishing gears only
+  st <- as.integer(rownames(fy))
+  do.call(rbind, lapply(seq_along(sp),
+                        function(j) data.frame(Species = sp[j], Year = st, Yield = fy[, j])))
+}
+
+# Apply sim_catch() across every ensemble member, tagging sim index + scenario
+ensemble_catch <- function(sims, scenario) {
+  do.call(rbind, lapply(seq_along(sims), function(k) {
+    d <- sim_catch(sims[[k]]); d$sim <- k; d$scen <- scenario; d }))
+}
+
+df_catches <- bind_rows(
+  ensemble_catch(sims_factual, "Factual (seal increase)"),
+  ensemble_catch(sims_counter, "Counterfactual (seals constant)"))
+
+```
+
+### Skill metrics: Spearman rho and log-scale RMSE
+
+```{r skill-metrics}
+# Simple RMSE helper, used on log-transformed values below
+rmse <- function(pred, obs) sqrt(mean((pred - obs)^2, na.rm = TRUE))
+
+# Per ensemble member: Spearman rho and log-scale RMSE for biomass (modelled vs observed)
+skill_biomass <- df_all |>
+  mutate(Biomass = Biomass / 1e9) |>
+  inner_join(obs, by = c("Species", "Year")) |>
+  filter(Biomass_obs > 0, Biomass > 0, Year >= 1986, Year <= 2024) |>  # skip zero/negative & pre-1986 years
+  group_by(scen, sim) |>
+  summarise(rho_biomass  = cor(Biomass, Biomass_obs, method = "spearman"),
+            rmse_biomass = rmse(log(Biomass), log(Biomass_obs)),
+            .groups = "drop")
+
+# Per ensemble member: Spearman rho and log-scale RMSE for catches (modelled vs observed)
+skill_catch <- df_catches |>
+  mutate(Yield = Yield / 1e9) |>
+  inner_join(obs_catch, by = c("Species", "Year")) |>
+  filter(Yield_obs > 0, Yield > 0, Year >= 1986, Year <= 2024) |>
+  group_by(scen, sim) |>
+  summarise(rho_catch  = cor(Yield, Yield_obs, method = "spearman"),
+            rmse_catch = rmse(log(Yield), log(Yield_obs)),
+            .groups = "drop")
+
+# Per ensemble member: Spearman rho and log-scale RMSE for mean individual weight,
+# against OBSERVED mean weight (mean_weight_ts), consistent in structure
+# with biomass and catch above.
+skill_mw <- df_all |>
+  filter(!is.na(MeanWeight), MeanWeight > 0) |>
+  inner_join(
+    mean_weight_ts |> transmute(Species, Year, MeanWeight_obs = MeanWeight),
+    by = c("Species", "Year")) |>
+  filter(MeanWeight_obs > 0, MeanWeight > 0, Year >= 1986, Year <= 2024) |>
+  group_by(scen, sim) |>
+  summarise(rho_mw  = cor(MeanWeight, MeanWeight_obs, method = "spearman"),
+            rmse_mw = rmse(log(MeanWeight), log(MeanWeight_obs)),
+            .groups = "drop")
+
+# Combine all skill metrics: Spearman rho and log-scale RMSE across all 3 indicators,
+# reshaped long for faceted plotting below
+skill <- left_join(skill_biomass, skill_catch, by = c("scen", "sim")) |>
+  left_join(skill_mw, by = c("scen", "sim")) |>
+  pivot_longer(cols = c(rho_biomass, rho_catch, rho_mw,
+                        rmse_biomass, rmse_catch, rmse_mw),
+               names_to = "metric", values_to = "value") |>
+  mutate(
+    indicator = case_when(
+      metric %in% c("rho_biomass", "rmse_biomass") ~ "Biomass",
+      metric %in% c("rho_catch", "rmse_catch")      ~ "Catch",
+      metric %in% c("rho_mw", "rmse_mw")            ~ "Mean individual weight"),
+    stat_type = case_when(
+      metric %in% c("rho_biomass", "rho_catch", "rho_mw")    ~ "Spearman rho",
+      metric %in% c("rmse_biomass", "rmse_catch", "rmse_mw") ~ "RMSE (log-scale)"),
+    indicator = factor(indicator, levels = c("Biomass", "Catch", "Mean individual weight")),
+    stat_type = factor(stat_type, levels = c("Spearman rho", "RMSE (log-scale)")))
+```
+
+### Skill plot
+
+Grid of violin+boxplots — rows = Spearman rho, RMSE (log-scale); columns =
+Biomass / Catch / Mean individual weight. All three indicators compare
+modelled vs observed values directly. RMSE is computed on log-transformed
+values throughout, expressing error as an order-of-magnitude discrepancy
+rather than being dominated by whichever species/years have the largest
+absolute biomass, catch, or mean weight. **Higher rho / lower RMSE = better
+model–observation agreement for that scenario.**
+
+```{r skill-plot, fig.width=10, fig.height=6}
+
+p_sk <- ggplot(skill, aes(x = scen, y = value, fill = scen)) +
+  geom_violin(alpha = 0.5, trim = FALSE, width = 0.9) +
+  geom_boxplot(width = 0.15, outlier.size = 0.3, fill = "white", colour = "black") +
+  facet_grid(stat_type ~ indicator, scales = "free_y", switch = "y") +
+  scale_fill_manual(values = c("Factual (seal increase)"         = "red",
+                               "Counterfactual (seals constant)" = "blue")) +
+  theme_bw(base_size = 11) +
+  labs(x = NULL, y = NULL) +
+  theme(
+    text = element_text(size = 12, face = "bold"),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.position = "bottom",
+    strip.text = element_text(size = 12, face = "bold"),
+    strip.placement = "outside",
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(linewidth = 1),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank())
+
+# Save skill plot: a quick local debug copy, and the "real" copy in save_dir
+ggsave("indicator_model_skill.png", p_sk, width = 8, height = 5, dpi = 300)
+ggsave(paste0(save_dir, "indicator_model_skill.jpeg"), p_sk, width = 14, height = 8, dpi = 200)
+
+p_sk
+```
+
+### Numeric summary
+
+Median skill per scenario, indicator, and metric type across the ensemble,
+with 10th/90th percentile spread — the numeric summary behind the plot above.
+
+```{r skill-summary-table}
+skill |> group_by(scen, indicator, stat_type) |>
+  summarise(median_val = round(median(value), 3),
+            q10 = round(quantile(value, 0.10), 3),
+            q90 = round(quantile(value, 0.90), 3), .groups = "drop") |>
+  arrange(indicator, stat_type, scen)
+```

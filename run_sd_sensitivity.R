@@ -58,3 +58,36 @@ res <- rbind(r01, r02)
 print(res)
 write.csv(res, "Ess_Output/sd_sensitivity_cod.csv", row.names = FALSE)
 cat("Saved Ess_Output/sd_sensitivity_cod.csv\n")
+
+
+
+
+## =============================================================================
+## Plots — styled to match the ranked single-colour bar chart (Fig. S3 style)
+## =============================================================================
+library(ggplot2)
+library(forcats)
+
+# ── Primary plot (sd = 0.1): ranked bar chart, % of webs recovering more
+#    without the seal increase — single colour, descending order, clean theme ──
+res_primary <- res_all |> filter(sd == 0.1)
+
+## =============================================================================
+## Log-ratio plots — same clean ranked-bar style as the pct plots above
+## =============================================================================
+
+# ── Primary plot (sd = 0.1): ranked bar chart, median log-ratio ─────────────
+p_logratio_primary <- ggplot(res_primary,
+                             aes(x = fct_reorder(species, median_logratio_counter_over_factual),
+                                 y = median_logratio_counter_over_factual)) +
+  geom_col(fill = "firebrick", alpha = 0.85, width = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
+  coord_flip() +
+  labs(x = NULL,
+       y = "Median log-scale biomass ratio (counterfactual / factual)\nat the end of the projection") +
+  theme_bw(base_size = 12) +
+  theme(panel.grid.minor = element_blank(), axis.text = element_text(size = 13, face = "bold"),
+        plot.title = element_text(size = 13))
+
+ggsave("fig_sd_sensitivity_logratio_primary.jpeg", p_logratio_primary, width = 8, height = 8, dpi = 200)
+p_logratio_primary
