@@ -160,5 +160,5 @@ effort_all_df = ggplot(effort_all_df, aes(x = Year, y = Effort)) +
     strip.background = element_rect(fill = "grey", color = NA),
   )
 
-ggsave(filename = paste0(save_dir, "effort_by_gear.jpeg"), plot = effort_all_df,
+ggsave(filename = "Ess_Output/effort_by_gear.jpeg", plot = effort_all_df,
        width = 11, height = 7.5, units = "in", dpi = 400)
