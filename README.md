@@ -59,6 +59,12 @@ Large inputs/outputs are git-ignored (`Ess_data/*.RDS`, `Ess_Output/*`). Re-run 
 **00** scripts to regenerate the data inputs, then **01** → **02**. Required hand-made
 inputs (e.g. `Ess_data/seal_gear_params.csv`, survey CSVs) are produced by the 00 step.
 
+**Reproducibility note — 00c raw inputs:** `00c_PPMR_extraction.R` reads the raw DFO food-habits
+tables `Ess_data/fhpd.csv` and `Ess_data/fhpy.csv`, which are **not distributed** with the repo
+(git-ignored; obtain from DFO). Its output, `Ess_data/predpreylengths.csv`, **is** committed, so
+`00b` and the rest of the pipeline run without re-running `00c`. Only re-run `00c` if you have
+the raw food-habits data and want to regenerate the predator–prey length pairs.
+
 ## Requirements
 
 Built and run with **R 4.5.2** and the following key packages:

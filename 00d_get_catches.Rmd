@@ -2,7 +2,7 @@
 title: "Extraction of Catch data from NAFO with updated species"
 author: "Ezekiel"
 date: "2026-03-14"
-output: Extracted Catch data from NAFO
+output: html_document
 ---
 
   Extraction of Catch data from NAFO
@@ -13,15 +13,13 @@ Also for background on fisheries management see these documents:
 https://www.dfo-mpo.gc.ca/oceans/publications/scotian-atlas-ecossais/index-eng.html#hake
 
 ```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/ESS_restructured")
-#knitr::opts_knit$set(root.dir = "~/R/FISHMIP/NEW ESS/Eastern-Scotian-Shelf-Model")
+knitr::opts_knit$set(root.dir = here::here())   # portable project root (was a hardcoded path)
 
 ```
 
 
 ```{r}
-library(dplyr)
-library(ggplot2)
+library(tidyverse)   # dplyr, ggplot2, tidyr (pivot_longer), readr (read_delim), etc.
 ```
 
 ```{r}
