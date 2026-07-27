@@ -13,6 +13,7 @@ library(tidyverse)
 library(tidyr)
 library(scales)
 library(patchwork)
+library(ggrepel)
 
 ```
 
@@ -55,7 +56,7 @@ PHASE_POST <- "1993-2025 (Unconstrained Period)"    # FIX #3: explicit en-dash u
 # 4. LONG PHASE DATA
 # ─────────────────────────────────────────────
 long_df_phase <- biomass_wide %>%
-  filter(between(YEAR, 1970, 2025)) %>%
+  filter(between(YEAR, 1978, 2025)) %>%
   mutate(Phase = factor(
     if_else(YEAR <= 1992, PHASE_REF, PHASE_POST),
     levels = c(PHASE_REF, PHASE_POST)
