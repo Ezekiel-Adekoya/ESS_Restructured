@@ -396,8 +396,13 @@ ggsave(paste0(save_dir, "indicator_model_skill.jpeg"), p_sk, width = 14, height 
 p_sk
 ```
 
-
-```{r}
-
+```{r save-manuscript-figures}
+# Copy this notebook's MANUSCRIPT figures into the version-controlled ./figures folder for
+# transparency. (The .jpeg in Ess_Output are gitignored regenerable working outputs; the
+# manuscript figures are tracked here so the exact figures in the paper live in the repo.)
+dir.create("figures", showWarnings = FALSE)
+invisible(file.copy(paste0(save_dir, c("indicator_mean_weight.jpeg",   # Fig 5: mean weight
+                                       "indicator_model_skill.jpeg")), # Fig 7: model skill
+                    "figures/", overwrite = TRUE))
 ```
 

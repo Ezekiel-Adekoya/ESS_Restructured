@@ -19,7 +19,9 @@ Rplots.pdf
 # local archive of dead-end / exploratory scripts (kept off the repo)
 /_archive/
 
-# regenerable output figures + summaries (the calibration/scenario scripts remake these)
+# regenerable working figures + summaries in Ess_Output (scripts remake these).
+# NOTE: the MANUSCRIPT figures are ALSO written to ./figures, which IS version-controlled
+# (see the `save-manuscript-figures` chunks in 03/04) so the exact paper figures live in the repo.
 Ess_Output/*.jpeg
 Ess_Output/*.pdf
 Ess_Output/*.csv

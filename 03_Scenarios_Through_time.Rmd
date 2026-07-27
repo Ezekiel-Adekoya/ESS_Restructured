@@ -1197,12 +1197,14 @@ spectra_plot <- ggplot(time_series_ss, aes(x = w, y = sim_meanN, colour = scen, 
   geom_point(data = mean_biomass_size_spectra_post, aes(x = weightclass, y = mean_nbiomass),
              inherit.aes = FALSE, size = 1.8, shape = 23, fill = "black", colour = "black") +
   scale_y_log10() +
-  scale_x_log10() +
+  scale_x_log10(limits = c(comm_win$wlo, comm_win$whi),           # aligned x-axis (see panel b)
+                breaks = c(1, 10, 100, 1000, 10000),
+                labels = c("1", "10", "100", "1000", "10000")) +
   scale_colour_manual(values = linecolours) +
   scale_fill_manual(values = linecolours) +
   labs(x = "Size (g)", y = "Normalized biomass density") +
-  annotate("text",x = x_limits[1] * 0.8, y = y_limits[2] * 0.95,
-           label = "(a)",hjust = 0, vjust = 1.2, fontface = "bold", size = 6) +
+  annotate("text", x = -Inf, y = Inf, label = "(a)",
+           hjust = -0.5, vjust = 1.5, fontface = "bold", size = 6) +
   theme_bw() +
   theme(
     text = element_text(size = 12, family = "Arial"),
@@ -1262,10 +1264,12 @@ sf2 <- ss_c_ref %>%left_join(ss_c_2, by = "w", suffix = c(".ref", ".scen2")) %>%
 combined_data <- bind_rows(sf1, sf2)
 
 # -----------------------------
-# 5b. OBSERVED symmetric relative difference (post-1985 vs pre-1986 survey spectra).
-#     Same (post - ref)/(post + ref) form as the model curves; the kg/g units cancel in the
-#     ratio, so it is directly comparable. The real world had INCREASING seals, so this
-#     observed shift is the empirical analogue of the FACTUAL (red) curve.
+# 5b. OBSERVED symmetric relative difference, computed the SAME WAY as the model curves above:
+#     (recent - reference)/(recent + reference), with the SAME periods as the model
+#     (reference = 1978-1985, recent = 2015-2024; the survey starts in 1978 so `Year < 1986`
+#     is the 1978-1985 reference). Units cancel in the ratio, so it is directly comparable.
+#     The real world had INCREASING seals, so this observed shift is the empirical analogue of
+#     the FACTUAL (red) curve.
 # -----------------------------
 obs_reldiff <- full_join(mean_biomass_size_spectra_ref, mean_biomass_size_spectra_post,
                          by = "weightclass", suffix = c(".ref", ".post")) |>
@@ -1310,22 +1314,24 @@ Relative_trophic_plot <-  ggplot(combined_data, aes(x = w, y = rel_diff, colour 
   geom_ribbon(data = rd_env, aes(x = w, ymin = lo, ymax = hi, fill = scenario),
               inherit.aes = FALSE, alpha = 0.15, colour = NA) +
   scale_fill_manual(values = linecolours, guide = "none") +
-  geom_line(linewidth = 1.0) + labs(x = "Weight (g)", y = "Symmetric relative difference") +
-  scale_x_log10(  breaks = c(1e-1, 1e2, 1e5),labels = c("**1e-1**", "**10e+2**", "**1e+5**")) +
+  geom_line(linewidth = 1.0) + labs(x = "Size (g)", y = "Symmetric relative difference") +
+  scale_x_log10(limits = c(comm_win$wlo, comm_win$whi),           # SAME x-axis as panel (a)
+                breaks = c(1, 10, 100, 1000, 10000),
+                labels = c("1", "10", "100", "1000", "10000")) +
   scale_color_manual(values = linecolours) +
   # Observed symmetric relative difference (survey post vs reference). Defined in the figure
   # caption rather than the legend; filled diamond to match the observed points in panel (a).
   geom_point(data = obs_reldiff, aes(x = weightclass, y = rel_diff),
              inherit.aes = FALSE, size = 2.0, shape = 23, fill = "black", colour = "black") +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "darkgrey", linewidth = 0.75) +
-  annotate( "text", x = min(combined_data$w) * 0.2, y = max(y_limits) * 0.95,label = "(b)",
-    hjust = 0, vjust = 1,fontface = "bold",size = 6) +
+  annotate( "text", x = -Inf, y = Inf, label = "(b)",
+    hjust = -0.5, vjust = 1.5, fontface = "bold", size = 6) +
   theme_bw() +
   theme(
     text = element_text(size = 12, face = "bold"),
     axis.title = element_text(size = 12, face = "bold"),
     axis.text.y = element_text(size = 10, face = "bold"),
-    axis.text.x = element_markdown(size = 10),  # <- bold x-axis labels
+    axis.text.x = element_text(size = 12, face = "bold"),  # match panel (a)
     legend.title = element_blank(),
     legend.text = element_text(size = 10, face = "bold"),
     legend.position = "bottom",
@@ -1409,8 +1415,14 @@ drift_plot
 
 ```
 
-
-```{r}
-
+```{r save-manuscript-figures}
+# Copy this notebook's MANUSCRIPT figures into the version-controlled ./figures folder for
+# transparency. (The .jpeg in Ess_Output are gitignored regenerable working outputs; the
+# manuscript figures are tracked here so the exact figures in the paper live in the repo.)
+dir.create("figures", showWarnings = FALSE)
+invisible(file.copy(paste0(save_dir, c("biomass_plot.jpeg",   # Fig 4: biomass through time
+                                       "yield_plot.jpeg",     # catch through time
+                                       "spectra_plot.jpeg")), # Fig 6: community size spectrum
+                    "figures/", overwrite = TRUE))
 ```
 
