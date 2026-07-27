@@ -46,10 +46,82 @@ biomass_ts <- readRDS("Ess_data/biomass_ts.RDS")
 sp    <- species_params(params)$species
 cl    <- species_params(params)$biomass_cutoff;     cl[is.na(cl)] <- 0    # lower survey cutoff
 ch    <- species_params(params)$biomass_cutoffHigh; ch[is.na(ch)] <- Inf  # upper survey cutoff
+wm    <- species_params(params)$w_mat                                     # maturation weight (g)
 w     <- params@w; dw <- params@dw
 n_sims <- length(sims_factual)
 cat(sprintf("Ensemble size: %d factual, %d counterfactual paired members\n",
             length(sims_factual), length(sims_counter)))
+```
+
+## Consistently-sampled size window per species (fixed, for a robust mean-weight comparison)
+
+```{r obs-size-window}
+# Survey COMMON_NAME -> mizer species; per-species allometry, cutoffs, maturation weight.
+species_code_lookup <- c(
+  "COD(ATLANTIC)"="Atlantic Cod","HADDOCK"="Haddock","WHITE HAKE"="White Hake",
+  "SILVER HAKE"="Silver Hake","POLLOCK"="Pollock","REDFISH UNSEPARATED"="Redfish Unseparated",
+  "AMERICAN PLAICE"="American Plaice","YELLOWTAIL FLOUNDER"="Yellowtail Flounder",
+  "SPINY DOGFISH"="Spiny Dogfish","HALIBUT(ATLANTIC)"="Atlantic Halibut",
+  "SQUIRREL OR RED HAKE"="Red Hake","MONKFISH,GOOSEFISH,ANGLER"="Monkfish",
+  "NORTHERN SAND LANCE"="Sand Lance","WITCH FLOUNDER"="Witch Flounder",
+  "HERRING(ATLANTIC)"="Atlantic Herring","THORNY SKATE"="Thorny Skate",
+  "WINTER SKATE"="Winter Skate","LONGHORN SCULPIN"="Longhorn Sculpin","CAPELIN"="Capelin")
+
+ab_obs <- tibble(Species = sp, a = species_params(params)$a, b = species_params(params)$b,
+                 cl = cl, ch = ch, wmat = wm)
+
+# ============================================================================================
+# CONSISTENTLY-SAMPLED SIZE WINDOW  (the ">= 75%" rule)
+# --------------------------------------------------------------------------------------------
+# WHAT the 75% is:
+#   A size class = a 2-cm length bin. A bin is "consistently sampled" for a species if the
+#   survey caught that species in that bin in AT LEAST 75% of survey years (>= 36 of 47 yr).
+#   Each species' analysis window is the full span [min, max] of its consistently-sampled bins.
+#
+# WHAT it is used for:
+#   It defines the size range over which the size-structure indicator (mean individual weight,
+#   below) is computed and compared between the MODEL and the SURVEY. Both the modelled and the
+#   observed mean weight are restricted to this identical, species-specific window.
+#
+# WHY 75% (and why a fixed window, not a moving one):
+#   The bottom-trawl survey does NOT sample all sizes equally every year: it under-catches the
+#   smallest fish (gear selectivity) and, especially for collapsed stocks, the largest fish
+#   (availability), and which extreme sizes appear varies year to year. Restricting to bins
+#   present in >= 75% of years therefore (a) keeps only the sizes the survey samples reliably,
+#   (b) trims BOTH sporadically-caught extremes (recruit pulses at the small end, rare large
+#   fish at the large end) so neither dominates the mean, and (c) uses ONE FIXED window per
+#   species (not re-derived each year), so it adds no year-to-year window noise and is NOT
+#   circular — it is never re-fit per year to force the model onto the data.
+#   75% is a single uniform threshold for all species; internal gaps are tolerated (model and
+#   observed use the same span). The 3 sparsely-sampled species with no bin reaching 75%
+#   (Atlantic Halibut, Capelin, Winter Skate) fall back to the fixed gear cutoffs cl/ch.
+# ============================================================================================
+occ <- read.csv("Ess_data/LF_Biomass_Abund.csv") %>%
+  mutate(strat_num = suppressWarnings(as.numeric(as.character(STRAT)))) %>%
+  filter(!is.na(strat_num), strat_num >= 443, strat_num <= 466,
+         YEAR >= 1978, YEAR <= 2024, Abundance_Strata > 0) %>%
+  mutate(Species   = species_code_lookup[COMMON_NAME],
+         length_cm = ifelse(COMMON_NAME == "HERRING(ATLANTIC)", FLEN / 10, FLEN)) %>%
+  filter(!is.na(Species)) %>%
+  mutate(bin = floor(length_cm / 2) * 2)
+nyr <- n_distinct(occ$YEAR)
+win_tbl <- occ %>%
+  group_by(Species, bin) %>% summarise(yrs = n_distinct(YEAR), .groups = "drop") %>%
+  mutate(frac = yrs / nyr) %>%
+  group_by(Species) %>%
+  summarise(                                     # full span at >=75% occupancy (uniform)
+    thr_used = if (any(frac >= 0.75)) "75%" else "none",
+    Lmin = { b <- bin[frac >= 0.75]; if (length(b)) min(b)     else NA_real_ },
+    Lmax = { b <- bin[frac >= 0.75]; if (length(b)) max(b) + 2 else NA_real_ },
+    .groups = "drop") %>%
+  left_join(ab_obs %>% select(Species, a, b), by = "Species") %>%
+  mutate(wlo = a * Lmin^b, whi = a * Lmax^b)
+
+# per-species weight bounds in sp order, falling back to the fixed cl/ch if a species has no
+# consistently-sampled window even at 75%.
+wlo <- setNames(win_tbl$wlo, win_tbl$Species)[sp]; wlo[is.na(wlo)] <- cl[is.na(wlo)]
+whi <- setNames(win_tbl$whi, win_tbl$Species)[sp]; whi[is.na(whi)] <- ch[is.na(whi)]
+print(win_tbl %>% transmute(Species, thr_used, Lmin, Lmax, wlo = round(wlo), whi = round(whi)))
 ```
 
 # Read abundance by species
@@ -67,21 +139,20 @@ mean_weight_ts <- biomass_ts %>%
 ```
 
 
-## Per-sim indicators (biomass, numbers, mean weight) above the survey cutoff
+## Per-sim mean individual weight over each species' consistently-sampled size window
 
 ```{r indicator-helper}
-# For one MizerSim: per species & year, biomass and numbers WITHIN that species'
-# survey size window [biomass_cutoff, biomass_cutoffHigh] (comparable to the survey,
-# which misses both the smallest AND the largest fish), mean individual weight =
-# biomass / numbers (g). The UPPER cutoff is essential: without it a collapsed stock's
-# few huge old survivors inflate mean weight far above the survey (cod 2024: 23 kg
-# lower-only vs ~23 g within-window). Returns long data.frame.
+# For one MizerSim: per species & year, mean individual weight (g) = biomass / numbers,
+# computed over that species' FIXED consistently-sampled window [wlo, whi] (the >=90%-of-years
+# size classes from above). The fixed window trims both the recruit-pulse small end and the
+# rare-giant large end, so neither extreme dominates the mean.
 sim_indicators <- function(sim) {
   st <- as.integer(dimnames(sim@n)[[1]])
+  wB <- w * dw
   do.call(rbind, lapply(seq_along(sp), function(j) {
-    idx <- w >= cl[j] & w <= ch[j]
-    B <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3, (w * dw)[idx], "*"))  # g
-    N <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3,  dw[idx],      "*"))  # numbers
+    idx <- w >= wlo[j] & w <= whi[j]                                    # fixed survey window
+    B <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3, wB[idx], "*")) # g
+    N <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3, dw[idx], "*")) # numbers
     data.frame(Species = sp[j], Year = st, Biomass = B, Number = N,
                MeanWeight = B / N)
   }))
@@ -101,62 +172,85 @@ df_all <- bind_rows(
 ```
 
 ```{r}
-# ── READ & PREPARE OBSERVED MEAN WEIGHT ──────────────────────────────────────
-abundance_obs <- read.csv("Ess_data/abundance_obs.csv")
-
-# Match Species factor levels to biomass_ts so the join works cleanly
-abundance_long <- abundance_obs %>%
+# ── OBSERVED mean individual weight over each species' FIXED consistently-sampled window
+#    [wlo, whi] (the >=90%-of-years size classes). Built from the length-frequency survey
+#    data (LF_Biomass_Abund.csv). species_code_lookup / ab_obs / win_tbl are defined above.
+# ─────────────────────────────────────────────────────────────────────────────
+mean_weight_ts <- read.csv("Ess_data/LF_Biomass_Abund.csv") %>%
+  mutate(strat_num = suppressWarnings(as.numeric(as.character(STRAT)))) %>%
+  filter(!is.na(strat_num), strat_num >= 443, strat_num <= 466,
+         YEAR >= 1978, YEAR <= 2024) %>%
+  mutate(Species   = species_code_lookup[COMMON_NAME],
+         length_cm = ifelse(COMMON_NAME == "HERRING(ATLANTIC)", FLEN / 10, FLEN)) %>%
+  filter(!is.na(Species)) %>%
+  left_join(ab_obs, by = "Species") %>%
+  left_join(win_tbl %>% select(Species, wlo, whi), by = "Species") %>%   # fixed window
+  mutate(w = a * length_cm^b, Bg = Biomass_Strata_KG * 1e3,
+         flo = ifelse(is.na(wlo), cl, wlo),
+         fhi = ifelse(is.na(whi), ch, whi)) %>%
+  filter(w >= flo, w <= fhi) %>%   # SAME fixed window as the model
+  group_by(Year = YEAR, Species) %>%
+  summarise(Btot = sum(Bg,              na.rm = TRUE),
+            Ntot = sum(Abundance_Strata, na.rm = TRUE),
+            .groups = "drop") %>%
+  mutate(MeanWeight = Btot / Ntot) %>%
+  filter(is.finite(MeanWeight), MeanWeight > 0) %>%
   mutate(Species = factor(Species, levels = levels(biomass_ts$Species)))
-
-# Join biomass and abundance, compute observed mean individual weight (g)
-mean_weight_ts <- biomass_ts %>%
-  left_join(abundance_long, by = c("Year", "Species")) %>%
-  mutate(MeanWeight = Biomass / Abundance) %>%        # Biomass in g, Abundance in numbers
-  filter(!is.na(MeanWeight), MeanWeight > 0,          # drop missing / zero
-         is.finite(MeanWeight))                        # drop Inf from zero abundance
 ```
 
-## Indicator 1 — mean individual weight per species, factual vs counterfactual
+## Indicator 1 — mean individual weight over consistently-sampled sizes, factual vs counterfactual
 
 ```{r mean-weight}
 # Ensemble median + 10-90% band (the band is the ensemble spread across randomised
 # food webs, NOT a formal CI). Factual vs counterfactual overlaid per species.
 # ── SUMMARISE ENSEMBLE ────────────────────────────────────────────────────────
 mw <- df_all %>%
+  filter(is.finite(MeanWeight), MeanWeight > 0) %>%
   group_by(scen, Species, Year) %>%
-  summarise(med = median(MeanWeight),
-            lo  = quantile(MeanWeight, 0.10),
-            hi  = quantile(MeanWeight, 0.90), .groups = "drop") %>%
+  summarise(med = median(MeanWeight, na.rm = TRUE),
+            lo  = quantile(MeanWeight, 0.10, na.rm = TRUE),
+            hi  = quantile(MeanWeight, 0.90, na.rm = TRUE), .groups = "drop") %>%
   mutate(Species = factor(Species, levels = levels(mean_weight_ts$Species))) %>%
   arrange(Species, Year)
 
-# ── PLOT ──────────────────────────────────────────────────────────────────────
-p_mw <- ggplot(mw, aes(Year, med, colour = scen, fill = scen)) +
+# ── PLOT (manuscript Fig 5 style) ─────────────────────────────────────────────
+# Reference period (<= 1986) drawn in grey — the counterfactual (seals held at 1978)
+# is the "no seal change" reference condition; scenarios are shown coloured only for
+# the projection (>= 1986), with a dashed divider between the two.
+divider <- 1986
+mw_ref  <- mw %>% filter(scen == "Counterfactual (seals constant)", Year <= divider)
+mw_proj <- mw %>% filter(Year >= divider)
 
-  # Ensemble spread (10–90% band)
-  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.20, colour = NA) +
-  # Ensemble median lines
-  geom_line(linewidth = 0.6) +
-  # Observed mean weight — black points, separate data layer
-  geom_point(
-    data        = mean_weight_ts,          # already filtered above
-    aes(x = Year, y = MeanWeight),
-    inherit.aes = FALSE,
-    colour      = "black",
-    size =0.8) +
+p_mw <- ggplot() +
+  # dashed reference / projection divider
+  geom_vline(xintercept = divider, linetype = "dashed", colour = "grey50", linewidth = 0.4) +
+  # reference period — grey band + line
+  geom_ribbon(data = mw_ref, aes(Year, ymin = lo, ymax = hi,
+              fill = "Reference period (1978–1985)"), alpha = 0.40) +
+  geom_line(data = mw_ref, aes(Year, med,
+            colour = "Reference period (1978–1985)"), linewidth = 0.6) +
+  # projection period — coloured scenarios (10–90% ensemble band + median)
+  geom_ribbon(data = mw_proj, aes(Year, ymin = lo, ymax = hi, fill = scen),
+              alpha = 0.20, colour = NA) +
+  geom_line(data = mw_proj, aes(Year, med, colour = scen), linewidth = 0.6) +
+  # Observed mean weight (survey, same fixed window) — black points
+  geom_point(data = mean_weight_ts, aes(x = Year, y = MeanWeight),
+             colour = "black", size = 0.8) +
   facet_wrap(~ Species, scales = "free_y") +
-  scale_colour_manual(
-    values = c("Factual (seal increase)"         = "firebrick",
-               "Counterfactual (seals constant)" = "steelblue")) +
-  scale_fill_manual(
-    values = c("Factual (seal increase)"         = "firebrick",
-               "Counterfactual (seals constant)" = "steelblue") ) +
+  scale_colour_manual(name = NULL, values = c(
+    "Reference period (1978–1985)" = "grey40",
+    "Factual (seal increase)"           = "firebrick",
+    "Counterfactual (seals constant)"   = "steelblue")) +
+  scale_fill_manual(name = NULL, values = c(
+    "Reference period (1978–1985)" = "grey70",
+    "Factual (seal increase)"           = "firebrick",
+    "Counterfactual (seals constant)"   = "steelblue")) +
   theme_bw(base_size = 9) +
-  labs(x = "Year", y = "Mean individual weight (g)") +
+  labs(x = "Year", y = "Mean individual weight (g), consistently-sampled sizes") +
   theme(
     text             = element_text(size = 12, face = "bold"),
     axis.title       = element_text(size = 12, face = "bold"),
-    axis.text.y      = element_text(size = 12, face = "bold"),
+    axis.text.y      = element_text(size = 10, face = "bold"),
     axis.text.x      = element_text(size = 12, face = "bold"),
     legend.title     = element_blank(),
     strip.text      = element_text(face = "bold", size = 12),
@@ -170,11 +264,16 @@ p_mw
 ggsave(paste0(save_dir, "indicator_mean_weight.jpeg"),
  p_mw, width = 14, height = 10, dpi = 200)
 
-# INTERPRETATION (comment): where the counterfactual (blue) sits above the factual (red),
-# removing the seal increase leaves larger mean body size (less size-selective seal
-# predation + recovered large fish). Bands = 10-90% of ensemble webs.
+# INTERPRETATION (comment): mean individual weight over each species' consistently-sampled
+# size window (2-cm classes present in >=90% of survey years, contiguous core). The window is
+# FIXED (not re-derived per year), so it adds no year-to-year window noise and is not circular,
+# and it trims both the recruit-pulse small end and rare-giant large end so neither dominates.
+# Where the counterfactual (blue) sits above the factual (red), removing the seal increase
+# leaves a larger-bodied size structure. Bands = 10-90% of ensemble webs.
 ```
 
+<!-- prop>w_mat and the per-year [q01,q99] companion figure were removed: mean weight over the
+fixed >=90%-consistently-sampled window (above) is now the single size-structure indicator. -->
 
 ## Model skill assessment (biomass, catch, mean weight vs observed)
 
