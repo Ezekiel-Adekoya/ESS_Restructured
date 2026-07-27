@@ -61,5 +61,14 @@ inputs (e.g. `Ess_data/seal_gear_params.csv`, survey CSVs) are produced by the 0
 
 ## Requirements
 
-R with `mizer`, `mizerExperimental`, `tidyverse`, `optimParallel`, `patchwork`,
-`ggpubr`. Calibration and the scenario ensemble use parallel cores.
+Built and run with **R 4.5.2** and the following key packages:
+
+| Package | Version |
+|---|---|
+| `mizer` | **2.5.3** |
+| `mizerExperimental` | **2.5.3.9000** (development build from GitHub: `sizespectrum/mizerExperimental`) |
+
+`mizerExperimental` is a development version (the `.9000` suffix), so install it from GitHub
+to match, e.g. `remotes::install_github("sizespectrum/mizerExperimental")`; `mizer` 2.5.3 is on
+CRAN. Also requires `tidyverse`, `optimParallel`, `patchwork`, and `ggpubr`. Calibration and
+the scenario ensemble use parallel cores.
