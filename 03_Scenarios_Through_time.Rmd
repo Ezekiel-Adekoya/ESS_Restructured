@@ -255,8 +255,8 @@ biomass_ts <- readRDS("Ess_data/biomass_ts.RDS")
 biomass_ts <- biomass_ts |> rename(Biomass_Obs = Biomass)
 
 # Extract biomass — convert to plain data frame immediately
-sim_bio  <- lapply(sims_counter, function(x) as.data.frame(getBiomass(x, min_w = species_params(params)$biomass_cutoff)))
-sim_bio2 <- lapply(sims_factual, function(x) as.data.frame(getBiomass(x, min_w = species_params(params)$biomass_cutoff)))
+sim_bio  <- lapply(sims_counter, function(x) { m <- reshape2::melt(getBiomass(x, min_w = species_params(params)$biomass_cutoff), varnames = c("time","Species"), value.name = "value"); m$time <- as.numeric(as.character(m$time)); m })
+sim_bio2 <- lapply(sims_factual,  function(x) { m <- reshape2::melt(getBiomass(x, min_w = species_params(params)$biomass_cutoff), varnames = c("time","Species"), value.name = "value"); m$time <- as.numeric(as.character(m$time)); m })
 
 # Stack all sims and add sim index
 df_sim_bio  <- do.call(rbind, sim_bio)
@@ -876,13 +876,13 @@ spectra_scen2 <- plotSpectra(sims_factual[[1]], return_data = TRUE, time_range =
 
 # Join Scenario 1 spectra with reference and calculate symmetric relative difference
 sf1 <- left_join(spectra_reference, spectra_scen1, by = c("w", "Legend")) |>
-  mutate(rel_diff = (`Biomass density.y` - `Biomass density.x`) /
-                    (`Biomass density.x` + `Biomass density.y`))
+  mutate(rel_diff = (`value.y` - `value.x`) /
+                    (`value.x` + `value.y`))
 
 # Join Scenario 2 spectra with reference and calculate symmetric relative difference
 sf2 <- left_join(spectra_reference, spectra_scen2, by = c("w", "Legend")) |>
-  mutate(rel_diff = (`Biomass density.y` - `Biomass density.x`) /
-                    (`Biomass density.x` + `Biomass density.y`))
+  mutate(rel_diff = (`value.y` - `value.x`) /
+                    (`value.x` + `value.y`))
 
 # Add scenario labels for plotting
 
@@ -989,6 +989,31 @@ Data Prep
 ```{r}
 stat <- read.csv("Ess_data/LF_Biomass_Abund.csv")
 
+# Survey COMMON_NAME -> mizer species lookup (defined in 01; needed here for bio_size)
+species_code_lookup <- c(
+  "COD(ATLANTIC)"             = "Atlantic Cod",
+  "HADDOCK"                   = "Haddock",
+  "WHITE HAKE"                = "White Hake",
+  "SILVER HAKE"               = "Silver Hake",
+  "POLLOCK"                   = "Pollock",
+  "REDFISH UNSEPARATED"       = "Redfish Unseparated",
+  "AMERICAN PLAICE"           = "American Plaice",
+  "YELLOWTAIL FLOUNDER"       = "Yellowtail Flounder",
+  "SPINY DOGFISH"             = "Spiny Dogfish",
+  "HALIBUT(ATLANTIC)"         = "Atlantic Halibut",
+  "SQUIRREL OR RED HAKE"      = "Red Hake",
+  "MONKFISH,GOOSEFISH,ANGLER" = "Monkfish",
+  "NORTHERN SAND LANCE"       = "Sand Lance",
+  "WITCH FLOUNDER"            = "Witch Flounder",
+  "HERRING(ATLANTIC)"         = "Atlantic Herring",
+  "THORNY SKATE"              = "Thorny Skate",
+  "WINTER SKATE"              = "Winter Skate",
+  "LONGHORN SCULPIN"          = "Longhorn Sculpin",
+  "CAPELIN"                   = "Capelin")
+
+# species vector (defined later at ~1309 in the original; needed here for ab_lookup)
+sp <- species_params(params)$species
+
 # Full-range bio_size (1978–2024), built from stat
 bio_size <- stat |>
   mutate(strat_num = suppressWarnings(as.numeric(as.character(STRAT)))) |>
@@ -1030,7 +1055,9 @@ bio_size$widths <- cut(bio_size$w, breaks = breaks)
 levels(bio_size$widths) <- widths
 bio_size$widths <- round(as.numeric(as.character(bio_size$widths)), 2)
 
-bio_size$norm_biomass <- bio_size$Biomass / bio_size$widths
+# Biomass_Strata_KG is in kilograms; the model (and 01's biomass_obs) is in grams.
+# Convert kg -> g (* 1e3) so the observed size-spectrum overlay is on the same units as the model.
+bio_size$norm_biomass <- bio_size$Biomass * 1e3 / bio_size$widths
 
 ## write.csv(bio_size, "Ess_data/bio_size.csv", row.names = FALSE)
 
@@ -1058,9 +1085,9 @@ mean_biomass_size_spectra_post <- biomass_size_spectra  %>%
 
 # create function to calculate *community* size spectrum from a time period.
 sizespec <- function(sim, time_range) {
-  plotSpectra(sim, power = 0, resource = FALSE, return_data = TRUE, time_range = time_range) |>
+  plotSpectra(sim, power = 1, resource = FALSE, return_data = TRUE, time_range = time_range) |>
     group_by(w) |>
-    summarise(value = sum(`Number density [1/g]`), .groups = "drop") |>
+    summarise(value = sum(value), .groups = "drop") |>
     filter(w >= 0.001)
 }
 
@@ -1147,6 +1174,12 @@ x_limits <- range(time_series_ss$w, na.rm = TRUE)
 # Create the spectra plot
 spectra_plot <- ggplot(time_series_ss, aes(x = w, y = sim_meanN, colour = scen, fill = scen)) +
   geom_ribbon(aes(ymin = sim_lowerN, ymax = sim_upperN), alpha = 0.1, colour = NA, show.legend = FALSE) +
+  # Reference envelope is very narrow (webs barely diverge by 1978-1985, median hi/lo ~1.65x),
+  # so give it a faint fill + dotted outline to make the band discernible on the log axis.
+  geom_ribbon(data = subset(time_series_ss, scen == "Reference period"),
+              aes(ymin = sim_lowerN, ymax = sim_upperN),
+              fill = "darkgray", colour = "grey40", linetype = "dotted",
+              linewidth = 0.3, alpha = 0.25, show.legend = FALSE) +
   geom_line(linewidth = 1.2, alpha = 0.8) +
   geom_point(data = mean_biomass_size_spectra_ref,  aes(x = weightclass, y = mean_nbiomass),
              inherit.aes = FALSE, size = 1.8, shape = 23, fill = "white", colour = "black") +
@@ -1174,8 +1207,6 @@ spectra_plot <- ggplot(time_series_ss, aes(x = w, y = sim_meanN, colour = scen, 
 spectra_plot
 
 ```
-
-<<<<<<< HEAD
 
 Relative difference spectra of Sceanrio 1 and 2 with reference
 
@@ -1220,6 +1251,18 @@ sf2 <- ss_c_ref %>%left_join(ss_c_2, by = "w", suffix = c(".ref", ".scen2")) %>%
 combined_data <- bind_rows(sf1, sf2)
 
 # -----------------------------
+# 5b. OBSERVED symmetric relative difference (post-1985 vs pre-1986 survey spectra).
+#     Same (post - ref)/(post + ref) form as the model curves; the kg/g units cancel in the
+#     ratio, so it is directly comparable. The real world had INCREASING seals, so this
+#     observed shift is the empirical analogue of the FACTUAL (red) curve.
+# -----------------------------
+obs_reldiff <- full_join(mean_biomass_size_spectra_ref, mean_biomass_size_spectra_post,
+                         by = "weightclass", suffix = c(".ref", ".post")) |>
+  mutate(rel_diff = (mean_nbiomass.post - mean_nbiomass.ref) /
+                    (mean_nbiomass.post + mean_nbiomass.ref)) |>
+  filter(is.finite(rel_diff))
+
+# -----------------------------
 # 6. Define manual colors for the scenarios
 # -----------------------------
 linecolours <- c(
@@ -1227,14 +1270,42 @@ linecolours <- c(
 "Factual (seals increasing)" = "#D73027")
 
 # -----------------------------
+# 6b. Ensemble envelope for the relative-difference curves.
+#     Compute rel_diff PER food web (paired within web: each web's own 2015-24 spectrum vs
+#     its OWN 1978-85 reference), then take the 10-90% spread across the 1000 webs at each
+#     size. 10-90% matches the manuscript ribbon convention (design note above).
+# -----------------------------
+rd_env <- bind_rows(
+  df_ssdf_ref |> rename(ref = value) |>
+    inner_join(df_ssdf_1 |> rename(s = value), by = c("w", "sim")) |>
+    mutate(rel_diff = (s - ref) / (s + ref),
+           scenario = "Counterfactual (seals constant)"),
+  df_ssdf_ref |> rename(ref = value) |>
+    inner_join(df_ssdf_2 |> rename(s = value), by = c("w", "sim")) |>
+    mutate(rel_diff = (s - ref) / (s + ref),
+           scenario = "Factual (seals increasing)")
+) |>
+  group_by(scenario, w) |>
+  summarise(lo = quantile(rel_diff, 0.1, na.rm = TRUE),
+            hi = quantile(rel_diff, 0.9, na.rm = TRUE), .groups = "drop")
+
+# -----------------------------
 # 7. Plot
 # Define y-axis limits for annotation (you can also use ggplot_build to get them dynamically)
-y_limits <- range(combined_data$rel_diff, na.rm = TRUE)
+y_limits <- range(c(combined_data$rel_diff, rd_env$lo, rd_env$hi), na.rm = TRUE)
 
 Relative_trophic_plot <-  ggplot(combined_data, aes(x = w, y = rel_diff, colour = scenario)) +
+  # 10-90% ensemble envelope (per-web paired rel_diff), drawn under the median lines
+  geom_ribbon(data = rd_env, aes(x = w, ymin = lo, ymax = hi, fill = scenario),
+              inherit.aes = FALSE, alpha = 0.15, colour = NA) +
+  scale_fill_manual(values = linecolours, guide = "none") +
   geom_line(linewidth = 1.0) + labs(x = "Weight (g)", y = "Symmetric relative difference") +
   scale_x_log10(  breaks = c(1e-1, 1e2, 1e5),labels = c("**1e-1**", "**10e+2**", "**1e+5**")) +
   scale_color_manual(values = linecolours) +
+  # Observed shift (survey post - reference) overlaid as points for validation
+  geom_point(data = obs_reldiff, aes(x = weightclass, y = rel_diff, shape = "Observed (post − ref)"),
+             inherit.aes = FALSE, size = 2.6, fill = "black", colour = "black") +
+  scale_shape_manual(name = NULL, values = c("Observed (post − ref)" = 21)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "darkgrey", linewidth = 0.75) +
   annotate( "text", x = min(combined_data$w) * 0.2, y = max(y_limits) * 0.95,label = "(b)",
     hjust = 0, vjust = 1,fontface = "bold",size = 6) +
@@ -1258,7 +1329,7 @@ spectra = spectra_plot/Relative_trophic_plot #bind plots
 ggsave(filename = paste0(save_dir, "spectra_plot.jpeg"), plot = spectra, width = 11, height = 7.5, units = "in", dpi =400)
 
 ```
-=======
+
 ## Diagnostic (not for manuscript) — baseline reorganization vs the seal signal
 
 Internal triage only, `eval=FALSE` — NOT a paper figure. Held at constant 1978 effort
