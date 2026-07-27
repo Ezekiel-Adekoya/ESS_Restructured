@@ -1034,13 +1034,21 @@ ab_lookup <- tibble(
   a = species_params(params)$a,
   b = species_params(params)$b)
 
-# NOW re-run the weightclass/norm_biomass pipeline on this full-range object
+# COMMUNITY-level consistently-sampled size window: the weight classes the survey samples in
+# >= 75% of years POOLED across all species (a single contiguous range, so the community
+# spectrum stays smooth rather than per-species jagged). Same >= 75% principle as the
+# per-species mean-weight window in 04, applied at the community level here because this is a
+# community aggregate. Restricting BOTH observed and modelled community spectra to it keeps
+# model and observed treated the same way. Single source of truth: Ess_data/make_size_windows.R.
+comm_win <- read.csv("Ess_data/community_size_window.csv")
+
+# Restrict the observed community spectrum to the community-level consistently-sampled window
 bio_size <- bio_size |>
   left_join(ab_lookup, by = "Species") |>
   group_by(Species) |>
   mutate(w = a * length_cm^b) |>
-  filter(!is.na(Biomass)) |>
-  ungroup()   # <-- no Year filter here this time
+  filter(!is.na(Biomass), w >= comm_win$wlo, w <= comm_win$whi) |>   # community window
+  ungroup()
 
 # Log-spaced weight-class bins: breaks, midpoints, and widths must all align (12 bins)
 breaks <- 10^seq(0, 6, 0.5)
@@ -1077,18 +1085,21 @@ mean_biomass_size_spectra_ref <- biomass_size_spectra  %>%
   filter(Year<1986)%>%
   group_by(weightclass) %>% 
   summarise(mean_nbiomass=mean(nbiomass))
-#Observed Post Reference period 1986:2024
-mean_biomass_size_spectra_post <- biomass_size_spectra  %>% 
-  filter(Year>1985)%>%
-  group_by(weightclass) %>% 
+#Observed final decade 2015-2024 (matches the modelled scenario window 2015:2024)
+mean_biomass_size_spectra_post <- biomass_size_spectra  %>%
+  filter(Year>=2015)%>%
+  group_by(weightclass) %>%
   summarise(mean_nbiomass=mean(nbiomass))
 
 # create function to calculate *community* size spectrum from a time period.
+# Restricted to the COMMUNITY-level consistently-sampled window [comm_win$wlo, comm_win$whi]
+# (the same size range as the observed community spectrum), so model and observed span the
+# same sizes without the jaggedness that per-species windows introduce at the community level.
 sizespec <- function(sim, time_range) {
   plotSpectra(sim, power = 1, resource = FALSE, return_data = TRUE, time_range = time_range) |>
+    filter(w >= comm_win$wlo, w <= comm_win$whi) |>   # community window
     group_by(w) |>
-    summarise(value = sum(value), .groups = "drop") |>
-    filter(w >= 0.001)
+    summarise(value = sum(value), .groups = "drop")
 }
 
 
@@ -1302,10 +1313,10 @@ Relative_trophic_plot <-  ggplot(combined_data, aes(x = w, y = rel_diff, colour 
   geom_line(linewidth = 1.0) + labs(x = "Weight (g)", y = "Symmetric relative difference") +
   scale_x_log10(  breaks = c(1e-1, 1e2, 1e5),labels = c("**1e-1**", "**10e+2**", "**1e+5**")) +
   scale_color_manual(values = linecolours) +
-  # Observed shift (survey post - reference) overlaid as points for validation
-  geom_point(data = obs_reldiff, aes(x = weightclass, y = rel_diff, shape = "Observed (post − ref)"),
-             inherit.aes = FALSE, size = 2.6, fill = "black", colour = "black") +
-  scale_shape_manual(name = NULL, values = c("Observed (post − ref)" = 21)) +
+  # Observed symmetric relative difference (survey post vs reference). Defined in the figure
+  # caption rather than the legend; filled diamond to match the observed points in panel (a).
+  geom_point(data = obs_reldiff, aes(x = weightclass, y = rel_diff),
+             inherit.aes = FALSE, size = 2.0, shape = 23, fill = "black", colour = "black") +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "darkgrey", linewidth = 0.75) +
   annotate( "text", x = min(combined_data$w) * 0.2, y = max(y_limits) * 0.95,label = "(b)",
     hjust = 0, vjust = 1,fontface = "bold",size = 6) +

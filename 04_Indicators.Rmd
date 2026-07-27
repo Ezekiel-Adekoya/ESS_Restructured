@@ -95,32 +95,14 @@ ab_obs <- tibble(Species = sp, a = species_params(params)$a, b = species_params(
 #   75% is a single uniform threshold for all species; internal gaps are tolerated (model and
 #   observed use the same span). The 3 sparsely-sampled species with no bin reaching 75%
 #   (Atlantic Halibut, Capelin, Winter Skate) fall back to the fixed gear cutoffs cl/ch.
+#
+# SINGLE SOURCE OF TRUTH: the window is computed once by Ess_data/make_size_windows.R and
+# saved to Ess_data/size_windows.csv, which BOTH 03 (species/community size spectra) and 04
+# (mean weight, here) load — so every size-based model/observed comparison uses the SAME window.
 # ============================================================================================
-occ <- read.csv("Ess_data/LF_Biomass_Abund.csv") %>%
-  mutate(strat_num = suppressWarnings(as.numeric(as.character(STRAT)))) %>%
-  filter(!is.na(strat_num), strat_num >= 443, strat_num <= 466,
-         YEAR >= 1978, YEAR <= 2024, Abundance_Strata > 0) %>%
-  mutate(Species   = species_code_lookup[COMMON_NAME],
-         length_cm = ifelse(COMMON_NAME == "HERRING(ATLANTIC)", FLEN / 10, FLEN)) %>%
-  filter(!is.na(Species)) %>%
-  mutate(bin = floor(length_cm / 2) * 2)
-nyr <- n_distinct(occ$YEAR)
-win_tbl <- occ %>%
-  group_by(Species, bin) %>% summarise(yrs = n_distinct(YEAR), .groups = "drop") %>%
-  mutate(frac = yrs / nyr) %>%
-  group_by(Species) %>%
-  summarise(                                     # full span at >=75% occupancy (uniform)
-    thr_used = if (any(frac >= 0.75)) "75%" else "none",
-    Lmin = { b <- bin[frac >= 0.75]; if (length(b)) min(b)     else NA_real_ },
-    Lmax = { b <- bin[frac >= 0.75]; if (length(b)) max(b) + 2 else NA_real_ },
-    .groups = "drop") %>%
-  left_join(ab_obs %>% select(Species, a, b), by = "Species") %>%
-  mutate(wlo = a * Lmin^b, whi = a * Lmax^b)
-
-# per-species weight bounds in sp order, falling back to the fixed cl/ch if a species has no
-# consistently-sampled window even at 75%.
-wlo <- setNames(win_tbl$wlo, win_tbl$Species)[sp]; wlo[is.na(wlo)] <- cl[is.na(wlo)]
-whi <- setNames(win_tbl$whi, win_tbl$Species)[sp]; whi[is.na(whi)] <- ch[is.na(whi)]
+win_tbl <- read.csv("Ess_data/size_windows.csv")            # Species, thr_used, Lmin, Lmax, wlo, whi
+wlo <- setNames(win_tbl$wlo, win_tbl$Species)[sp]
+whi <- setNames(win_tbl$whi, win_tbl$Species)[sp]
 print(win_tbl %>% transmute(Species, thr_used, Lmin, Lmax, wlo = round(wlo), whi = round(whi)))
 ```
 
