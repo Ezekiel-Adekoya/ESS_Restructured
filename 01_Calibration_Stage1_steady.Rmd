@@ -1625,6 +1625,11 @@ Calibration_plot
 ggsave(filename = paste0(save_dir, "Calibration_plot.jpeg"), plot = Calibration_plot,
        width = 11,height = 8.5, units = "in",dpi = 400)
 
+# Copy manuscript Figure 2 (4-panel time-averaged calibration) to the tracked ./figures folder.
+dir.create("figures", showWarnings = FALSE)
+invisible(file.copy(paste0(save_dir, "Calibration_plot.jpeg"),
+                    "figures/figure2_calibration.jpeg", overwrite = TRUE))
+
 Calibration_plot
 ```
 

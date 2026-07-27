@@ -401,8 +401,8 @@ p_sk
 # transparency. (The .jpeg in Ess_Output are gitignored regenerable working outputs; the
 # manuscript figures are tracked here so the exact figures in the paper live in the repo.)
 dir.create("figures", showWarnings = FALSE)
-invisible(file.copy(paste0(save_dir, c("indicator_mean_weight.jpeg",   # Fig 5: mean weight
-                                       "indicator_model_skill.jpeg")), # Fig 7: model skill
-                    "figures/", overwrite = TRUE))
+invisible(Map(function(from, to) file.copy(paste0(save_dir, from), paste0("figures/", to), overwrite = TRUE),
+  c("indicator_mean_weight.jpeg", "indicator_model_skill.jpeg"),
+  c("figure5_mean_weight.jpeg",   "figure7_model_skill.jpeg")))
 ```
 

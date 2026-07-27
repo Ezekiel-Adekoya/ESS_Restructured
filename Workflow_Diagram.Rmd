@@ -167,6 +167,10 @@ svg_code <- export_svg(p)
 # Save as PNG image
 rsvg_png(charToRaw(svg_code), file = "Ess_Output/workflow.png")
 
+# Also write manuscript Figure 1 to the tracked ./figures folder
+dir.create("figures", showWarnings = FALSE)
+rsvg_png(charToRaw(svg_code), file = "figures/figure1_workflow.png")
+
 # Save as PDF (you accidentally labeled it as .jpeg; fixed below)
 #rsvg_pdf(charToRaw(svg_code), file = "Ess_Output/workflow.pdf")
 ```
