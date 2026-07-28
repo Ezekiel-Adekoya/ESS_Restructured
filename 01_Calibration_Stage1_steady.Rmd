@@ -1371,7 +1371,7 @@ diet_long <- diet_compare %>%
                        model_prop = "Model (mizer)",
                        cb_prop    = "Cook & Bundy"))
 
-ggplot(diet_long, aes(x = Prey, y = Predator, fill = prop)) +
+fish_diet_compare <- ggplot(diet_long, aes(x = Prey, y = Predator, fill = prop)) +
   geom_tile(colour = "white", linewidth = 0.3) +
   facet_wrap(~type) +
   scale_fill_distiller(palette = "Blues", direction = 1,
@@ -1383,6 +1383,8 @@ ggplot(diet_long, aes(x = Prey, y = Predator, fill = prop)) +
         axis.text.y  = element_text(size = 7),
         strip.text   = element_text(face = "bold"),
         panel.grid   = element_blank())
+ggsave(paste0(save_dir, "fish_diet_vs_cook_bundy.jpeg"), fish_diet_compare, width = 10, height = 6, dpi = 200)  # Supplementary Fig S5
+fish_diet_compare
 ```
 
 Create size spectrum plots by species with size distribution data from DFO RV Trawl Surveys (q-corrected)
@@ -1693,8 +1695,8 @@ saveRDS(params_steady, "Ess_data/params_stage1_steady.RDS")
 # Copy this notebook's SUPPLEMENTARY figures to the version-controlled figures/supplementary/.
 dir.create("figures/supplementary", recursive = TRUE, showWarnings = FALSE)
 invisible(Map(function(from, to) file.copy(paste0(save_dir, from), paste0("figures/supplementary/", to), overwrite = TRUE),
-  c("heatmap_plot.jpeg", "diet_interaction.jpeg", "seal_diet_vs_bowen.jpeg",
-    "GrowthCurves.jpeg",  "diet_at_size.jpeg",     "size_distributions.jpeg"),
+  c("heatmap_plot.jpeg", "fish_diet_vs_cook_bundy.jpeg", "seal_diet_vs_bowen.jpeg",
+    "GrowthCurves.jpeg",  "diet_at_size.jpeg",           "size_distributions.jpeg"),
   c("figureS4_interaction_matrix.jpeg", "figureS5_fish_diet.jpeg",     "figureS6_seal_diet.jpeg",
     "figureS7_growth_curves.jpeg",      "figureS8_diet_at_size.jpeg",  "figureS9_species_size_spectra.jpeg")))
 ```
