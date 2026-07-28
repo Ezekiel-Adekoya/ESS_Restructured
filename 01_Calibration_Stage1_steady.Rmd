@@ -1178,8 +1178,10 @@ plotBiomass(sim)
 plotSpectra(sim)
 
 # Plot species diet composition by size
-# Shows who eats whom across size classes
-plotDiet(params_steady)
+# Shows who eats whom across size classes  (Supplementary Fig S8)
+diet_at_size <- plotDiet(params_steady)
+ggsave(paste0(save_dir, "diet_at_size.jpeg"), diet_at_size, width = 12, height = 9, dpi = 200)
+diet_at_size
 
 # Plot growth curves for each species
 # - species_panel = TRUE: shows separate panels per species
@@ -1670,12 +1672,14 @@ seal_long <- seal_diet %>%
   pivot_longer(c(model_pct, bowen_pct), names_to = "source", values_to = "pct") %>%
   mutate(source = recode(source, model_pct = "Model (emergent)",
                          bowen_pct = "Bowen & Harrison 1994"))
-ggplot(seal_long, aes(x = source, y = reorder(species, pct), fill = pct)) +
+seal_diet_plot <- ggplot(seal_long, aes(x = source, y = reorder(species, pct), fill = pct)) +
   geom_tile(colour = "white") +
   scale_fill_distiller(palette = "Blues", direction = 1, name = "% diet") +
   labs(title = "Grey seal diet: model emergent vs Bowen & Harrison (1994)",
        x = NULL, y = NULL) +
   theme_minimal(base_size = 9)
+ggsave(paste0(save_dir, "seal_diet_vs_bowen.jpeg"), seal_diet_plot, width = 7, height = 6, dpi = 200)  # Supplementary Fig S6
+seal_diet_plot
 
 ```
 
