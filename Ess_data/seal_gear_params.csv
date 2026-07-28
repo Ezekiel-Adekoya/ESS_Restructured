@@ -1,20 +1,20 @@
 "species","gear","sel_func","w_opt","sigma","catchability"
 "Atlantic Cod","Seals","gaussian_sizeweight",201,0.75,0.1
-"Haddock","Seals","gaussian_sizeweight",150,0.75,0.003
-"Redfish Unseparated","Seals","gaussian_sizeweight",32,0.75,0.015
-"American Plaice","Seals","gaussian_sizeweight",132,0.75,0.015
-"Silver Hake","Seals","gaussian_sizeweight",66,0.75,0.02
+"Haddock","Seals","gaussian_sizeweight",150,0.75,0.1
+"Redfish Unseparated","Seals","gaussian_sizeweight",32,0.75,0.1
+"American Plaice","Seals","gaussian_sizeweight",132,0.75,0.1
+"Silver Hake","Seals","gaussian_sizeweight",66,0.75,0.1
 "Monkfish","Seals","gaussian_sizeweight",150,0.75,0.01
-"White Hake","Seals","gaussian_sizeweight",66,0.75,0.005
+"White Hake","Seals","gaussian_sizeweight",66,0.75,0.1
 "Thorny Skate","Seals","gaussian_sizeweight",150,0.75,0.02
 "Winter Skate","Seals","gaussian_sizeweight",150,0.75,0.02
-"Pollock","Seals","gaussian_sizeweight",150,0.75,0.005
-"Yellowtail Flounder","Seals","gaussian_sizeweight",89,0.75,0.012
-"Witch Flounder","Seals","gaussian_sizeweight",90,0.75,0.005
-"Longhorn Sculpin","Seals","gaussian_sizeweight",50,0.75,0.005
-"Red Hake","Seals","gaussian_sizeweight",50,0.75,0.005
-"Atlantic Herring","Seals","gaussian_sizeweight",50,0.75,0.001
+"Pollock","Seals","gaussian_sizeweight",150,0.75,0.1
+"Yellowtail Flounder","Seals","gaussian_sizeweight",89,0.75,0.1
+"Witch Flounder","Seals","gaussian_sizeweight",90,0.75,0.1
+"Longhorn Sculpin","Seals","gaussian_sizeweight",50,0.75,0.1
+"Red Hake","Seals","gaussian_sizeweight",50,0.75,0.1
+"Atlantic Herring","Seals","gaussian_sizeweight",50,0.75,0.1
 "Sand Lance","Seals","gaussian_sizeweight",15,0.75,0.1
 "Spiny Dogfish","Seals","gaussian_sizeweight",200,0.75,0.01
 "Atlantic Halibut","Seals","gaussian_sizeweight",200,0.75,0
-"Capelin","Seals","gaussian_sizeweight",15,0.75,0.005
+"Capelin","Seals","gaussian_sizeweight",15,0.75,0.1

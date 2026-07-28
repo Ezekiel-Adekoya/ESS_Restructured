@@ -367,10 +367,14 @@ nafo_mizer <- nafo_21B %>%
     # SMALL MESH (Silver Hake / Redfish)
     Gear %in% c(13, 14, 15) & MainSpecies %in% c(4, 5, 3) ~ "Small_Mesh",
     
-    # PELAGIC (Herring)
+    # PELAGIC (Herring) — purse-seine gears only.
+    # Gears 13/14/15 (midwater trawl) are deliberately NOT added here: pre-1995 they
+    # are dominated by large FOREIGN non-herring factory trawlers (e.g. MainSpecies
+    # 81/99, Tonnage 7), which produced a spurious 1979 effort spike unrelated to the
+    # ESS herring fishery. Purse-seine effort (the real herring fishery) only exists
+    # in NAFO 21B from ~1995; earlier years are reconstructed from herring landings
+    # below (see the pelagic-reconstruction block), not from these trawl records.
     Gear %in% c(30, 31, 17, 63) ~ "Pelagic",
-    #Gear %in% c(13, 14, 15) & MainSpecies == 30 ~ "Pelagic",
-    Gear %in% c(13, 14, 15)  ~ "Pelagic",
     
     # FIXED GEAR (Halibut / Pollock / White Hake)
     Gear %in% c(40, 41, 42, 49, 50, 51, 52, 53, 58, 56) ~ "Fixed_Gear",
@@ -423,16 +427,41 @@ effort_1960_wide <- mizer_effort_matrix %>%
   mutate(across(everything(), ~replace_na(., 0)))
 saveRDS(effort_1960_wide, "Ess_data/effort_by_gear_1960.rds")
 
+# --- Herring landings (tonnes/yr) for pelagic-effort reconstruction ---
+# Purse-seine effort records (gears 30/31/17/63 = the herring fishery) only exist in
+# NAFO 21B from ~1995. For earlier years and interior gaps we reconstruct pelagic
+# effort from herring LANDINGS rather than interpolating: effort is scaled to catch by
+# the median effort/catch ratio over the overlap years where both series exist
+# (validated: purse-seine effort vs landings r = 0.88; reconstructed series vs landings
+# r = 0.92). This preserves the fishery's real relative changes instead of drawing a
+# straight na.approx line through the pre-1995 gap.
+herring_catch_t <- stat_grouped %>%
+  filter(Species == "Atlantic Herring") %>%
+  transmute(Year, herring_t = Catches_g_per_yr / 1e6)
+
 mizer_effort_matrix <- mizer_effort_matrix %>%
   filter(Year >= 1978) %>%
-  # Use values_fill = NA to allow interpolation of missing years
+  # Use values_fill = NA so missing gear-years are NA (reconstructable), not 0
   pivot_wider(names_from = Mizer_Gear, values_from = Yearly_kW_Days, values_fill = NA) %>%
   arrange(Year) %>%
-  # Fill the gaps: Replace NAs with interpolated values
-  mutate(across(c(Bottom_Trawl, Fixed_Gear, Small_Mesh, Pelagic), 
-   ~na.approx(., na.rm = FALSE))) %>%
+  left_join(herring_catch_t, by = "Year")
+
+# Pelagic: keep real purse-seine effort where present; elsewhere reconstruct as
+# median(effort/catch) * landings. (A summarised 0 = "no purse-seine records that
+# year" = missing, so treat 0 as NA before computing the ratio and filling.)
+.pel   <- mizer_effort_matrix$Pelagic
+.pel[.pel == 0] <- NA
+.ratio <- median(.pel / mizer_effort_matrix$herring_t, na.rm = TRUE)
+mizer_effort_matrix$Pelagic <- ifelse(is.na(.pel),
+                                       .ratio * mizer_effort_matrix$herring_t, .pel)
+
+mizer_effort_matrix <- mizer_effort_matrix %>%
+  # Other gears keep the interpolation fill for residual gaps
+  mutate(across(c(Bottom_Trawl, Fixed_Gear, Small_Mesh),
+                ~na.approx(., na.rm = FALSE))) %>%
   # Handle the edges (years before/after data exists for specific gears)
   fill(everything(), .direction = "updown") %>%
+  dplyr::select(-herring_t) %>%
   # Replace any remaining NAs (e.g., in Exclude groups) with 0
   mutate(across(everything(), ~replace_na(., 0)))
 

@@ -1,55 +1,55 @@
 "indicator","Species","rho_counterfactual","rho_factual","rmse_counterfactual","rmse_factual"
-"Biomass","American Plaice",0.57,0.746,2.491,1.476
-"Biomass","Atlantic Cod",-0.404,0.596,3.442,2.38
-"Biomass","Atlantic Halibut",0.636,0.666,1.175,1.366
-"Biomass","Atlantic Herring",0.203,0.247,1.561,1.584
-"Biomass","Capelin",0.409,-0.227,3.202,3.191
-"Biomass","Haddock",0.286,-0.284,0.841,0.964
-"Biomass","Longhorn Sculpin",-0.172,0.336,2.919,1.793
-"Biomass","Monkfish",-0.576,-0.303,3.2,2.735
-"Biomass","Pollock",-0.483,-0.481,2.056,2.065
-"Biomass","Red Hake",-0.021,0.009,0.779,0.653
-"Biomass","Redfish Unseparated",0.069,0.073,1.296,1.105
-"Biomass","Sand Lance",-0.199,-0.306,7.78,4.85
-"Biomass","Silver Hake",0.152,0.233,1.223,1.217
-"Biomass","Spiny Dogfish",0.003,0.007,2.467,2.181
-"Biomass","Thorny Skate",-0.522,-0.5,0.888,0.894
-"Biomass","White Hake",0.528,0.727,1.058,1.017
-"Biomass","Winter Skate",-0.557,-0.464,1.507,1.476
-"Biomass","Witch Flounder",0.378,-0.207,1.606,1.076
-"Biomass","Yellowtail Flounder",0.222,0.4,2.089,1.453
-"Catch","American Plaice",0.713,0.76,2.235,1.84
-"Catch","Atlantic Cod",0.745,0.881,3.206,1.474
-"Catch","Atlantic Halibut",0.027,0.192,1.678,1.634
-"Catch","Atlantic Herring",0.679,0.356,3.377,3.866
-"Catch","Haddock",0.78,0.772,2.412,2.514
-"Catch","Monkfish",0.746,0.758,2.05,1.82
-"Catch","Pollock",0.504,0.499,2.144,2.14
-"Catch","Red Hake",0.26,0.304,1.581,1.507
-"Catch","Redfish Unseparated",0.703,0.695,1.25,1.389
-"Catch","Silver Hake",-0.153,0.154,2.192,1.864
-"Catch","Spiny Dogfish",0.418,0.331,2.433,2.41
-"Catch","Thorny Skate",0.806,0.804,1.833,1.845
-"Catch","White Hake",0.799,0.873,1.635,1.611
-"Catch","Winter Skate",0.789,0.795,2.382,2.356
-"Catch","Witch Flounder",0.6,0.605,1.844,1.55
-"Catch","Yellowtail Flounder",0.792,0.773,2.174,1.874
-"Mean individual weight","American Plaice",0.096,0.515,0.934,1.168
-"Mean individual weight","Atlantic Cod",0.029,-0.01,0.83,1.452
-"Mean individual weight","Atlantic Halibut",0.563,0.571,0.558,0.597
-"Mean individual weight","Atlantic Herring",-0.081,0.216,0.256,0.222
-"Mean individual weight","Capelin",-0.37,-0.463,1.009,1.016
-"Mean individual weight","Haddock",0.178,-0.044,1.308,1.45
-"Mean individual weight","Longhorn Sculpin",-0.331,0.651,0.846,0.545
-"Mean individual weight","Monkfish",0.073,0.068,0.281,0.284
-"Mean individual weight","Pollock",-0.254,-0.307,0.394,0.405
-"Mean individual weight","Red Hake",0.406,0.349,0.301,0.346
-"Mean individual weight","Redfish Unseparated",-0.363,-0.096,0.628,0.764
-"Mean individual weight","Sand Lance",0.582,0.562,0.474,0.679
-"Mean individual weight","Silver Hake",-0.029,-0.031,0.627,0.67
-"Mean individual weight","Spiny Dogfish",-0.002,0.002,0.11,0.11
-"Mean individual weight","Thorny Skate",-0.164,0.097,0.425,0.441
-"Mean individual weight","White Hake",-0.204,-0.31,0.433,0.467
-"Mean individual weight","Winter Skate",-0.107,-0.222,1.126,1.263
-"Mean individual weight","Witch Flounder",-0.425,-0.272,0.596,0.86
-"Mean individual weight","Yellowtail Flounder",-0.42,0.142,0.832,1.023
+"Biomass","American Plaice",-0.748,0.746,2.867,1.521
+"Biomass","Atlantic Cod",-0.362,-0.376,3.094,3.107
+"Biomass","Atlantic Halibut",0.44,0.625,1.233,1.402
+"Biomass","Atlantic Herring",0.072,0.069,1.819,1.866
+"Biomass","Capelin",0.676,0.703,3.03,3.069
+"Biomass","Haddock",-0.379,-0.52,1.253,1.768
+"Biomass","Longhorn Sculpin",-0.124,0.381,3.219,1.527
+"Biomass","Monkfish",-0.577,-0.577,3.557,3.573
+"Biomass","Pollock",-0.489,-0.49,2.003,1.984
+"Biomass","Red Hake",0.05,0,0.778,0.799
+"Biomass","Redfish Unseparated",0.116,0.198,1.464,1.287
+"Biomass","Sand Lance",-0.195,0.077,8.414,5.453
+"Biomass","Silver Hake",0.103,0.056,1.096,1.175
+"Biomass","Spiny Dogfish",0.007,0.003,2.398,2.524
+"Biomass","Thorny Skate",-0.377,-0.606,0.902,0.993
+"Biomass","White Hake",0.536,0.591,1.104,1.088
+"Biomass","Winter Skate",-0.451,-0.67,1.461,1.615
+"Biomass","Witch Flounder",0.349,-0.216,1.735,1.122
+"Biomass","Yellowtail Flounder",0.116,0.363,2.319,1.388
+"Catch","American Plaice",0.679,0.759,2.504,1.75
+"Catch","Atlantic Cod",0.573,0.554,2.211,2.273
+"Catch","Atlantic Halibut",-0.207,-0.127,1.73,1.739
+"Catch","Atlantic Herring",0.701,0.765,3.794,3.734
+"Catch","Haddock",0.769,0.714,2.892,3.318
+"Catch","Monkfish",0.744,0.74,2.334,2.346
+"Catch","Pollock",0.566,0.604,2.076,2.044
+"Catch","Red Hake",0.223,0.227,1.532,1.52
+"Catch","Redfish Unseparated",0.704,0.71,1.156,1.294
+"Catch","Silver Hake",0.035,0.15,1.951,2.008
+"Catch","Spiny Dogfish",0.331,0.372,2.597,2.62
+"Catch","Thorny Skate",0.817,0.785,1.772,1.909
+"Catch","White Hake",0.783,0.808,1.648,1.639
+"Catch","Winter Skate",0.805,0.773,2.335,2.49
+"Catch","Witch Flounder",0.57,0.615,1.994,1.757
+"Catch","Yellowtail Flounder",0.793,0.765,2.391,1.901
+"Mean individual weight","American Plaice",-0.359,0.603,0.965,1.016
+"Mean individual weight","Atlantic Cod",0.158,0.103,0.746,0.738
+"Mean individual weight","Atlantic Halibut",0.493,0.507,0.547,0.615
+"Mean individual weight","Atlantic Herring",0.068,0.069,0.243,0.245
+"Mean individual weight","Capelin",-0.51,-0.368,1.041,0.977
+"Mean individual weight","Haddock",0.029,0.056,1.284,1.211
+"Mean individual weight","Longhorn Sculpin",-0.434,0.72,0.819,0.529
+"Mean individual weight","Monkfish",0.126,0.103,0.287,0.285
+"Mean individual weight","Pollock",-0.246,-0.254,0.395,0.393
+"Mean individual weight","Red Hake",0.432,0.463,0.267,0.253
+"Mean individual weight","Redfish Unseparated",-0.261,-0.326,0.624,0.618
+"Mean individual weight","Sand Lance",0.505,0.441,0.406,0.342
+"Mean individual weight","Silver Hake",-0.03,-0.049,0.603,0.609
+"Mean individual weight","Spiny Dogfish",-0.01,-0.011,0.11,0.11
+"Mean individual weight","Thorny Skate",0.049,-0.25,0.417,0.427
+"Mean individual weight","White Hake",-0.066,-0.182,0.408,0.424
+"Mean individual weight","Winter Skate",-0.159,-0.104,1.14,1.114
+"Mean individual weight","Witch Flounder",-0.223,-0.244,0.501,1.229
+"Mean individual weight","Yellowtail Flounder",-0.533,0.209,0.86,0.686

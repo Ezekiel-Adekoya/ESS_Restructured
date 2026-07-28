@@ -1,12 +1,8 @@
-setwd("/Users/juliab6/UTAS Research Dropbox/Julia Blanchard/NEW DATA ESS/Untitled")
-
-
-
 library("here")
-dir <- setwd(here())
-knitr::opts_knit$set(root.dir = "~/Mac/Dropbox/Desktop/ESS_restructured/")
+setwd(here::here())
+knitr::opts_knit$set(root.dir = here::here())
 # Define the save directory
-save_dir <- paste0(here(), "Ess_data/")
+save_dir <- file.path(here::here(), "Ess_data")
 
 # Run 00d_get_catches.Rmd first (generates effort_matrix_by_gear.RDS)
 
