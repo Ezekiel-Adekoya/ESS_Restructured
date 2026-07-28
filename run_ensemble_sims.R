@@ -162,3 +162,8 @@ effort_all_df = ggplot(effort_all_df, aes(x = Year, y = Effort)) +
 
 ggsave(filename = "Ess_Output/effort_by_gear.jpeg", plot = effort_all_df,
        width = 11, height = 7.5, units = "in", dpi = 400)
+
+# Supplementary Fig S1 -> version-controlled figures/supplementary/
+dir.create("figures/supplementary", recursive = TRUE, showWarnings = FALSE)
+invisible(file.copy("Ess_Output/effort_by_gear.jpeg",
+                    "figures/supplementary/figureS1_effort.jpeg", overwrite = TRUE))

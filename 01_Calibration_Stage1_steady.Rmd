@@ -1688,3 +1688,13 @@ seal_diet_plot
 ```{r save-stage1}
 saveRDS(params_steady, "Ess_data/params_stage1_steady.RDS")
 ```
+
+```{r save-supplementary-figures}
+# Copy this notebook's SUPPLEMENTARY figures to the version-controlled figures/supplementary/.
+dir.create("figures/supplementary", recursive = TRUE, showWarnings = FALSE)
+invisible(Map(function(from, to) file.copy(paste0(save_dir, from), paste0("figures/supplementary/", to), overwrite = TRUE),
+  c("heatmap_plot.jpeg", "diet_interaction.jpeg", "seal_diet_vs_bowen.jpeg",
+    "GrowthCurves.jpeg",  "diet_at_size.jpeg",     "size_distributions.jpeg"),
+  c("figureS4_interaction_matrix.jpeg", "figureS5_fish_diet.jpeg",     "figureS6_seal_diet.jpeg",
+    "figureS7_growth_curves.jpeg",      "figureS8_diet_at_size.jpeg",  "figureS9_species_size_spectra.jpeg")))
+```

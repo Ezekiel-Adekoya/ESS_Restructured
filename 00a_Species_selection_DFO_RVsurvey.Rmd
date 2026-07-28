@@ -309,6 +309,11 @@ p
 
 ggsave("Ess_data/species_cluster.jpeg", plot   = p, width  = 14, height = 10, dpi    = 300,device = "jpeg")
 
+# Supplementary Fig S2 -> version-controlled figures/supplementary/
+dir.create("figures/supplementary", recursive = TRUE, showWarnings = FALSE)
+invisible(file.copy("Ess_data/species_cluster.jpeg",
+                    "figures/supplementary/figureS2_pca_clustering.jpeg", overwrite = TRUE))
+
 ```
 
 
