@@ -30,6 +30,11 @@ Ess_Output/*.csv
 0?_*.html
 _*.log
 
+# manuscript documents — NEVER committed (kept on the Desktop, not distributed with the code)
+*.docx
+*.doc
+*Adekoya*
+
 # raw / superseded data versions not used by the workflow (kept locally, off the repo)
 SUMMER_csv/
 /inter.rds
