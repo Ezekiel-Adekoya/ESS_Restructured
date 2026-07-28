@@ -124,19 +124,26 @@ mean_weight_ts <- biomass_ts %>%
 ## Per-sim mean individual weight over each species' consistently-sampled size window
 
 ```{r indicator-helper}
-# For one MizerSim: per species & year, mean individual weight (g) = biomass / numbers,
-# computed over that species' FIXED consistently-sampled window [wlo, whi] (the >=90%-of-years
-# size classes from above). The fixed window trims both the recruit-pulse small end and the
-# rare-giant large end, so neither extreme dominates the mean.
+# For one MizerSim, per species & year, TWO size-structure quantities, each over the size
+# window appropriate to what it is compared against:
+#   Biomass    = biomass over [biomass_cutoff, Inf)  -- the SAME window matchBiomasses used in
+#                calibration (lower gear cutoff only; the upper cutoff is a reporting cutoff not
+#                used in matchBiomasses). Compared to the (forage-scaled) survey biomass_ts, so
+#                the biomass skill is consistent with the calibration.
+#   MeanWeight = biomass/numbers over the consistently-sampled window [wlo, whi] (>=75%-of-years
+#                size classes), matching the observed mean weight built the same way.
 sim_indicators <- function(sim) {
   st <- as.integer(dimnames(sim@n)[[1]])
   wB <- w * dw
   do.call(rbind, lapply(seq_along(sp), function(j) {
-    idx <- w >= wlo[j] & w <= whi[j]                                    # fixed survey window
-    B <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3, wB[idx], "*")) # g
-    N <- rowSums(sweep(sim@n[, j, idx, drop = FALSE], 3, dw[idx], "*")) # numbers
-    data.frame(Species = sp[j], Year = st, Biomass = B, Number = N,
-               MeanWeight = B / N)
+    win  <- w >= wlo[j] & w <= whi[j]                                     # consistently-sampled (mean weight)
+    Bw   <- rowSums(sweep(sim@n[, j, win, drop = FALSE], 3, wB[win], "*"))
+    Nw   <- rowSums(sweep(sim@n[, j, win, drop = FALSE], 3, dw[win], "*"))
+    cal  <- w >= cl[j]                                                    # calibration window (lower cutoff only)
+    Bcal <- rowSums(sweep(sim@n[, j, cal, drop = FALSE], 3, wB[cal], "*"))
+    data.frame(Species = sp[j], Year = st,
+               Biomass = Bcal,                # [cl, Inf) — biomass skill (calibration-consistent)
+               MeanWeight = Bw / Nw)          # [wlo, whi] — size-structure indicator
   }))
 }
 
@@ -396,13 +403,210 @@ ggsave(paste0(save_dir, "indicator_model_skill.jpeg"), p_sk, width = 14, height 
 p_sk
 ```
 
+### Biomass skill by species
+
+The pooled Spearman rho above mixes the (large, scenario-insensitive) between-species biomass
+ordering with the within-species temporal signal, so it barely reflects the seal mechanism.
+Below, biomass skill is computed PER SPECIES as the rank correlation of modelled vs observed
+biomass THROUGH TIME (1986-2024), over the calibration window `[biomass_cutoff, Inf)` (forage
+scaling kept). Species are ordered by the factual - counterfactual median-rho difference, so the
+species where removing the seal increase helps/hurts most are at the ends.
+
+```{r skill-by-species, fig.width=13, fig.height=6}
+skill_biomass_sp <- df_all |>
+  mutate(Biomass = Biomass / 1e9) |>
+  inner_join(obs, by = c("Species", "Year")) |>
+  filter(Biomass_obs > 0, Biomass > 0, Year >= 1986, Year <= 2024) |>
+  group_by(scen, Species, sim) |>
+  filter(dplyr::n() >= 5) |>                       # need enough years for a correlation
+  summarise(rho = suppressWarnings(cor(Biomass, Biomass_obs, method = "spearman")),
+            .groups = "drop") |>
+  filter(is.finite(rho))
+
+# order species by factual - counterfactual median rho (where the seal increase matters most)
+sp_order <- skill_biomass_sp |>
+  group_by(Species, scen) |> summarise(m = median(rho), .groups = "drop") |>
+  tidyr::pivot_wider(names_from = scen, values_from = m) |>
+  mutate(diff = `Factual (seal increase)` - `Counterfactual (seals constant)`) |>
+  arrange(diff) |> pull(Species)
+skill_biomass_sp$Species <- factor(skill_biomass_sp$Species, levels = sp_order)
+
+p_sk_sp <- ggplot(skill_biomass_sp, aes(x = Species, y = rho, fill = scen)) +
+  geom_boxplot(width = 0.7, outlier.size = 0.2, position = position_dodge(0.8)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+  scale_fill_manual(values = c("Factual (seal increase)"         = "red",
+                               "Counterfactual (seals constant)" = "blue")) +
+  labs(x = NULL, y = "Spearman rho (modelled vs observed biomass, 1986-2024)") +
+  theme_bw(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+        legend.position = "bottom", legend.title = element_blank())
+ggsave(paste0(save_dir, "indicator_skill_biomass_by_species.jpeg"), p_sk_sp,
+       width = 13, height = 6, dpi = 200)
+p_sk_sp
+```
+
+### Paired scenario difference (factual − counterfactual, per web)
+
+The ensemble is PAIRED — the same randomised food web is run under both scenarios — so the
+cleanest scenario comparison is the WITHIN-WEB difference, which cancels the shared web-to-web
+variation. For Spearman rho, diff > 0 means factual fits observed better; for RMSE, diff < 0
+means factual fits better (dashed line = no difference).
+
+```{r skill-paired-diff, fig.width=11, fig.height=5}
+skill_diff <- skill |>
+  select(scen, sim, indicator, stat_type, value) |>
+  pivot_wider(names_from = scen, values_from = value) |>
+  mutate(diff = `Factual (seal increase)` - `Counterfactual (seals constant)`) |>
+  filter(is.finite(diff))
+
+p_diff <- ggplot(skill_diff, aes(x = indicator, y = diff, fill = indicator)) +
+  geom_violin(alpha = 0.5, trim = FALSE) +
+  geom_boxplot(width = 0.12, fill = "white", outlier.size = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
+  facet_wrap(~ stat_type, scales = "free_y") +
+  labs(x = NULL, y = "Factual − Counterfactual  (paired, per web)") +
+  theme_bw(base_size = 11) +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 20, hjust = 1, face = "bold"))
+ggsave(paste0(save_dir, "indicator_skill_paired_diff.jpeg"), p_diff, width = 11, height = 5, dpi = 200)
+p_diff
+```
+
+```{r skill-paired-diff-by-species, fig.width=13, fig.height=11}
+# Per-species PAIRED skill difference (factual - counterfactual rho, per web) for ALL THREE
+# indicators. Biomass reuses skill_biomass_sp; catch and mean weight computed the same way.
+# (Catch panel omits Sand Lance/Capelin/Longhorn Sculpin — no reliable catch data.)
+persp_rho <- function(dat) dat |>
+  group_by(scen, Species, sim) |> filter(dplyr::n() >= 5) |>
+  summarise(rho = suppressWarnings(cor(value, obs, method = "spearman")), .groups = "drop") |>
+  filter(is.finite(rho))
+
+sp_cat <- df_catches |> mutate(value = Yield / 1e9) |>
+  inner_join(obs_catch, by = c("Species", "Year")) |> rename(obs = Yield_obs) |>
+  filter(obs > 0, value > 0, Year >= 1986, Year <= 2024) |>
+  persp_rho() |> mutate(indicator = "Catch")
+
+sp_mw <- df_all |> filter(!is.na(MeanWeight), MeanWeight > 0) |>
+  inner_join(mean_weight_ts |> transmute(Species, Year, obs = MeanWeight), by = c("Species", "Year")) |>
+  rename(value = MeanWeight) |> filter(obs > 0, value > 0, Year >= 1986, Year <= 2024) |>
+  persp_rho() |> mutate(indicator = "Mean individual weight")
+
+skill_sp_all <- bind_rows(mutate(skill_biomass_sp, indicator = "Biomass"), sp_cat, sp_mw)
+
+skill_sp_diff <- skill_sp_all |>
+  tidyr::pivot_wider(names_from = scen, values_from = rho) |>
+  mutate(diff = `Factual (seal increase)` - `Counterfactual (seals constant)`) |>
+  filter(is.finite(diff))
+
+# common species order by the BIOMASS median diff (keeps cod at the right across all rows)
+bio_ord <- skill_sp_diff |> filter(indicator == "Biomass") |>
+  group_by(Species) |> summarise(m = median(diff), .groups = "drop") |> arrange(m) |> pull(Species)
+skill_sp_diff$Species   <- factor(skill_sp_diff$Species, levels = bio_ord)
+skill_sp_diff$indicator <- factor(skill_sp_diff$indicator,
+                                  levels = c("Biomass", "Catch", "Mean individual weight"))
+med_sp <- skill_sp_diff |> group_by(indicator, Species) |> summarise(m = median(diff), .groups = "drop")
+skill_sp_diff <- skill_sp_diff |> left_join(med_sp, by = c("indicator", "Species")) |>
+  mutate(fac_better = m > 0)
+
+p_sp_diff <- ggplot(skill_sp_diff, aes(x = Species, y = diff, fill = fac_better)) +
+  geom_boxplot(width = 0.6, outlier.size = 0.15) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
+  facet_grid(indicator ~ ., scales = "free_y") +
+  scale_fill_manual(values = c(`TRUE` = "#D6604D", `FALSE` = "#4393C3"),
+                    labels = c(`TRUE` = "Factual better", `FALSE` = "Counterfactual better"),
+                    name = NULL) +
+  labs(x = NULL, y = "Δ skill rho  (Factual − Counterfactual), per web") +
+  theme_bw(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+        strip.text = element_text(face = "bold"), legend.position = "bottom")
+ggsave(paste0(save_dir, "indicator_skill_paired_diff_by_species.jpeg"),
+       p_sp_diff, width = 13, height = 11, dpi = 200)
+p_sp_diff
+```
+
+```{r skill-paired-diff-by-species-rmse, fig.width=13, fig.height=11}
+# Same per-species paired figure, but for log-scale RMSE. For RMSE, LOWER = better, so the
+# paired diff (factual - counterfactual) is NEGATIVE where the factual fits better. Species
+# order matches the rho figure (bio_ord) for direct comparison.
+persp_rmse <- function(dat) dat |>
+  group_by(scen, Species, sim) |> filter(dplyr::n() >= 5) |>
+  summarise(rmse = sqrt(mean((log(value) - log(obs))^2)), .groups = "drop") |>
+  filter(is.finite(rmse))
+
+sp_bio_r <- df_all |> mutate(value = Biomass / 1e9) |>
+  inner_join(obs, by = c("Species", "Year")) |> rename(obs = Biomass_obs) |>
+  filter(obs > 0, value > 0, Year >= 1986, Year <= 2024) |>
+  persp_rmse() |> mutate(indicator = "Biomass")
+sp_cat_r <- df_catches |> mutate(value = Yield / 1e9) |>
+  inner_join(obs_catch, by = c("Species", "Year")) |> rename(obs = Yield_obs) |>
+  filter(obs > 0, value > 0, Year >= 1986, Year <= 2024) |>
+  persp_rmse() |> mutate(indicator = "Catch")
+sp_mw_r <- df_all |> filter(!is.na(MeanWeight), MeanWeight > 0) |>
+  inner_join(mean_weight_ts |> transmute(Species, Year, obs = MeanWeight), by = c("Species", "Year")) |>
+  rename(value = MeanWeight) |> filter(obs > 0, value > 0, Year >= 1986, Year <= 2024) |>
+  persp_rmse() |> mutate(indicator = "Mean individual weight")
+
+skill_sp_rmse <- bind_rows(sp_bio_r, sp_cat_r, sp_mw_r) |>
+  tidyr::pivot_wider(names_from = scen, values_from = rmse) |>
+  mutate(diff = `Factual (seal increase)` - `Counterfactual (seals constant)`) |>
+  filter(is.finite(diff))
+skill_sp_rmse$Species   <- factor(skill_sp_rmse$Species, levels = bio_ord)
+skill_sp_rmse$indicator <- factor(skill_sp_rmse$indicator,
+                                  levels = c("Biomass", "Catch", "Mean individual weight"))
+med_r <- skill_sp_rmse |> group_by(indicator, Species) |> summarise(m = median(diff), .groups = "drop")
+skill_sp_rmse <- skill_sp_rmse |> left_join(med_r, by = c("indicator", "Species")) |>
+  mutate(fac_better = m < 0)          # lower RMSE = factual better
+
+p_sp_rmse <- ggplot(skill_sp_rmse, aes(x = Species, y = diff, fill = fac_better)) +
+  geom_boxplot(width = 0.6, outlier.size = 0.15) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
+  facet_grid(indicator ~ ., scales = "free_y") +
+  scale_fill_manual(values = c(`TRUE` = "#D6604D", `FALSE` = "#4393C3"),
+                    labels = c(`TRUE` = "Factual better", `FALSE` = "Counterfactual better"),
+                    name = NULL) +
+  labs(x = NULL,
+       y = "Δ log-RMSE  (Factual − Counterfactual), per web   [negative = factual better]") +
+  theme_bw(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+        strip.text = element_text(face = "bold"), legend.position = "bottom")
+ggsave(paste0(save_dir, "indicator_skill_rmse_paired_diff_by_species.jpeg"),
+       p_sp_rmse, width = 13, height = 11, dpi = 200)
+p_sp_rmse
+```
+
+### Supplementary table — per-species skill values (absolute), by scenario
+
+```{r skill-table}
+# Median (across the 1000 webs) Spearman rho and log-RMSE per species, scenario and indicator.
+# Gives the ABSOLUTE skill levels (the paired-difference figures show only the contrast, so a
+# large paired difference on two poor fits would otherwise be indistinguishable from skill).
+dir.create("figures/supplementary", recursive = TRUE, showWarnings = FALSE)
+tab_rho  <- skill_sp_all |> group_by(indicator, Species, scen) |>
+  summarise(rho = median(rho), .groups = "drop")
+tab_rmse <- bind_rows(sp_bio_r, sp_cat_r, sp_mw_r) |> group_by(indicator, Species, scen) |>
+  summarise(rmse = median(rmse), .groups = "drop")
+skill_table <- full_join(tab_rho, tab_rmse, by = c("indicator", "Species", "scen")) |>
+  mutate(scen = ifelse(grepl("Factual", scen), "factual", "counterfactual")) |>
+  tidyr::pivot_wider(names_from = scen, values_from = c(rho, rmse)) |>
+  mutate(indicator = factor(indicator, levels = c("Biomass", "Catch", "Mean individual weight"))) |>
+  arrange(indicator, Species) |>
+  mutate(across(where(is.numeric), \(x) round(x, 3)))
+write.csv(skill_table, "figures/supplementary/table_skill_by_species.csv", row.names = FALSE)
+knitr::kable(skill_table)
+```
+
 ```{r save-manuscript-figures}
 # Copy this notebook's MANUSCRIPT figures into the version-controlled ./figures folder for
-# transparency. (The .jpeg in Ess_Output are gitignored regenerable working outputs; the
-# manuscript figures are tracked here so the exact figures in the paper live in the repo.)
+# transparency. (The .jpeg in Ess_Output are gitignored regenerable working outputs.)
 dir.create("figures", showWarnings = FALSE)
+dir.create("figures/supplementary", showWarnings = FALSE)
+# Main figures: Fig 5 = mean weight; Fig 7 = POOLED PAIRED difference (featured skill figure)
 invisible(Map(function(from, to) file.copy(paste0(save_dir, from), paste0("figures/", to), overwrite = TRUE),
-  c("indicator_mean_weight.jpeg", "indicator_model_skill.jpeg"),
+  c("indicator_mean_weight.jpeg", "indicator_skill_paired_diff.jpeg"),
   c("figure5_mean_weight.jpeg",   "figure7_model_skill.jpeg")))
+# Supplementary: the two per-species paired-difference figures (rho and RMSE)
+invisible(Map(function(from, to) file.copy(paste0(save_dir, from), paste0("figures/supplementary/", to), overwrite = TRUE),
+  c("indicator_skill_paired_diff_by_species.jpeg", "indicator_skill_rmse_paired_diff_by_species.jpeg"),
+  c("skill_rho_by_species.jpeg",                    "skill_rmse_by_species.jpeg")))
 ```
 
