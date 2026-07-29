@@ -89,8 +89,9 @@ pB <- ggplot(df, aes(cultivation, seal_effect)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey55") +
   geom_point(alpha = 0.16, size = 0.9, colour = "steelblue4") +
   geom_smooth(method = "lm", colour = "steelblue4", fill = "grey70", linewidth = 1) +
-  annotate("text", x = Inf, y = -Inf, hjust = 1.05, vjust = -0.8,
-           label = "below 0 = seal increase suppresses cod", size = 3, colour = "grey35") +
+  annotate("text", x = mean(range(df$cultivation)), y = min(df$seal_effect),
+           hjust = 0.5, vjust = 0, label = "below 0 = seal increase suppresses cod",
+           size = 3, colour = "grey35") +
   labs(x = xlab, y = "Seal effect on cod change (factual - counterfactual, % pts)",
        subtitle = "(b) Grey-seal effect (paired, within-web)") +
   theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
