@@ -14,10 +14,17 @@
 ##           (Pollock, Red Hake) — choosing WHICH is a structural call
 ##
 ##   (2) CRITERIA  (penalties in the loss) — what a valid "factual" model must satisfy:
-##         - forage must persist & rise (herring high in the non-recovery era)
+##         - herring CATCH tracks observed landings (fishery discipline; forage biomass is
+##           x50-catchability-confounded so it is constrained via the catch, not absolute biomass)
+##         - forage OUTBURST ratio ~5-12x pre->post collapse (Frank et al. 2013, cath.-independent)
 ##         - no stock explodes (max <= k * max observed)
 ##         - no stock implausibly collapses (min >= frac * min observed)
-##         - biomass trajectory fit (weighted SS log-residual, cod weighted high)
+##         - biomass trajectory fit (weighted SS log-residual, cod weighted high; forage low)
+## NOTE (limitation): the cod non-recovery requires a large forage stock (cultivation), which
+## implies a herring biomass larger than the directed fishery alone supports — the modelled
+## herring catch stays a few x above observed. Read as forage survey under-sampling + a post-
+## collapse crash in exploitation rate (fishery did not scale with the irruption). Forage is
+## therefore validated on the catchability-independent RATIO (sand lance 9.7x ~ Frank), not level.
 ##
 ##   (3) CONTINUOUS  (optimised) — nuisance params, no scientific claim:
 ##         - fishing catchability multiplier per fished species  (-> the collapse)
@@ -45,6 +52,10 @@ fish_gears <- c("Bottom_Trawl","Fixed_Gear","Small_Mesh","Pelagic")
 effort <- as.matrix(eff[eff$Year %in% 1978:2024, gear_cols])
 rownames(effort) <- eff$Year[eff$Year %in% 1978:2024]
 dat_ts <- readRDS("Ess_data/biomass_ts.RDS")
+# observed herring LANDINGS (tonnes/yr) — Stage-2 now fits the herring CATCH so the
+# forage-cultivation criterion cannot inflate the stock to unrealistic (catch-breaking) levels.
+.yt <- readRDS("Ess_data/yield_ts.RDS")
+obs_hcatch <- with(.yt[grepl("Herring", .yt$Species), ], setNames(Yield / 1e6, as.character(Year)))
 
 ## ============================================================================
 ## (1) STRUCTURAL DECISIONS — FIXED, from study objectives (no seal-F rescale yet;
@@ -106,12 +117,13 @@ set_seal_Fpeak <- function(p, F_peak) {
 ## (3) CONTINUOUS params + (2) CRITERIA loss
 ## ============================================================================
 tune_fish <- c("Atlantic Cod","Haddock","Pollock","White Hake","Silver Hake",
-               "Monkfish","Thorny Skate","Winter Skate")
-# loss weights: cod high (the mechanism), herring high (must not be sacrificed),
-# forage-undersampled low (level is catchability-confounded).
+               "Monkfish","Thorny Skate","Winter Skate","Atlantic Herring")
+# loss weights: cod high (the mechanism). Herring absolute biomass DOWN-weighted — it is
+# x50-catchability-confounded and was over-inflating the stock; herring is instead constrained
+# by its CATCH (real landings) + its OUTBURST RATIO (Frank et al. 2013), both below.
 wts <- setNames(rep(1, length(sp)), sp)
-wts[c("Atlantic Cod","Atlantic Herring")] <- c(6, 3)
-wts[c("Sand Lance","Capelin")] <- c(0.2, 0.5)
+wts["Atlantic Cod"] <- 6
+wts[c("Atlantic Herring","Sand Lance","Capelin")] <- c(0.5, 0.2, 0.5)
 
 project_bio <- function(p) {
   sim <- project(p, effort=effort, t_max=nrow(effort), t_save=1, progress_bar=FALSE)
@@ -119,7 +131,9 @@ project_bio <- function(p) {
   st <- as.integer(dimnames(sim@n)[[1]])
   mb <- sapply(seq_along(sp), function(j)
     rowSums(sweep(sim@n[,j,p@w>=cl[j],drop=FALSE],3,(p@w*p@dw)[p@w>=cl[j]],"*")))
-  colnames(mb) <- sp; rownames(mb) <- st; mb/1e9      # kt
+  colnames(mb) <- sp; rownames(mb) <- st
+  hc <- rowSums(getYieldGear(sim)[, , "Atlantic Herring"]) / 1e6   # herring catch, tonnes/yr
+  structure(mb/1e9, hcatch = setNames(hc, st))                      # kt biomass + attached catch
 }
 
 # observed summaries for the penalty criteria
@@ -152,9 +166,19 @@ getErrorSteered <- function(vary, return_params=FALSE) {
   }
   ## (2b) ECOLOGICAL CRITERIA penalties (study objectives)
   pen <- 0; LAM <- 50
-  # forage must be RELEASED & sustained in the non-recovery era (cultivation needs it)
-  hr <- mb[as.character(intersect(st,2010:2024)),"Atlantic Herring"]
-  if (length(hr)) pen <- pen + LAM*max(0, log(1200/mean(hr)))^2
+  # herring CATCH must track observed landings (REPLACES the old absolute herring-biomass>=1200
+  # floor, which forced a ~10x-too-large stock and blew modelled catches up ~44x). Cultivation is
+  # now constrained by the fishery, not by an inflated biomass.
+  hcatch <- attr(mb, "hcatch")
+  cy <- as.character(intersect(as.integer(names(hcatch)), as.integer(names(obs_hcatch))))
+  if (length(cy)) pen <- pen + LAM*mean((log(pmax(hcatch[cy],1)/pmax(obs_hcatch[cy],1)))^2)
+  # forage OUTBURST: LOW pre-collapse -> ~7-9x rise post-collapse (Frank et al. 2013),
+  # catchability-independent ratio. Penalise herring rise outside [5,12]x. This is what pushes
+  # the optimiser to fish herring down early (high F x high early effort) so it can irrupt after.
+  hpre  <- mean(mb[as.character(intersect(st,1978:1990)),"Atlantic Herring"], na.rm=TRUE)
+  hpost <- mean(mb[as.character(intersect(st,1996:2011)),"Atlantic Herring"], na.rm=TRUE)
+  if (is.finite(hpre) && hpre>0) { r <- hpost/hpre
+    pen <- pen + LAM*max(0, log(5/r))^2 + LAM*max(0, log(r/12))^2 }
   # no stock explodes (max <= 4x max observed); no implausible collapse (min >= 0.1x min obs)
   for (s in sp) {
     if (!is.na(obs_max[s])) pen <- pen + LAM*max(0, log(max(mb[,s])/(4*obs_max[s])))^2
@@ -165,7 +189,8 @@ getErrorSteered <- function(vary, return_params=FALSE) {
 
 ## ── WARM START at the hand-tuned solution ─────────────────────────────────────
 warm_fish <- c("Atlantic Cod"=4,"Haddock"=1.8,"Pollock"=4,"White Hake"=3.5,
-               "Silver Hake"=0.5,"Monkfish"=10,"Thorny Skate"=25,"Winter Skate"=20)
+               "Silver Hake"=0.5,"Monkfish"=10,"Thorny Skate"=25,"Winter Skate"=20,
+               "Atlantic Herring"=1)
 par0  <- c(log10(warm_fish[tune_fish]), log10(4))      # + F_peak = 4
 lower <- c(log10(rep(0.3,length(tune_fish))), log10(1.5))
 upper <- c(log10(rep(30, length(tune_fish))), log10(8))
@@ -178,7 +203,7 @@ cl <- makeCluster(ncores)
 clusterEvalQ(cl, { suppressMessages({library(mizer);library(mizerExperimental);library(dplyr)})
   source("Ess_data/Useful_functions.R") })
 clusterExport(cl, c("p_base","effort","dat_ts","sp","tune_fish","fish_gears",
-                    "wts","obs_max","obs_min","set_seal_Fpeak","project_bio"))
+                    "wts","obs_max","obs_min","obs_hcatch","set_seal_Fpeak","project_bio"))
 setDefaultCluster(cl)
 t0 <- Sys.time()
 fit <- optimParallel(par=par0, fn=getErrorSteered, lower=lower, upper=upper,
