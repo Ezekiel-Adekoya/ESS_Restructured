@@ -114,8 +114,8 @@ p <- grViz("digraph workflow {
       • Generate 1000 randomised food webs (interaction matrix &amp; seal<br/>
         catchability perturbed by lognormal noise, SD = 0.1)
     </td></tr>
-    <tr><td bgcolor='#FFD54F'>
-      <b>• PAIRED design: EACH web run under BOTH scenarios</b><br/>
+    <tr><td bgcolor='#D6EAF8'>
+      <b>• PAIRED design: each web run under both scenarios</b><br/>
       factual (seal increase) vs counterfactual (seals constant)
     </td></tr>
     <tr><td bgcolor='white'>
