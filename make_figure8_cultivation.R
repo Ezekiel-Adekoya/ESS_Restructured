@@ -53,11 +53,12 @@ cod_pct_scen <- function(sims) {
 }
 fac <- cod_pct_scen(sf); cou <- cod_pct_scen(sc)
 
-## Panel A = FACTUAL marginal; Panel B = PAIRED seal effect (counterfactual - factual)
-## on the same cod %-change scale. Positive Panel-B values = seals SUPPRESS cod recovery.
+## Panel A = FACTUAL marginal; Panel B = PAIRED seal effect = the TREATMENT effect of
+## the seal increase = factual - counterfactual (same cod %-change scale). NEGATIVE
+## Panel-B values = the seal increase SUPPRESSED cod recovery.
 df  <- tibble(web = seq_along(sf), cultivation,
               cod_ref = fac$ref, cod_pct = fac$pct,        # factual
-              seal_effect = cou$pct - fac$pct)             # counterfactual - factual
+              seal_effect = fac$pct - cou$pct)             # factual - counterfactual
 
 ## ── Diagnostics ──────────────────────────────────────────────────────────────
 terc <- cut(df$cultivation, quantile(df$cultivation, c(0, 1/3, 2/3, 1)),
@@ -68,8 +69,8 @@ cat(sprintf("Panel A (factual): Pearson %.2f | Spearman %.2f | tercile %.0f/%.0f
             cor(df$cultivation, df$cod_pct), cor(df$cultivation, df$cod_pct, method="spearman"),
             median(df$cod_pct[terc=="weak"]), median(df$cod_pct[terc=="mid"]),
             median(df$cod_pct[terc=="strong"])))
-cat(sprintf("Panel B (seal effect = counter-factual, pct-pts): median %.1f | %% webs >0 %.1f | vs cultivation r %.2f | tercile %.1f/%.1f/%.1f\n",
-            median(df$seal_effect), 100*mean(df$seal_effect > 0),
+cat(sprintf("Panel B (seal effect = factual-counterfactual, pct-pts): median %.1f | %% webs <0 %.1f | vs cultivation r %.2f | tercile %.1f/%.1f/%.1f\n",
+            median(df$seal_effect), 100*mean(df$seal_effect < 0),
             cor(df$cultivation, df$seal_effect),
             median(df$seal_effect[terc=="weak"]), median(df$seal_effect[terc=="mid"]),
             median(df$seal_effect[terc=="strong"])))
@@ -88,8 +89,10 @@ pB <- ggplot(df, aes(cultivation, seal_effect)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey55") +
   geom_point(alpha = 0.16, size = 0.9, colour = "steelblue4") +
   geom_smooth(method = "lm", colour = "steelblue4", fill = "grey70", linewidth = 1) +
-  labs(x = xlab, y = "Seal effect on cod change (counterfactual - factual, % pts)",
-       subtitle = "(b) Grey-seal suppression (paired, within-web)") +
+  annotate("text", x = Inf, y = -Inf, hjust = 1.05, vjust = -0.8,
+           label = "below 0 = seal increase suppresses cod", size = 3, colour = "grey35") +
+  labs(x = xlab, y = "Seal effect on cod change (factual - counterfactual, % pts)",
+       subtitle = "(b) Grey-seal effect (paired, within-web)") +
   theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
 
 P <- pA + pB + plot_layout(ncol = 2)
