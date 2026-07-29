@@ -73,7 +73,7 @@ P <- ggplot(df, aes(cultivation, cod_pct)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey55") +
   geom_point(alpha = 0.18, size = 0.9, colour = "grey20") +
   geom_smooth(method = "lm", colour = "firebrick", fill = "grey70", linewidth = 1) +
-  labs(x = "Herring + sand lance -> cod cultivation strength (interaction)",
+  labs(x = "Herring + sand lance cultivation of cod (interaction strength)",
        y = "Cod biomass change 1986-2024 (%)") +
   theme_bw(base_size = 12) +
   theme(panel.grid.minor = element_blank())
