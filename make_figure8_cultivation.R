@@ -1,5 +1,5 @@
 ## =============================================================================
-## make_S14_cultivation.R  — Supplementary Fig S14
+## make_figure8_cultivation.R  — MAIN-TEXT Figure 8
 ## DIRECT per-web evidence of the forage-cultivation mechanism from the paired
 ## ensemble: strength of the (herring + sand lance) -> cod cultivation interaction
 ## vs cod biomass change over the paper's 1986-2024 PROJECTION window.
@@ -92,7 +92,10 @@ P <- ggplot(df, aes(cultivation, cod_pct, colour = Scenario, fill = Scenario)) +
   theme_bw(base_size = 12) +
   theme(panel.grid.minor = element_blank(), legend.position = "top")
 
-dir.create("figures/supplementary", recursive = TRUE, showWarnings = FALSE)
-ggsave("figures/supplementary/figureS14_cultivation_vs_cod.jpeg", P,
-       width = 7.5, height = 5.5, dpi = 200)
-cat("Saved figures/supplementary/figureS14_cultivation_vs_cod.jpeg\n")
+## Working output in Ess_Output/ (gitignored, regenerable), then copy the tracked
+## MANUSCRIPT figure into ./figures — same convention as 03/04's main figures.
+ggsave("Ess_Output/cultivation_vs_cod.jpeg", P, width = 7.5, height = 5.5, dpi = 200)
+dir.create("figures", showWarnings = FALSE)
+invisible(file.copy("Ess_Output/cultivation_vs_cod.jpeg",
+                    "figures/figure8_cultivation.jpeg", overwrite = TRUE))
+cat("Saved figures/figure8_cultivation.jpeg\n")
