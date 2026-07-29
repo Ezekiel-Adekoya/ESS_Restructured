@@ -17,7 +17,7 @@
 ##
 ## Runs after run_ensemble_sims.R (needs sims_factual.RDS). Reproducible.
 ## =============================================================================
-suppressMessages({library(mizer); library(mizerExperimental); library(tidyverse)})
+suppressMessages({library(mizer); library(mizerExperimental); library(tidyverse); library(patchwork)})
 
 p  <- readRDS("Ess_data/params_stage2_AUTO.RDS")
 sf <- readRDS("Ess_Output/sims_factual.RDS")          # factual = seal increase
@@ -53,48 +53,50 @@ cod_pct_scen <- function(sims) {
 }
 fac <- cod_pct_scen(sf); cou <- cod_pct_scen(sc)
 
-df <- bind_rows(
-  tibble(web = seq_along(sf), cultivation, cod_ref = fac$ref, cod_pct = fac$pct,
-         Scenario = "Factual (seal increase)"),
-  tibble(web = seq_along(sc), cultivation, cod_ref = cou$ref, cod_pct = cou$pct,
-         Scenario = "Counterfactual (seals constant)")
-) |> mutate(Scenario = factor(Scenario,
-      levels = c("Counterfactual (seals constant)", "Factual (seal increase)")))
+## Panel A = FACTUAL marginal; Panel B = PAIRED seal effect (counterfactual - factual)
+## on the same cod %-change scale. Positive Panel-B values = seals SUPPRESS cod recovery.
+df  <- tibble(web = seq_along(sf), cultivation,
+              cod_ref = fac$ref, cod_pct = fac$pct,        # factual
+              seal_effect = cou$pct - fac$pct)             # counterfactual - factual
 
-## ── Robustness diagnostics (per scenario) ────────────────────────────────────
-diag <- function(d) {
-  keep <- d$cod_ref > quantile(d$cod_ref, 0.05)
-  terc <- cut(d$cultivation, quantile(d$cultivation, c(0, 1/3, 2/3, 1)),
-              include.lowest = TRUE, labels = c("weak","mid","strong"))
-  tmed <- tapply(d$cod_pct, terc, median)
-  cat(sprintf("  Pearson %.2f | Spearman %.2f | trimmed %.2f | tercile %.0f/%.0f/%.0f\n",
-              cor(d$cultivation, d$cod_pct), cor(d$cultivation, d$cod_pct, method="spearman"),
-              cor(d$cultivation[keep], d$cod_pct[keep]),
-              tmed["weak"], tmed["mid"], tmed["strong"]))
-}
+## ── Diagnostics ──────────────────────────────────────────────────────────────
+terc <- cut(df$cultivation, quantile(df$cultivation, c(0, 1/3, 2/3, 1)),
+            include.lowest = TRUE, labels = c("weak","mid","strong"))
 cat(sprintf("cultivation range: %.2f-%.2f (mean %.2f)\n",
             min(cultivation), max(cultivation), mean(cultivation)))
-cat("Factual (seal increase):\n");         diag(filter(df, Scenario == "Factual (seal increase)"))
-cat("Counterfactual (seals constant):\n"); diag(filter(df, Scenario == "Counterfactual (seals constant)"))
+cat(sprintf("Panel A (factual): Pearson %.2f | Spearman %.2f | tercile %.0f/%.0f/%.0f\n",
+            cor(df$cultivation, df$cod_pct), cor(df$cultivation, df$cod_pct, method="spearman"),
+            median(df$cod_pct[terc=="weak"]), median(df$cod_pct[terc=="mid"]),
+            median(df$cod_pct[terc=="strong"])))
+cat(sprintf("Panel B (seal effect = counter-factual, pct-pts): median %.1f | %% webs >0 %.1f | vs cultivation r %.2f | tercile %.1f/%.1f/%.1f\n",
+            median(df$seal_effect), 100*mean(df$seal_effect > 0),
+            cor(df$cultivation, df$seal_effect),
+            median(df$seal_effect[terc=="weak"]), median(df$seal_effect[terc=="mid"]),
+            median(df$seal_effect[terc=="strong"])))
 
-## ── Figure ───────────────────────────────────────────────────────────────────
-P <- ggplot(df, aes(cultivation, cod_pct, colour = Scenario, fill = Scenario)) +
+## ── Figure: 2 panels ─────────────────────────────────────────────────────────
+xlab <- "Herring + sand lance cultivation of cod (interaction strength)"
+pA <- ggplot(df, aes(cultivation, cod_pct)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey55") +
-  geom_point(alpha = 0.16, size = 0.9) +
-  geom_smooth(method = "lm", linewidth = 1) +
-  scale_colour_manual(values = c("Counterfactual (seals constant)" = "steelblue4",
-                                 "Factual (seal increase)"         = "firebrick")) +
-  scale_fill_manual(values   = c("Counterfactual (seals constant)" = "steelblue4",
-                                 "Factual (seal increase)"         = "firebrick")) +
-  labs(x = "Herring + sand lance cultivation of cod (interaction strength)",
-       y = "Cod biomass change 1986-2024 (%)", colour = NULL, fill = NULL) +
-  guides(colour = guide_legend(override.aes = list(alpha = 1, size = 2))) +
-  theme_bw(base_size = 12) +
-  theme(panel.grid.minor = element_blank(), legend.position = "top")
+  geom_point(alpha = 0.16, size = 0.9, colour = "grey20") +
+  geom_smooth(method = "lm", colour = "firebrick", fill = "grey70", linewidth = 1) +
+  labs(x = xlab, y = "Cod biomass change 1986-2024 (%)",
+       subtitle = "(a) Factual (seal increase)") +
+  theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
+
+pB <- ggplot(df, aes(cultivation, seal_effect)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey55") +
+  geom_point(alpha = 0.16, size = 0.9, colour = "steelblue4") +
+  geom_smooth(method = "lm", colour = "steelblue4", fill = "grey70", linewidth = 1) +
+  labs(x = xlab, y = "Seal effect on cod change (counterfactual - factual, % pts)",
+       subtitle = "(b) Grey-seal suppression (paired, within-web)") +
+  theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
+
+P <- pA + pB + plot_layout(ncol = 2)
 
 ## Working output in Ess_Output/ (gitignored, regenerable), then copy the tracked
 ## MANUSCRIPT figure into ./figures — same convention as 03/04's main figures.
-ggsave("Ess_Output/cultivation_vs_cod.jpeg", P, width = 7.5, height = 5.5, dpi = 200)
+ggsave("Ess_Output/cultivation_vs_cod.jpeg", P, width = 12, height = 5.5, dpi = 200)
 dir.create("figures", showWarnings = FALSE)
 invisible(file.copy("Ess_Output/cultivation_vs_cod.jpeg",
                     "figures/figure8_cultivation.jpeg", overwrite = TRUE))
