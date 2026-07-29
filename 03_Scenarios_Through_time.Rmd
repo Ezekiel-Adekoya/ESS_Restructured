@@ -974,8 +974,10 @@ p_factual <- style_spectra(
   "Factual (seal increase)")
 
 p_combined <- (p_counter + p_factual) +
-  plot_layout(guides = "collect") &
-  theme(legend.position = "right")
+  plot_layout(guides = "collect") +
+  plot_annotation(tag_levels = "a", tag_prefix = "(", tag_suffix = ")") &
+  theme(legend.position = "right",
+        plot.tag = element_text(face = "bold", size = 18))   # ICES (a)/(b) panel labels
 
 p_combined
 
