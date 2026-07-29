@@ -1422,7 +1422,7 @@ drift_plot
 dir.create("figures", showWarnings = FALSE)
 invisible(Map(function(from, to) file.copy(paste0(save_dir, from), paste0("figures/", to), overwrite = TRUE),
   c("yield_plot.jpeg",       "biomass_plot.jpeg",    "spectra_plot.jpeg"),
-  c("figure3_catch.jpeg",    "figure4_biomass.jpeg", "figure6_size_spectrum.jpeg")))
+  c("figure3_catch.jpeg",    "figure4_biomass.jpeg", "figure7_size_spectrum.jpeg")))
 
 # Supplementary figures from this notebook -> figures/supplementary/
 dir.create("figures/supplementary", recursive = TRUE, showWarnings = FALSE)

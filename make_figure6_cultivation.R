@@ -1,5 +1,5 @@
 ## =============================================================================
-## make_figure8_cultivation.R  — MAIN-TEXT Figure 8
+## make_figure6_cultivation.R  — MAIN-TEXT Figure 6
 ## DIRECT per-web evidence of the forage-cultivation mechanism from the paired
 ## ensemble: strength of the (herring + sand lance) -> cod cultivation interaction
 ## vs cod biomass change over the paper's 1986-2024 PROJECTION window.
@@ -103,5 +103,5 @@ P <- pA + pB + plot_layout(ncol = 2)
 ggsave("Ess_Output/cultivation_vs_cod.jpeg", P, width = 12, height = 5.5, dpi = 200)
 dir.create("figures", showWarnings = FALSE)
 invisible(file.copy("Ess_Output/cultivation_vs_cod.jpeg",
-                    "figures/figure8_cultivation.jpeg", overwrite = TRUE))
-cat("Saved figures/figure8_cultivation.jpeg\n")
+                    "figures/figure6_cultivation.jpeg", overwrite = TRUE))
+cat("Saved figures/figure6_cultivation.jpeg\n")

@@ -600,10 +600,10 @@ knitr::kable(skill_table)
 # transparency. (The .jpeg in Ess_Output are gitignored regenerable working outputs.)
 dir.create("figures", showWarnings = FALSE)
 dir.create("figures/supplementary", showWarnings = FALSE)
-# Main figures: Fig 5 = mean weight; Fig 7 = POOLED PAIRED difference (featured skill figure)
+# Main figures: Fig 5 = mean weight; Fig 8 = POOLED PAIRED difference (overall skill assessment)
 invisible(Map(function(from, to) file.copy(paste0(save_dir, from), paste0("figures/", to), overwrite = TRUE),
   c("indicator_mean_weight.jpeg", "indicator_skill_paired_diff.jpeg"),
-  c("figure5_mean_weight.jpeg",   "figure7_model_skill.jpeg")))
+  c("figure5_mean_weight.jpeg",   "figure8_model_skill.jpeg")))
 # Supplementary: the two per-species paired-difference figures (rho and RMSE)
 invisible(Map(function(from, to) file.copy(paste0(save_dir, from), paste0("figures/supplementary/", to), overwrite = TRUE),
   c("indicator_skill_paired_diff_by_species.jpeg", "indicator_skill_rmse_paired_diff_by_species.jpeg"),
