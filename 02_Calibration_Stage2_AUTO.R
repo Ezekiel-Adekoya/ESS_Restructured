@@ -64,9 +64,14 @@ obs_hcatch <- with(.yt[grepl("Herring", .yt$Species), ], setNames(Yield / 1e6, a
 forage <- c("Atlantic Herring","Sand Lance","Capelin")
 # Relative seal selectivity on demersals (grey seals are benthic foragers; the
 # Bowen 1994 snapshot under-represents benthic prey). Multipliers on the empirical
-# seal_gear_params catchability; cod is the binding non-recovery lever.
+# seal_gear_params catchability; cod is the binding non-recovery lever. Atlantic
+# Herring is DOWN-weighted (x0.05): the base catchability over-fed herring to seals
+# (~36% of diet vs Bowen's 0.2%); at 0.05 the 1990s seal diet matches Bowen (sand
+# lance ~78% vs 81%, herring ~3% vs 0.2%) and the forage-relief that was masking the
+# seal->cod signal is removed (widens the factual/counterfactual cod separation).
 seal_rel <- c("Atlantic Cod"=3, "American Plaice"=14, "Yellowtail Flounder"=14,
-              "Witch Flounder"=8, "Longhorn Sculpin"=40, "Monkfish"=15)
+              "Witch Flounder"=8, "Longhorn Sculpin"=40, "Monkfish"=15,
+              "Atlantic Herring"=0.05)
 
 # Cultivation strengths (forage -> predator-recruit predation): WHICH species are
 # cultivated is the structural/objective decision (cod = non-recovery; gadoids &
