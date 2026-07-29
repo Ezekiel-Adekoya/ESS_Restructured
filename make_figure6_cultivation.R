@@ -77,12 +77,15 @@ cat(sprintf("Panel B (seal effect = factual-counterfactual, pct-pts): median %.1
 
 ## ── Figure: 2 panels ─────────────────────────────────────────────────────────
 xlab <- "Herring + sand lance cultivation of cod (interaction strength)"
+# ICES JMS panel labels: lower-case letters, bold, top-left corner (matches Fig 7 in 03).
 pA <- ggplot(df, aes(cultivation, cod_pct)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey55") +
   geom_point(alpha = 0.16, size = 0.9, colour = "grey20") +
   geom_smooth(method = "lm", colour = "firebrick", fill = "grey70", linewidth = 1) +
+  annotate("text", x = -Inf, y = Inf, label = "(a)",
+           hjust = -0.5, vjust = 1.5, fontface = "bold", size = 6) +
   labs(x = xlab, y = "Cod biomass change 1986-2024 (%)",
-       subtitle = "(a) Factual (seal increase)") +
+       subtitle = "Factual (seal increase)") +
   theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
 
 pB <- ggplot(df, aes(cultivation, seal_effect)) +
@@ -92,8 +95,10 @@ pB <- ggplot(df, aes(cultivation, seal_effect)) +
   annotate("text", x = mean(range(df$cultivation)), y = min(df$seal_effect),
            hjust = 0.5, vjust = 0, label = "below 0 = seal increase suppresses cod",
            size = 3, colour = "grey35") +
+  annotate("text", x = -Inf, y = Inf, label = "(b)",
+           hjust = -0.5, vjust = 1.5, fontface = "bold", size = 6) +
   labs(x = xlab, y = "Seal effect on cod change (factual - counterfactual, % pts)",
-       subtitle = "(b) Grey-seal effect (paired, within-web)") +
+       subtitle = "Grey-seal effect (paired, within-web)") +
   theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
 
 P <- pA + pB + plot_layout(ncol = 2)

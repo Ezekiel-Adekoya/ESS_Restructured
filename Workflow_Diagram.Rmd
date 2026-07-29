@@ -109,10 +109,17 @@ p <- grViz("digraph workflow {
   
   # Step 6: Simulate scenarios with randomized interactions
   Step_6 [label = <<table border='0' cellborder='1' cellspacing='0' cellpadding='8'>
-    <tr><td bgcolor='lightgray'><b>Step 6: Run Models with Randomized Interactions</b></td></tr>
+    <tr><td bgcolor='lightgray'><b>Step 6: Paired Randomised-Web Ensemble</b></td></tr>
     <tr><td bgcolor='white'>
-      • Project model simulations (1978–2024) under two scenarios<br/>
-      • Run 1000 randomized interaction matrices for each scenario
+      • Generate 1000 randomised food webs (interaction matrix &amp; seal<br/>
+        catchability perturbed by lognormal noise, SD = 0.1)
+    </td></tr>
+    <tr><td bgcolor='#FFD54F'>
+      <b>• PAIRED design: EACH web run under BOTH scenarios</b><br/>
+      factual (seal increase) vs counterfactual (seals constant)
+    </td></tr>
+    <tr><td bgcolor='white'>
+      • Project 1978–2024; compare scenarios within each paired web
     </td></tr>
   </table>>, pos = '2,-4!']
   
