@@ -21,6 +21,7 @@ suppressMessages({library(mizer); library(mizerExperimental); library(tidyverse)
 
 p  <- readRDS("Ess_data/params_stage2_AUTO.RDS")
 sf <- readRDS("Ess_Output/sims_factual.RDS")          # factual = seal increase
+sc <- readRDS("Ess_Output/sims_counter.RDS")          # counterfactual = seals constant
 cat(sprintf("Ensemble: %d webs\n", length(sf)))
 
 ## ── Cod biomass, cutoff-based, IDENTICAL to 03's term_bio ────────────────────
@@ -38,45 +39,58 @@ ref_years <- 1978:1985                                # paper's reference period
 end_year  <- 2024
 
 ## ── Cultivation strength per web (herring + sand lance -> cod) ────────────────
+## Cultivation is a property of the WEB (same interaction matrix in both scenarios).
 cult_rows <- c("Atlantic Herring", "Sand Lance")
 cultivation <- vapply(sf, function(s)
   mean(s@params@interaction[cult_rows, "Atlantic Cod"]), numeric(1))
 
 ## ── Cod change over the 1986-2024 projection: (2024 - refmean)/refmean * 100 ──
-cod_ref <- vapply(sf, cod_bio, numeric(1), years = ref_years)
-cod_end <- vapply(sf, cod_bio, numeric(1), years = end_year)
-cod_pct <- 100 * (cod_end - cod_ref) / cod_ref
+## Same web run under both efforts: factual (seal increase) vs counterfactual.
+cod_pct_scen <- function(sims) {
+  ref <- vapply(sims, cod_bio, numeric(1), years = ref_years)
+  end <- vapply(sims, cod_bio, numeric(1), years = end_year)
+  list(ref = ref, pct = 100 * (end - ref) / ref)
+}
+fac <- cod_pct_scen(sf); cou <- cod_pct_scen(sc)
 
-df <- tibble(web = seq_along(sf), cultivation, cod_ref, cod_end, cod_pct)
+df <- bind_rows(
+  tibble(web = seq_along(sf), cultivation, cod_ref = fac$ref, cod_pct = fac$pct,
+         Scenario = "Factual (seal increase)"),
+  tibble(web = seq_along(sc), cultivation, cod_ref = cou$ref, cod_pct = cou$pct,
+         Scenario = "Counterfactual (seals constant)")
+) |> mutate(Scenario = factor(Scenario,
+      levels = c("Counterfactual (seals constant)", "Factual (seal increase)")))
 
-## ── Robustness diagnostics ───────────────────────────────────────────────────
-r_p <- cor(df$cultivation, df$cod_pct, method = "pearson")
-r_s <- cor(df$cultivation, df$cod_pct, method = "spearman")
-# guard against tiny-denominator blow-ups: drop webs with a near-zero reference stock
-keep <- df$cod_ref > quantile(df$cod_ref, 0.05)
-r_p_trim <- cor(df$cultivation[keep], df$cod_pct[keep], method = "pearson")
-terc <- cut(df$cultivation, quantile(df$cultivation, c(0, 1/3, 2/3, 1)),
-            include.lowest = TRUE, labels = c("weak", "mid", "strong"))
-tmed <- tapply(df$cod_pct, terc, median)
-
+## ── Robustness diagnostics (per scenario) ────────────────────────────────────
+diag <- function(d) {
+  keep <- d$cod_ref > quantile(d$cod_ref, 0.05)
+  terc <- cut(d$cultivation, quantile(d$cultivation, c(0, 1/3, 2/3, 1)),
+              include.lowest = TRUE, labels = c("weak","mid","strong"))
+  tmed <- tapply(d$cod_pct, terc, median)
+  cat(sprintf("  Pearson %.2f | Spearman %.2f | trimmed %.2f | tercile %.0f/%.0f/%.0f\n",
+              cor(d$cultivation, d$cod_pct), cor(d$cultivation, d$cod_pct, method="spearman"),
+              cor(d$cultivation[keep], d$cod_pct[keep]),
+              tmed["weak"], tmed["mid"], tmed["strong"]))
+}
 cat(sprintf("cultivation range: %.2f-%.2f (mean %.2f)\n",
             min(cultivation), max(cultivation), mean(cultivation)))
-cat(sprintf("cor(cultivation, cod %% change 1986-2024): Pearson %.2f | Spearman %.2f | trimmed %.2f\n",
-            r_p, r_s, r_p_trim))
-cat(sprintf("cod %% change by cultivation tercile: weak %.0f  mid %.0f  strong %.0f\n",
-            tmed["weak"], tmed["mid"], tmed["strong"]))
-cat(sprintf("cod ref-period biomass range (kt): %.1f - %.1f\n",
-            min(cod_ref), max(cod_ref)))
+cat("Factual (seal increase):\n");         diag(filter(df, Scenario == "Factual (seal increase)"))
+cat("Counterfactual (seals constant):\n"); diag(filter(df, Scenario == "Counterfactual (seals constant)"))
 
 ## ── Figure ───────────────────────────────────────────────────────────────────
-P <- ggplot(df, aes(cultivation, cod_pct)) +
+P <- ggplot(df, aes(cultivation, cod_pct, colour = Scenario, fill = Scenario)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey55") +
-  geom_point(alpha = 0.18, size = 0.9, colour = "grey20") +
-  geom_smooth(method = "lm", colour = "firebrick", fill = "grey70", linewidth = 1) +
+  geom_point(alpha = 0.16, size = 0.9) +
+  geom_smooth(method = "lm", linewidth = 1) +
+  scale_colour_manual(values = c("Counterfactual (seals constant)" = "steelblue4",
+                                 "Factual (seal increase)"         = "firebrick")) +
+  scale_fill_manual(values   = c("Counterfactual (seals constant)" = "steelblue4",
+                                 "Factual (seal increase)"         = "firebrick")) +
   labs(x = "Herring + sand lance cultivation of cod (interaction strength)",
-       y = "Cod biomass change 1986-2024 (%)") +
+       y = "Cod biomass change 1986-2024 (%)", colour = NULL, fill = NULL) +
+  guides(colour = guide_legend(override.aes = list(alpha = 1, size = 2))) +
   theme_bw(base_size = 12) +
-  theme(panel.grid.minor = element_blank())
+  theme(panel.grid.minor = element_blank(), legend.position = "top")
 
 dir.create("figures/supplementary", recursive = TRUE, showWarnings = FALSE)
 ggsave("figures/supplementary/figureS14_cultivation_vs_cod.jpeg", P,
