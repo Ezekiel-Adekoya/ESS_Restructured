@@ -1,5 +1,5 @@
 ---
-title: "ESS Calibration — Stage 1: time-averaged steady state (1978-85)"
+title: "ESS Calibration — Stage 1: time-averaged steady state (1978-81)"
 author: "Ezekiel / Julia / Derek"
 date: "2026-06"
 output: html_document
@@ -7,8 +7,8 @@ output: html_document
 
 # STAGE 1 of 2 — time-averaged steady-state calibration
 
-Calibrates the 18/19-species ESS size-spectrum model to the **1978-85 reference
-period** (high groundfish, low pelagics). Output `params_stage1_steady.RDS` feeds
+Calibrates the 18/19-species ESS size-spectrum model to the **1978-81 reference
+period** (`years_to_use`; the stable post-EEZ plateau, CV=0.12 — high groundfish, low pelagics). Output `params_stage1_steady.RDS` feeds
 **Stage 2** (`02_Calibration_Stage2_AUTO.R`), which projects through the
 historical effort and tunes the dynamic processes (collapse + non-recovery).
 
@@ -429,7 +429,7 @@ for (sp in names(forage_catchability_mult))
 
 ```
 
-To intialise model need to time-average biomasses between 1978 and 1985 (prior to any detectable trends in species, relatively more stable period)
+To intialise model need to time-average biomasses over the reference window `years_to_use` (1978-1981; prior to any detectable trends in species, relatively more stable period)
 
 ```{r}
 library(reshape2)
@@ -503,7 +503,7 @@ ggplot(yield_ts, aes(x = Year, y = Yield)) + geom_line(linewidth = 0.4) +
 
 
 
-Aggregate to mean observed yield between 1978 and 1985 
+Aggregate to mean observed yield over the reference window `years_to_use` (1978-1981)
 ```{r}
 ## Aggregate to mean observed catch 
 ## Aritmetric mean
@@ -1013,7 +1013,7 @@ get_seal_yield <- function(p) {
 # the biomass loops (post-hoc; see 00e_digitise_seal_data.r note). Running the
 # empirical (juvenile-focused) seal gear during matchBiomasses drives
 # reproduction_level -> 0 (R_max -> Inf) for the low-productivity species and
-# distorts the 1978-85 reference state (cod dynamics flip). We keep the target
+# distorts the 1978-81 reference state (cod dynamics flip). We keep the target
 # (Yield_observed_seals_g) and the empirical catchabilities for the post-hoc step.
 seal_rows <- which(gear_params(params)$gear == seal_gear_name)
 seal_gp_species <- gear_params(params)$species[seal_rows]
@@ -1087,7 +1087,7 @@ cat("Inf R_max before seals:", sum(is.infinite(species_params(params_steady)$R_m
 # Fishing-only steady state is now set (finite R_max, growth, biomass). Add the
 # empirical seal gear and scale its catchabilities to the Q/B consumption target,
 # as a perturbation on the stable state (NOT followed by matchBiomasses, which
-# would re-trigger the R_max->Inf cascade). At the 1978-85 reference seal effort
+# would re-trigger the R_max->Inf cascade). At the 1978-81 reference seal effort
 # this is a modest perturbation; the large seal predation ramps in Stage 2.
 seal_rows <- which(gear_params(params_steady)$gear == seal_gear_name)
 gear_params(params_steady)$catchability[seal_rows] <- seal_catchability_init
@@ -1686,7 +1686,7 @@ seal_diet_plot
 ```
 
 
-## STAGE 1 OUTPUT: time-averaged 1978-85 steady state → feeds Stage 2 time-series tuning
+## STAGE 1 OUTPUT: time-averaged 1978-81 steady state → feeds Stage 2 time-series tuning
 ```{r save-stage1}
 saveRDS(params_steady, "Ess_data/params_stage1_steady.RDS")
 ```
