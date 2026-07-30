@@ -137,7 +137,8 @@ project_bio <- function(p) {
   mb <- sapply(seq_along(sp), function(j)
     rowSums(sweep(sim@n[,j,p@w>=cl[j],drop=FALSE],3,(p@w*p@dw)[p@w>=cl[j]],"*")))
   colnames(mb) <- sp; rownames(mb) <- st
-  hc <- rowSums(getYieldGear(sim)[, , "Atlantic Herring"]) / 1e6   # herring catch, tonnes/yr
+  yg <- getYieldGear(sim)[, , "Atlantic Herring"]                  # [time, gear]
+  hc <- rowSums(yg[, colnames(yg) != "Seals", drop = FALSE]) / 1e6 # FISHING catch only (exclude Seals = predation, not catch)
   structure(mb/1e9, hcatch = setNames(hc, st))                      # kt biomass + attached catch
 }
 
@@ -197,7 +198,14 @@ warm_fish <- c("Atlantic Cod"=4,"Haddock"=1.8,"Pollock"=4,"White Hake"=3.5,
                "Silver Hake"=0.5,"Monkfish"=10,"Thorny Skate"=25,"Winter Skate"=20,
                "Atlantic Herring"=1)
 par0  <- c(log10(warm_fish[tune_fish]), log10(4))      # + F_peak = 4
-lower <- c(log10(rep(0.3,length(tune_fish))), log10(1.5))
+# Fishing-catchability bounds: [0.3, 30]x, EXCEPT Atlantic Herring, whose lower bound is
+# relaxed to 0.01x so the optimiser can drop herring fishing mortality far enough to fit the
+# reported ~15 kt/yr landings (a large under-surveyed stock is only lightly fished; the catch
+# overshoot is a fishing-mortality mis-specification, not a biomass error). Biomass stays high
+# (fishing is a minor part of herring mortality), so cultivation is preserved.
+lower_mult <- rep(0.3, length(tune_fish))
+lower_mult[tune_fish == "Atlantic Herring"] <- 0.01
+lower <- c(log10(lower_mult), log10(1.5))
 upper <- c(log10(rep(30, length(tune_fish))), log10(8))
 
 cat("Loss at warm start (manual solution):", round(getErrorSteered(par0),1), "\n")
