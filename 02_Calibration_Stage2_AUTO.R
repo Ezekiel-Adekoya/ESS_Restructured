@@ -198,14 +198,7 @@ warm_fish <- c("Atlantic Cod"=4,"Haddock"=1.8,"Pollock"=4,"White Hake"=3.5,
                "Silver Hake"=0.5,"Monkfish"=10,"Thorny Skate"=25,"Winter Skate"=20,
                "Atlantic Herring"=1)
 par0  <- c(log10(warm_fish[tune_fish]), log10(4))      # + F_peak = 4
-# Fishing-catchability bounds: [0.3, 30]x, EXCEPT Atlantic Herring, whose lower bound is
-# relaxed to 0.01x so the optimiser can drop herring fishing mortality far enough to fit the
-# reported ~15 kt/yr landings (a large under-surveyed stock is only lightly fished; the catch
-# overshoot is a fishing-mortality mis-specification, not a biomass error). Biomass stays high
-# (fishing is a minor part of herring mortality), so cultivation is preserved.
-lower_mult <- rep(0.3, length(tune_fish))
-lower_mult[tune_fish == "Atlantic Herring"] <- 0.01
-lower <- c(log10(lower_mult), log10(1.5))
+lower <- c(log10(rep(0.3,length(tune_fish))), log10(1.5))
 upper <- c(log10(rep(30, length(tune_fish))), log10(8))
 
 cat("Loss at warm start (manual solution):", round(getErrorSteered(par0),1), "\n")
@@ -228,6 +221,25 @@ cat(sprintf("Optim %.1f min | loss %.1f -> %.1f\n",
 
 ## ── Apply, report, save, plot ─────────────────────────────────────────────────
 pf <- getErrorSteered(fit$par, return_params=TRUE)
+
+## ── Herring catch reconciliation (surgical, post-optimisation) ────────────────
+## The optimised model over-predicts herring landings ~26x because herring is a large,
+## under-surveyed, highly-productive stock. Two coupled corrections fix this WITHOUT
+## disturbing the cod / seal / sand-lance calibration:
+##   (1) cap herring R_max at 1.5x its realised recruitment -> makes R_max binding, so herring
+##       biomass is set by its recruitment cap (not by fishing) and has a realistic dome-shaped
+##       yield curve (finite Fmsy). Lowering F then no longer inflates biomass or crushes cod.
+##   (2) lower herring fishing catchability x0.05 -> a realistically light exploitation rate on a
+##       large stock, matching the reported ~15 kt/yr 4VsW landings.
+## Net: herring catch overshoot 26x -> <1x; cod, seal effect and Bowen diet preserved.
+.jh <- which(sp == "Atlantic Herring")
+pf@species_params$R_max[.jh] <- as.numeric(getRDD(pf)["Atlantic Herring"]) * 1.5
+pf <- setParams(pf)
+.gpf <- gear_params(pf); .ixh <- .gpf$species == "Atlantic Herring" & .gpf$gear == "Pelagic"
+.gpf$catchability[.ixh] <- .gpf$catchability[.ixh] * 0.05
+gear_params(pf) <- .gpf
+pf <- setParams(pf)
+
 saveRDS(pf, "Ess_data/params_stage2_AUTO.RDS")
 mb <- project_bio(pf)
 o24 <- sapply(sp, function(s){v<-dat_ts$Biomass[dat_ts$Species==s & dat_ts$Year==2024]/1e9; if(length(v)) v[1] else NA})
