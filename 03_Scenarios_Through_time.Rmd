@@ -311,8 +311,8 @@ sim2 <- left_join(biomass_ts, sim2)
 time_series <- rbind(sim1, sim2)
 time_series <- time_series |> rename(Biomass = Biomass_Obs)
 
-# Add calibration label for years before 1986
-time_series <- time_series |> mutate(scen = ifelse(Year < 1986, "Calibration", scen))
+# Add calibration label for years before 1982
+time_series <- time_series |> mutate(scen = ifelse(Year < 1982, "Calibration", scen))
 
 # Whole time series, no calibration/scenario split: both scenarios (with their ensemble
 # envelopes) run across 1978-2024; they coincide early and diverge as seals increase.
@@ -344,7 +344,7 @@ biomass_plot <- ggplot(time_series,
   geom_point(data = filter(time_series, Biomass > 0), colour = "black", size = 0.5) +
   geom_ribbon(aes(ymin = sim_lower/1e9, ymax = sim_upper/1e9), alpha = 0.4, colour = NA) +
   geom_line(aes(y = sim_mean/1e9)) +
-  geom_vline(xintercept = 1985, linetype = "dashed", color = "black") +
+  geom_vline(xintercept = 1981, linetype = "dashed", color = "black") +
   scale_colour_manual(name   = NULL, values = c("grey70", "#4575B4", "#D73027"),
     labels = c("Reference period",
                "Counterfactual (seals constant)",
@@ -380,7 +380,7 @@ Taylor plot and correlation plot
 library(openair)
 time_series_first4 <- sim2[, 1:4]
 colnames(time_series_first4) <- c("Year", "Species","Biomass_observed", "Biomass")
-time_series_first4<- time_series_first4 %>%  filter(Year >= 1986, Year <= 2024)
+time_series_first4<- time_series_first4 %>%  filter(Year >= 1982, Year <= 2024)
 modStats(time_series_first4,
          obs  = "Biomass_observed", mod  = "Biomass",type = "Species",rank = "Species")
 
@@ -499,7 +499,7 @@ sim2_c <- right_join(yield_ts, sim2_c, by = c("Species", "Year"))
 # Combine scenarios
 # ============================================================
 time_series_c <- rbind(sim1_c, sim2_c)
-time_series_c <- time_series_c |> mutate(scen = ifelse(Year < 1986, "Calibration", scen))|> 
+time_series_c <- time_series_c |> mutate(scen = ifelse(Year < 1982, "Calibration", scen))|> 
                 rename(Yield = Yield_Obs)
 
 ```
@@ -528,7 +528,7 @@ yield_plot <- ggplot(time_series_c,
   scale_y_continuous(breaks = scales::pretty_breaks(n = 4),
   labels = scales::label_number(accuracy = 1)) +
   labs(y = "Catches (kt)", x = "Year") +
-  geom_vline(xintercept = 1986, linetype = "dashed", color = "black") +
+  geom_vline(xintercept = 1982, linetype = "dashed", color = "black") +
   theme_pubr() +
   theme(
     legend.position = "bottom",
@@ -864,8 +864,8 @@ ggsave(filename = paste0(save_dir, "factual_fishing_vs_seal_log10.jpeg"),
 
 # Compare size-based trophic cascades under each scenario relative to histrorical when cod were abundant across species
 ```{r}
-# Extract reference spectra from historical period — 1985 as representative pre-change year
-spectra_reference <- plotSpectra(sims_counter[[1]], return_data = TRUE, time_range = 1978:1985)
+# Extract reference spectra from historical period — 1981 as representative pre-change year
+spectra_reference <- plotSpectra(sims_counter[[1]], return_data = TRUE, time_range = 1978:1981)
 
 # Extract spectra for Scenario 1 (with constant predation) for 1995–2010
 spectra_scen1 <- plotSpectra(sims_counter[[1]], return_data = TRUE, time_range = 2015:2024)
@@ -1082,9 +1082,9 @@ biomass_size_spectra <- bio_size %>%
   summarise(nbiomass = sum(norm_biomass)) %>%
   ungroup() 
 
-#Observed Reference period 1970-1985
+#Observed Reference period 1978-1981
 mean_biomass_size_spectra_ref <- biomass_size_spectra  %>% 
-  filter(Year<1986)%>%
+  filter(Year<1982)%>%
   group_by(weightclass) %>% 
   summarise(mean_nbiomass=mean(nbiomass))
 #Observed final decade 2015-2024 (matches the modelled scenario window 2015:2024)
@@ -1105,7 +1105,7 @@ sizespec <- function(sim, time_range) {
 }
 
 
-ssdf_ref   <- lapply(sims_counter, sizespec, time_range = 1978:1985)
+ssdf_ref   <- lapply(sims_counter, sizespec, time_range = 1978:1981)
 ssdf_scen1 <- lapply(sims_counter, sizespec, time_range = 2015:2024)
 ssdf_scen2 <- lapply(sims_factual, sizespec, time_range = 2015:2024)
 
@@ -1187,7 +1187,7 @@ x_limits <- range(time_series_ss$w, na.rm = TRUE)
 # Create the spectra plot
 spectra_plot <- ggplot(time_series_ss, aes(x = w, y = sim_meanN, colour = scen, fill = scen)) +
   geom_ribbon(aes(ymin = sim_lowerN, ymax = sim_upperN), alpha = 0.1, colour = NA, show.legend = FALSE) +
-  # Reference envelope is very narrow (webs barely diverge by 1978-1985, median hi/lo ~1.65x),
+  # Reference envelope is very narrow (webs barely diverge by 1978-1981, median hi/lo ~1.65x),
   # so give it a faint fill + dotted outline to make the band discernible on the log axis.
   geom_ribbon(data = subset(time_series_ss, scen == "Reference period"),
               aes(ymin = sim_lowerN, ymax = sim_upperN),
@@ -1268,8 +1268,8 @@ combined_data <- bind_rows(sf1, sf2)
 # -----------------------------
 # 5b. OBSERVED symmetric relative difference, computed the SAME WAY as the model curves above:
 #     (recent - reference)/(recent + reference), with the SAME periods as the model
-#     (reference = 1978-1985, recent = 2015-2024; the survey starts in 1978 so `Year < 1986`
-#     is the 1978-1985 reference). Units cancel in the ratio, so it is directly comparable.
+#     (reference = 1978-1981, recent = 2015-2024; the survey starts in 1978 so `Year < 1982`
+#     is the 1978-1981 reference). Units cancel in the ratio, so it is directly comparable.
 #     The real world had INCREASING seals, so this observed shift is the empirical analogue of
 #     the FACTUAL (red) curve.
 # -----------------------------

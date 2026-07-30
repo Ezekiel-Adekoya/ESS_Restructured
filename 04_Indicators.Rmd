@@ -203,10 +203,10 @@ mw <- df_all %>%
   arrange(Species, Year)
 
 # ── PLOT (manuscript Fig 5 style) ─────────────────────────────────────────────
-# Reference period (<= 1986) drawn in grey — the counterfactual (seals held at 1978)
+# Reference period (<= 1982) drawn in grey — the counterfactual (seals held at 1978)
 # is the "no seal change" reference condition; scenarios are shown coloured only for
-# the projection (>= 1986), with a dashed divider between the two.
-divider <- 1986
+# the projection (>= 1982), with a dashed divider between the two.
+divider <- 1982
 mw_ref  <- mw %>% filter(scen == "Counterfactual (seals constant)", Year <= divider)
 mw_proj <- mw %>% filter(Year >= divider)
 
@@ -215,9 +215,9 @@ p_mw <- ggplot() +
   geom_vline(xintercept = divider, linetype = "dashed", colour = "grey50", linewidth = 0.4) +
   # reference period — grey band + line
   geom_ribbon(data = mw_ref, aes(Year, ymin = lo, ymax = hi,
-              fill = "Reference period (1978–1985)"), alpha = 0.40) +
+              fill = "Reference period (1978–1981)"), alpha = 0.40) +
   geom_line(data = mw_ref, aes(Year, med,
-            colour = "Reference period (1978–1985)"), linewidth = 0.6) +
+            colour = "Reference period (1978–1981)"), linewidth = 0.6) +
   # projection period — coloured scenarios (10–90% ensemble band + median)
   geom_ribbon(data = mw_proj, aes(Year, ymin = lo, ymax = hi, fill = scen),
               alpha = 0.20, colour = NA) +
@@ -227,11 +227,11 @@ p_mw <- ggplot() +
              colour = "black", size = 0.8) +
   facet_wrap(~ Species, scales = "free_y") +
   scale_colour_manual(name = NULL, values = c(
-    "Reference period (1978–1985)" = "grey40",
+    "Reference period (1978–1981)" = "grey40",
     "Factual (seal increase)"           = "firebrick",
     "Counterfactual (seals constant)"   = "steelblue")) +
   scale_fill_manual(name = NULL, values = c(
-    "Reference period (1978–1985)" = "grey70",
+    "Reference period (1978–1981)" = "grey70",
     "Factual (seal increase)"           = "firebrick",
     "Counterfactual (seals constant)"   = "steelblue")) +
   theme_bw(base_size = 9) +
@@ -312,7 +312,7 @@ rmse <- function(pred, obs) sqrt(mean((pred - obs)^2, na.rm = TRUE))
 skill_biomass <- df_all |>
   mutate(Biomass = Biomass / 1e9) |>
   inner_join(obs, by = c("Species", "Year")) |>
-  filter(Biomass_obs > 0, Biomass > 0, Year >= 1986, Year <= 2024) |>  # skip zero/negative & pre-1986 years
+  filter(Biomass_obs > 0, Biomass > 0, Year >= 1982, Year <= 2024) |>  # skip zero/negative & pre-1982 years
   group_by(scen, sim) |>
   summarise(rho_biomass  = cor(Biomass, Biomass_obs, method = "spearman"),
             rmse_biomass = rmse(log(Biomass), log(Biomass_obs)),
@@ -322,7 +322,7 @@ skill_biomass <- df_all |>
 skill_catch <- df_catches |>
   mutate(Yield = Yield / 1e9) |>
   inner_join(obs_catch, by = c("Species", "Year")) |>
-  filter(Yield_obs > 0, Yield > 0, Year >= 1986, Year <= 2024) |>
+  filter(Yield_obs > 0, Yield > 0, Year >= 1982, Year <= 2024) |>
   group_by(scen, sim) |>
   summarise(rho_catch  = cor(Yield, Yield_obs, method = "spearman"),
             rmse_catch = rmse(log(Yield), log(Yield_obs)),
@@ -336,7 +336,7 @@ skill_mw <- df_all |>
   inner_join(
     mean_weight_ts |> transmute(Species, Year, MeanWeight_obs = MeanWeight),
     by = c("Species", "Year")) |>
-  filter(MeanWeight_obs > 0, MeanWeight > 0, Year >= 1986, Year <= 2024) |>
+  filter(MeanWeight_obs > 0, MeanWeight > 0, Year >= 1982, Year <= 2024) |>
   group_by(scen, sim) |>
   summarise(rho_mw  = cor(MeanWeight, MeanWeight_obs, method = "spearman"),
             rmse_mw = rmse(log(MeanWeight), log(MeanWeight_obs)),
@@ -408,7 +408,7 @@ p_sk
 The pooled Spearman rho above mixes the (large, scenario-insensitive) between-species biomass
 ordering with the within-species temporal signal, so it barely reflects the seal mechanism.
 Below, biomass skill is computed PER SPECIES as the rank correlation of modelled vs observed
-biomass THROUGH TIME (1986-2024), over the calibration window `[biomass_cutoff, Inf)` (forage
+biomass THROUGH TIME (1982-2024), over the calibration window `[biomass_cutoff, Inf)` (forage
 scaling kept). Species are ordered by the factual - counterfactual median-rho difference, so the
 species where removing the seal increase helps/hurts most are at the ends.
 
@@ -416,7 +416,7 @@ species where removing the seal increase helps/hurts most are at the ends.
 skill_biomass_sp <- df_all |>
   mutate(Biomass = Biomass / 1e9) |>
   inner_join(obs, by = c("Species", "Year")) |>
-  filter(Biomass_obs > 0, Biomass > 0, Year >= 1986, Year <= 2024) |>
+  filter(Biomass_obs > 0, Biomass > 0, Year >= 1982, Year <= 2024) |>
   group_by(scen, Species, sim) |>
   filter(dplyr::n() >= 5) |>                       # need enough years for a correlation
   summarise(rho = suppressWarnings(cor(Biomass, Biomass_obs, method = "spearman")),
@@ -436,7 +436,7 @@ p_sk_sp <- ggplot(skill_biomass_sp, aes(x = Species, y = rho, fill = scen)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
   scale_fill_manual(values = c("Factual (seal increase)"         = "red",
                                "Counterfactual (seals constant)" = "blue")) +
-  labs(x = NULL, y = "Spearman rho (modelled vs observed biomass, 1986-2024)") +
+  labs(x = NULL, y = "Spearman rho (modelled vs observed biomass, 1982-2024)") +
   theme_bw(base_size = 10) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
         legend.position = "bottom", legend.title = element_blank())
@@ -483,12 +483,12 @@ persp_rho <- function(dat) dat |>
 
 sp_cat <- df_catches |> mutate(value = Yield / 1e9) |>
   inner_join(obs_catch, by = c("Species", "Year")) |> rename(obs = Yield_obs) |>
-  filter(obs > 0, value > 0, Year >= 1986, Year <= 2024) |>
+  filter(obs > 0, value > 0, Year >= 1982, Year <= 2024) |>
   persp_rho() |> mutate(indicator = "Catch")
 
 sp_mw <- df_all |> filter(!is.na(MeanWeight), MeanWeight > 0) |>
   inner_join(mean_weight_ts |> transmute(Species, Year, obs = MeanWeight), by = c("Species", "Year")) |>
-  rename(value = MeanWeight) |> filter(obs > 0, value > 0, Year >= 1986, Year <= 2024) |>
+  rename(value = MeanWeight) |> filter(obs > 0, value > 0, Year >= 1982, Year <= 2024) |>
   persp_rho() |> mutate(indicator = "Mean individual weight")
 
 skill_sp_all <- bind_rows(mutate(skill_biomass_sp, indicator = "Biomass"), sp_cat, sp_mw)
@@ -535,15 +535,15 @@ persp_rmse <- function(dat) dat |>
 
 sp_bio_r <- df_all |> mutate(value = Biomass / 1e9) |>
   inner_join(obs, by = c("Species", "Year")) |> rename(obs = Biomass_obs) |>
-  filter(obs > 0, value > 0, Year >= 1986, Year <= 2024) |>
+  filter(obs > 0, value > 0, Year >= 1982, Year <= 2024) |>
   persp_rmse() |> mutate(indicator = "Biomass")
 sp_cat_r <- df_catches |> mutate(value = Yield / 1e9) |>
   inner_join(obs_catch, by = c("Species", "Year")) |> rename(obs = Yield_obs) |>
-  filter(obs > 0, value > 0, Year >= 1986, Year <= 2024) |>
+  filter(obs > 0, value > 0, Year >= 1982, Year <= 2024) |>
   persp_rmse() |> mutate(indicator = "Catch")
 sp_mw_r <- df_all |> filter(!is.na(MeanWeight), MeanWeight > 0) |>
   inner_join(mean_weight_ts |> transmute(Species, Year, obs = MeanWeight), by = c("Species", "Year")) |>
-  rename(value = MeanWeight) |> filter(obs > 0, value > 0, Year >= 1986, Year <= 2024) |>
+  rename(value = MeanWeight) |> filter(obs > 0, value > 0, Year >= 1982, Year <= 2024) |>
   persp_rmse() |> mutate(indicator = "Mean individual weight")
 
 skill_sp_rmse <- bind_rows(sp_bio_r, sp_cat_r, sp_mw_r) |>

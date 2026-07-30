@@ -2,11 +2,12 @@
 ## make_figure6_cultivation.R  — MAIN-TEXT Figure 6
 ## DIRECT per-web evidence of the forage-cultivation mechanism from the paired
 ## ensemble: strength of the (herring + sand lance) -> cod cultivation interaction
-## vs cod biomass change over the paper's 1986-2024 PROJECTION window.
+## vs cod biomass change over the paper's 1982-2024 PROJECTION window.
 ##
-## Window convention MATCHES the rest of the paper (03/04): the 1978-1985 period is
-## the calibration/reference (grey in Figs), 1986-2024 is the projection. So cod
-## "change" is measured relative to the 1978-1985 REFERENCE MEAN (robust to single-
+## Window convention MATCHES the rest of the paper (03/04): the 1978-1981 post-EEZ
+## stable period is the calibration/reference (= the Stage-1 steady-state window;
+## grey in Figs), 1982-2024 is the projection. So cod "change" is measured relative
+## to the 1978-1981 REFERENCE MEAN (robust to single-
 ## year noise), evaluated at the terminal 2024 state, in the FACTUAL (seal-increase)
 ## world. Cod biomass uses the SAME cutoff-based method as 03 (term_bio).
 ##
@@ -35,7 +36,7 @@ cod_bio <- function(sim, years) {                     # mean cod biomass (kt) ov
     sum(sim@n[y, cod_j, keep] * wdw[keep]) / 1e9, numeric(1)) |> mean()
 }
 
-ref_years <- 1978:1985                                # paper's reference period
+ref_years <- 1978:1981                                # reference period = Stage-1 steady-state window (post-EEZ stable)
 end_year  <- 2024
 
 ## ── Cultivation strength per web (herring + sand lance -> cod) ────────────────
@@ -44,7 +45,7 @@ cult_rows <- c("Atlantic Herring", "Sand Lance")
 cultivation <- vapply(sf, function(s)
   mean(s@params@interaction[cult_rows, "Atlantic Cod"]), numeric(1))
 
-## ── Cod change over the 1986-2024 projection: (2024 - refmean)/refmean * 100 ──
+## ── Cod change over the 1982-2024 projection: (2024 - refmean)/refmean * 100 ──
 ## Same web run under both efforts: factual (seal increase) vs counterfactual.
 cod_pct_scen <- function(sims) {
   ref <- vapply(sims, cod_bio, numeric(1), years = ref_years)
@@ -84,7 +85,7 @@ pA <- ggplot(df, aes(cultivation, cod_pct)) +
   geom_smooth(method = "lm", colour = "firebrick", fill = "grey70", linewidth = 1) +
   annotate("text", x = -Inf, y = Inf, label = "(a)",
            hjust = -0.5, vjust = 1.5, fontface = "bold", size = 6) +
-  labs(x = xlab, y = "Cod biomass change 1986-2024 (%)",
+  labs(x = xlab, y = "Cod biomass change 1982-2024 (%)",
        subtitle = "Factual (seal increase)") +
   theme_bw(base_size = 11) + theme(panel.grid.minor = element_blank())
 
